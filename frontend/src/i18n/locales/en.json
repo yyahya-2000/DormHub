@@ -7,7 +7,9 @@
       "register": "Buildings",
       "building": "Building",
       "myCard": "My card",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "notifications": "Notifications",
+      "personalData": "Personal data"
     }
   },
   "common": {
@@ -55,7 +57,9 @@
     "conflictUnknown": "The server refused but attached no conflicting record.",
     "validationTitle": "The form is filled in incorrectly",
     "serverSays": "The server said: {{message}}",
-    "serverFault": "The server failed to process the request. Its own message is withheld here: a fault is not a refusal, and its text is for the log, not for the screen."
+    "serverFault": "The server failed to process the request. Its own message is withheld here: a fault is not a refusal, and its text is for the log, not for the screen.",
+    "mandatoryTitle": "The category cannot be switched off",
+    "mandatoryBody": "The server refused the attempt to switch «{{category}}» off."
   },
   "fields": {
     "name": "Name",
@@ -302,6 +306,14 @@
   "obligationKind": {
     "accommodation_contract": "Accommodation contract"
   },
+  "maintenanceStatus": {
+    "new": "new",
+    "assigned": "assigned",
+    "in_progress": "in progress",
+    "done": "done",
+    "rejected": "rejected",
+    "cancelled": "cancelled"
+  },
   "audit": {
     "heading": "Audit log",
     "lead": "Entries are written by the server and cannot be edited. Reading the log is itself logged.",
@@ -415,6 +427,162 @@
     "waitingEmpty": "Every account of this building has a password of its own.",
     "waitingRow": "The code was sent, no password is set yet.",
     "waitingNote": "The server clears this mark when the resident spends the code. The code itself is not here — the list only says it has not been used."
+  },
+  "notifications": {
+    "heading": "Notifications",
+    "lead": "The messages of your personal account, newest first. You mark a message read; the server keeps the moment it was first read and never rewrites it.",
+    "filterLabel": "What to show",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "toSettings": "Set the categories",
+    "captionAll": "All messages",
+    "captionUnread": "Unread",
+    "total_one": "{{count, number}} message",
+    "total_other": "{{count, number}} messages",
+    "empty": "No messages yet.",
+    "emptyUnread": "Nothing unread.",
+    "page": "Page {{current}} of {{total}}",
+    "previous": "Back",
+    "next": "Forward",
+    "credentialNote": "The one-time code of a new account never appears here. It goes by mail to the resident's own address and is not kept in the database, so the category is on the settings screen and the row is not on this one.",
+    "noCategory": "No category",
+    "unread": "Unread",
+    "unreadCount_one": "{{count, number}} unread message",
+    "unreadCount_other": "{{count, number}} unread messages",
+    "markRead": "Mark read",
+    "readAt": "Read {{time}}",
+    "unknownMessage": "Message {{type}}",
+    "unnamedGuest": "a guest the message does not name",
+    "requestApproved": "Guest request approved: {{guest}}",
+    "requestRefused": "Guest request refused: {{guest}}",
+    "requestDecided": "Guest request decided: {{guest}}",
+    "requestNumber": "Request no. {{number}}",
+    "comment": "Comment: {{comment}}",
+    "visitOverdue": "A guest has not left on time: {{guest}}",
+    "visitDue": "Was to have left by {{time}}",
+    "visitBuilding": "Building: {{building}}",
+    "visitDuty": "A guest is in the dormitory while the resident who invited them is present — clause 2.2 of the rules of internal order.",
+    "maintenanceMoved": "The maintenance request has moved to «{{status}}»",
+    "maintenanceFrom": "Was: {{status}}",
+    "maintenanceNumber": "Request no. {{number}}",
+    "documentAwaiting": "A document is waiting for your signature: {{title}}",
+    "documentDue": "Due {{date}}",
+    "documentRevision": "Revision {{revision}}"
+  },
+  "notificationCategory": {
+    "account_issued": {
+      "label": "Account and credentials",
+      "description": "The one-time code for a new account, and changes to the way you sign in.",
+      "ground": "The ground is the accommodation contract. Without the one-time code the account cannot be used at all, so switching this message off would be declining the access rather than the mail."
+    },
+    "request_decision": {
+      "label": "Decision on a guest request",
+      "description": "Your guest request has been approved or refused."
+    },
+    "visit_overdue": {
+      "label": "Guest overdue at the entrance",
+      "description": "A guest you invited has not left by the hour the rules of internal order set.",
+      "ground": "The ground is clause 2.2 of the rules of internal order: a guest is in the dormitory while the resident who invited them is present. The resident answers for the departure, which is why the message goes to them."
+    },
+    "maintenance_status": {
+      "label": "Maintenance request status",
+      "description": "A maintenance request you filed has moved to another state."
+    },
+    "document_signature": {
+      "label": "Document awaiting signature",
+      "description": "A document is waiting for your signature.",
+      "ground": "The ground is the accommodation contract. The document has a deadline, and the deadline has to be told to you."
+    }
+  },
+  "notificationSettings": {
+    "heading": "Notification categories",
+    "lead": "What the system will write to you about. Some categories can be switched off and some cannot, and what that rests on is stated below.",
+    "toList": "To the messages",
+    "toConsents": "To the consents",
+    "optionalCaption": "May be switched off",
+    "optionalCount_one": "{{count, number}} category",
+    "optionalCount_other": "{{count, number}} categories",
+    "optionalNote": "These messages only save you from opening the application, and they stand on nothing else — only on your consent to the processing of personal data. That is why they can be switched off, and why they stop when the consent is withdrawn.",
+    "stateOn": "Arrives",
+    "stateOff": "Switched off",
+    "mandatoryCaption": "Cannot be switched off",
+    "mandatoryCount_one": "{{count, number}} category",
+    "mandatoryCount_other": "{{count, number}} categories",
+    "mandatoryNote": "These messages rest on the accommodation contract and on the rules of internal order rather than on consent. Switching them off would be declining the service and not the mail; the server refuses the request, and the database behind it.",
+    "always": "Always arrives",
+    "groundUnstated": "The server called the category mandatory and named no ground in its answer.",
+    "silencedTitle": "The optional notifications are not arriving",
+    "silencedBody": "Your consent to the processing of personal data is not in force: it has been withdrawn, or it has not been given yet. The optional categories stand on it alone, so they stay silent whatever position their switch is in.",
+    "silencedWayOut": "Read the consent text"
+  },
+  "consentDocument": {
+    "resident_personal_data": "Resident's consent",
+    "guest_personal_data": "Guest's consent"
+  },
+  "consent": {
+    "heading": "Consent to the processing of personal data",
+    "lead": "Read the text and decide.",
+    "leadFor": "{{name}}, read the text and decide.",
+    "separateNote": "A screen of its own and not a tick on a form: art. 9 part 1 of Federal Law No. 152-FZ requires consent to be executed separately from other documents. Neither signing in, nor setting a password, nor any other form of this system records a consent.",
+    "draftTitle": "This text has not been through legal review",
+    "draftBody": "It is a working placeholder. It states what the system actually does with the data, but the officer responsible for the processing has not approved it. Before the system carries real data the text is replaced by the approved one under a new revision number, and the consent is asked for again.",
+    "draftRevision": "Revision of the text: {{revision}}",
+    "documentOf": "{{code}} · revision {{revision}}",
+    "decisionTitle": "Decision",
+    "ifYes": "If you agree: the system may send the optional notifications — the decision on your guest request and the movement of a maintenance request — and the security post may see that the guest was invited by you.",
+    "ifNo": "If you do not: the optional notifications will not arrive. The mandatory ones still will — an overdue guest, a document awaiting signature, the issue of an account.",
+    "notBlocking": "Your account is not blocked either way. The housing register and the resident card are kept under the accommodation contract, not under this consent.",
+    "agree": "I consent",
+    "later": "Decide later",
+    "remaining_one": "{{count, number}} more document is waiting for a decision.",
+    "remaining_other": "{{count, number}} more documents are waiting for a decision.",
+    "recordedTitle": "The consent is recorded",
+    "recordedNote": "The record holds the fact, the date and the revision of the text you read. It cannot be deleted even after a withdrawal: the burden of proving consent is on the operator (art. 9 part 3 of Federal Law No. 152-FZ).",
+    "continue": "Onward",
+    "fields": {
+      "document": "Document",
+      "revision": "Revision",
+      "acceptedAt": "Consented on",
+      "revokedAt": "Withdrawn on",
+      "address": "Given from the address"
+    },
+    "nothingPending": "Nothing to decide: you have read every text that concerns you and answered on each.",
+    "toHistory": "History of consents",
+    "toSystem": "Into the system",
+    "atPostTitle": "This consent is taken at the security post",
+    "atPostBody": "A guest's consent is executed in person, before the security officer records the entry. It is neither given nor withdrawn through the personal account.",
+    "strip": "The consent to the processing of personal data is waiting for your decision.",
+    "stripAction": "Read it and decide"
+  },
+  "consentHistory": {
+    "heading": "Personal data",
+    "lead": "What you signed, when, and under which revision. The withdrawal is here too.",
+    "pendingTitle_one": "{{count, number}} document is waiting for a decision",
+    "pendingTitle_other": "{{count, number}} documents are waiting for a decision",
+    "pendingBody": "Either you have not read it, or the text has been replaced since you agreed: a consent is given to one particular revision.",
+    "pendingAction": "Open the text",
+    "effectCaption": "What a withdrawal does",
+    "effectLead": "Read this before you press. A withdrawal has consequences, and closing your account is not one of them.",
+    "effectStopsLabel": "Stops",
+    "effectStops": "The optional notifications: the decision on a guest request and the status of a maintenance request.",
+    "effectKeepsLabel": "Stays",
+    "effectKeeps": "The housing register, the resident card and the mandatory notifications. They rest on the accommodation contract and on the rules of internal order, not on consent.",
+    "effectRecordLabel": "The record",
+    "effectRecord": "The record of the consent is not deleted: it acquires a date of withdrawal. The burden of proving consent for the period before it is on the operator (art. 9 part 3 of Federal Law No. 152-FZ).",
+    "effectAfterLabel": "Afterwards",
+    "effectAfter": "You are among those the text is offered to again: the consent may be given afresh at any time.",
+    "toSettings": "Look at the notification categories",
+    "recordsCaption": "History of consents",
+    "recordsCount_one": "{{count, number}} record",
+    "recordsCount_other": "{{count, number}} records",
+    "empty": "No records: consent has never been given.",
+    "inForce": "In force",
+    "withdrawn": "Withdrawn",
+    "withdrawAction": "Withdraw the consent",
+    "withdrawConfirm": "Withdraw",
+    "confirmTitle": "Withdraw the consent: {{title}}?",
+    "nothingStood": "There was nothing to withdraw: no consent to this document was in force. The server answered with the state and not with an error.",
+    "atPostOnly": "Withdrawn at the security post, in person."
   },
   "setPassword": {
     "title": "First sign-in: your own password",
