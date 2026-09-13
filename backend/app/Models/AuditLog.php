@@ -6,7 +6,9 @@ namespace App\Models;
 
 use App\Enums\AuditAction;
 use App\Enums\AuditResult;
+use App\Models\Builders\AppendOnlyBuilder;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,8 +19,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * update or a delete outright. The database revokes the same two rights from
  * the application role, so the guarantee does not depend on this class being
  * correct — this is the first of the two levels, not the only one.
+ *
+ * The refusal is stated twice inside this level as well, because the two
+ * statements catch different things. The `booted` hooks below cover the
+ * single-record path and see nothing else; a mass update never loads a record
+ * and never fires an event, so it is the builder that has to refuse it.
  */
 #[Fillable(['user_id', 'action', 'subject_type', 'subject_id', 'payload', 'ip_address', 'result'])]
+#[UseEloquentBuilder(AppendOnlyBuilder::class)]
 class AuditLog extends Model
 {
     public const UPDATED_AT = null;
