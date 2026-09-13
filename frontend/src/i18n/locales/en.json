@@ -1,0 +1,139 @@
+{
+  "app": {
+    "name": "Dormitory",
+    "fullName": "Dormitory support system",
+    "section": {
+      "building": "Building",
+      "audit": "Audit log"
+    }
+  },
+  "common": {
+    "loading": "Loading",
+    "retry": "Try again",
+    "empty": "—",
+    "signOut": "Sign out",
+    "signingOut": "Signing out",
+    "open": "Open",
+    "language": "Interface language",
+    "languageRu": "Rus",
+    "languageEn": "Eng",
+    "menu": "Sections",
+    "backToBuilding": "Back to the building card"
+  },
+  "errors": {
+    "network": "The server is not answering. Check the connection and try again.",
+    "forbidden": "The server refused: your role does not cover this object.",
+    "notFound": "No such building.",
+    "unexpected": "The server refused the request. Status {{status}}.",
+    "notFoundPage": "Page not found."
+  },
+  "login": {
+    "title": "Sign in",
+    "lead": "Accounts are issued by the dormitory administration.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Checking",
+    "invalid": "The email or the password is wrong.",
+    "attemptsLeft_one": "{{count}} attempt left before sign-in is blocked.",
+    "attemptsLeft_other": "{{count}} attempts left before sign-in is blocked.",
+    "lastAttemptUsed": "That was the last attempt: sign-in for this email is closed.",
+    "lockedTitle": "Sign-in blocked",
+    "lockedBody": "Five failed attempts close sign-in for this email. You can try again in {{remaining}}.",
+    "lockedBodyUnknown": "Five failed attempts close sign-in for this email. Try again later.",
+    "lockedOver": "The block has expired, try signing in again.",
+    "validationTitle": "The form is incomplete",
+    "validation": {
+      "email": "Enter an email in the form name@example.com.",
+      "password": "Enter the password.",
+      "other": "The field “{{field}}” is filled in incorrectly."
+    },
+    "sessionExpired": "The session ended. Sign in again.",
+    "note": "The token is kept until the tab is closed, so a session does not outlive a shift on the shared computer at the security post."
+  },
+  "picker": {
+    "title": "Choose a building",
+    "fromGrants": "Your account holds a role in these buildings:",
+    "adminLead": "The administrator holds the role over the whole system, so the building is opened by its number.",
+    "numberLabel": "Building number",
+    "noGrants": "Your account holds no role in any building. Ask the administrator."
+  },
+  "building": {
+    "heading": "Building card",
+    "fields": {
+      "id": "Number in the system",
+      "name": "Name",
+      "address": "Address",
+      "floors": "Floors",
+      "visiting": "Visiting hours",
+      "curfew": "Entrance closes",
+      "status": "State"
+    },
+    "visitingWindow": "{{from}} to {{to}}",
+    "active": "In service",
+    "inactive": "Closed",
+    "visitingNote": "The visiting window is the span in which a guest may stay in the building in the presence of the resident who invited them."
+  },
+  "people": {
+    "heading": "People of the building",
+    "count_one": "{{count}} account",
+    "count_other": "{{count}} accounts",
+    "columns": {
+      "person": "Person",
+      "contacts": "Contacts",
+      "role": "Role",
+      "status": "State"
+    },
+    "empty": "Nobody is listed in this building yet.",
+    "noPhone": "No phone on file",
+    "hint": "The roll is open to the administrator and to the warden or duty officer of this building. Other roles are refused by the server."
+  },
+  "roles": {
+    "admin": "Administrator",
+    "duty_officer": "Duty officer",
+    "warden": "Warden",
+    "security": "Security",
+    "student": "Resident",
+    "scopeSystem": "whole system",
+    "scopeBuilding": "building no. {{id}}"
+  },
+  "userStatus": {
+    "active": "Active",
+    "blocked": "Blocked",
+    "archived": "Archived"
+  },
+  "audit": {
+    "heading": "Audit log",
+    "lead": "Entries are written by the server and cannot be edited. Reading the log is itself logged.",
+    "columns": {
+      "time": "Time",
+      "action": "Event",
+      "who": "Who",
+      "subject": "Object",
+      "result": "Result",
+      "address": "Address"
+    },
+    "filter": "Event",
+    "filterAll": "All events",
+    "anonymous": "No account",
+    "empty": "No entries.",
+    "page": "Page {{current}} of {{total}}",
+    "previous": "Previous",
+    "next": "Next",
+    "actions": {
+      "auth.login_succeeded": "Signed in",
+      "auth.login_failed": "Failed sign-in attempt",
+      "auth.login_locked": "Sign-in blocked",
+      "auth.login_blocked": "Blocked account refused",
+      "auth.logout_succeeded": "Signed out",
+      "building.viewed": "Building card viewed",
+      "building.users_viewed": "Building roll viewed",
+      "audit_log.viewed": "Audit log viewed"
+    },
+    "results": {
+      "success": "Success",
+      "failure": "Refused",
+      "denied": "Not permitted"
+    }
+  }
+}
