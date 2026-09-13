@@ -47,25 +47,31 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { AuditAction } from './auditAction';
-import type { AuditEntryPayload } from './auditEntryPayload';
-import type { AuditEntrySubject } from './auditEntrySubject';
-import type { AuditEntryUser } from './auditEntryUser';
-import type { AuditResult } from './auditResult';
+import type { StudyStatus } from './studyStatus';
 
 /**
- * The record format of §3.9.6: who, what, over which object, when, from which
- * address, with what result.
+ * FR-42. The fields of an incoming resident, and nothing else. There is no
+ * `role` — it is always the resident role in the dormitory named by the
+ * path — and no `password`: a password the caller could set is a password
+ * the caller knows.
  */
-export interface AuditEntry {
-  id: number;
-  action: AuditAction;
-  user: AuditEntryUser;
-  subject: AuditEntrySubject;
-  /** @nullable */
-  payload?: AuditEntryPayload;
-  /** @nullable */
-  ip_address?: string | null;
-  result: AuditResult;
-  created_at: string;
+export interface ResidentAccountInput {
+  /** @maxLength 255 */
+  full_name: string;
+  /**
+     * The confirmed contact the one-time code is delivered to, which is why it is the one field that can be neither omitted nor duplicated.
+     * @maxLength 255
+     */
+  email: string;
+  /**
+     * @maxLength 32
+     * @nullable
+     */
+  phone?: string | null;
+  study_status?: StudyStatus | null;
+  /**
+     * @maxLength 64
+     * @nullable
+     */
+  citizenship?: string | null;
 }

@@ -47,25 +47,8 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { AuditAction } from './auditAction';
-import type { AuditEntryPayload } from './auditEntryPayload';
-import type { AuditEntrySubject } from './auditEntrySubject';
-import type { AuditEntryUser } from './auditEntryUser';
-import type { AuditResult } from './auditResult';
+import type { RoleGrant } from './roleGrant';
 
-/**
- * The record format of §3.9.6: who, what, over which object, when, from which
- * address, with what result.
- */
-export interface AuditEntry {
-  id: number;
-  action: AuditAction;
-  user: AuditEntryUser;
-  subject: AuditEntrySubject;
-  /** @nullable */
-  payload?: AuditEntryPayload;
-  /** @nullable */
-  ip_address?: string | null;
-  result: AuditResult;
-  created_at: string;
-}
+export type AppointStaff201 = {
+  data: RoleGrant;
+};

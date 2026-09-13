@@ -47,25 +47,16 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { AuditAction } from './auditAction';
-import type { AuditEntryPayload } from './auditEntryPayload';
-import type { AuditEntrySubject } from './auditEntrySubject';
-import type { AuditEntryUser } from './auditEntryUser';
-import type { AuditResult } from './auditResult';
+import type { RoleCode } from './roleCode';
 
 /**
- * The record format of §3.9.6: who, what, over which object, when, from which
- * address, with what result.
+ * FR-41. Who, and which role. The dormitory is not here: it comes from the
+ * path, so the payload cannot nominate the scope the caller's own
+ * authorisation is checked against.
  */
-export interface AuditEntry {
-  id: number;
-  action: AuditAction;
-  user: AuditEntryUser;
-  subject: AuditEntrySubject;
-  /** @nullable */
-  payload?: AuditEntryPayload;
-  /** @nullable */
-  ip_address?: string | null;
-  result: AuditResult;
-  created_at: string;
+export interface StaffAppointmentInput {
+  /** The account receiving the role. It need not exist in this dormitory yet. */
+  user_id: number;
+  /** One of the roles the caller may grant. A warden may grant `manager`, `duty_officer` and `security`; the administrator may grant `warden`. Anything else is 403. */
+  role: RoleCode;
 }

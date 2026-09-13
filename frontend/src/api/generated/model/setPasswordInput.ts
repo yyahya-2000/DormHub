@@ -47,25 +47,20 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { AuditAction } from './auditAction';
-import type { AuditEntryPayload } from './auditEntryPayload';
-import type { AuditEntrySubject } from './auditEntrySubject';
-import type { AuditEntryUser } from './auditEntryUser';
-import type { AuditResult } from './auditResult';
 
 /**
- * The record format of §3.9.6: who, what, over which object, when, from which
- * address, with what result.
+ * FR-42. The one-time code, and the password replacing it. The address is
+ * validated for shape and not for existence: a rule that checked it
+ * against the table would tell an unauthenticated caller which addresses
+ * hold an account.
  */
-export interface AuditEntry {
-  id: number;
-  action: AuditAction;
-  user: AuditEntryUser;
-  subject: AuditEntrySubject;
-  /** @nullable */
-  payload?: AuditEntryPayload;
-  /** @nullable */
-  ip_address?: string | null;
-  result: AuditResult;
-  created_at: string;
+export interface SetPasswordInput {
+  /** @maxLength 255 */
+  email: string;
+  /** The one-time code delivered to the account's contact. Works once. */
+  token: string;
+  /** @minLength 8 */
+  password: string;
+  /** @minLength 8 */
+  password_confirmation: string;
 }
