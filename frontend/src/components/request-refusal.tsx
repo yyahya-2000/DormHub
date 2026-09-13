@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   asCapacityExceeded,
   asDeletionBlocked,
+  asMandatoryCategory,
   asResidencyConflict,
   fieldMessages,
   serverMessage,
@@ -39,6 +40,7 @@ export function RequestRefusal({
   const blocked = asDeletionBlocked(error)
   const conflict = asResidencyConflict(error)
   const capacity = status === 422 ? asCapacityExceeded(error) : null
+  const mandatory = asMandatoryCategory(error)
   const fields = fieldMessages(error)
 
   let title = t('refusal.title')
@@ -105,6 +107,27 @@ export function RequestRefusal({
           </p>
         </>
       )
+  } else if (mandatory !== null) {
+    /*
+     * FR-34. The server refused to switch a category off, and the answer names
+     * which one. The ground is repeated here rather than only on the settings
+     * screen, because this refusal can also arrive from a stale page whose
+     * switch was drawn before the server changed its mind about the category.
+     */
+    const label = t(`notificationCategory.${mandatory.category}.label`, {
+      defaultValue: mandatory.category_label,
+    })
+    title = t('refusal.mandatoryTitle')
+    body = (
+      <>
+        <p className="m-0">{t('refusal.mandatoryBody', { category: label })}</p>
+        <p className="mt-2 mb-0">
+          {t(`notificationCategory.${mandatory.category}.ground`, {
+            defaultValue: t('notificationSettings.groundUnstated'),
+          })}
+        </p>
+      </>
+    )
   } else if (fields.length > 0) {
     title = t('refusal.validationTitle')
     body = (

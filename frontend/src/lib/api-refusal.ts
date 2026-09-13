@@ -1,6 +1,7 @@
 import type {
   CapacityExceeded,
   DeletionBlocked,
+  MandatoryCategory,
   ResidencyConflict,
   ValidationError,
 } from '@/api/generated/model'
@@ -76,6 +77,26 @@ export function asDeletionBlocked(error: unknown): DeletionBlocked | null {
   }
   return typeof body.blocked_by === 'object' && body.blocked_by !== null
     ? (body as unknown as DeletionBlocked)
+    : null
+}
+
+/**
+ * FR-34. The refusal of an attempt to switch off a category that carries what
+ * the dormitory is obliged to tell the person.
+ *
+ * It shares 422 with an ordinary validation failure and is told apart by its
+ * shape: a category and the server's own name for it, and no `errors` map. The
+ * distinction is worth making on the screen — «the form is wrong» and «that one
+ * cannot be switched off, and here is why» are different sentences, and only
+ * the second one answers what the person just tried to do.
+ */
+export function asMandatoryCategory(error: unknown): MandatoryCategory | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 422) {
+    return null
+  }
+  return typeof body.category === 'string' && typeof body.category_label === 'string'
+    ? (body as unknown as MandatoryCategory)
     : null
 }
 
