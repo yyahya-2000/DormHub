@@ -5,6 +5,9 @@ use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
 use App\Exceptions\ConsentRequiredException;
 use App\Exceptions\CredentialAlreadySpentException;
+use App\Exceptions\EntryNotPermittedException;
+use App\Exceptions\GuestQuotaExceededException;
+use App\Exceptions\IllegalTransitionException;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
@@ -12,6 +15,8 @@ use App\Exceptions\MandatoryNotificationCategoryException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Exceptions\ResidentOfAnotherDormitoryException;
+use App\Exceptions\ResponsibleOfficerMarkRequiredException;
+use App\Exceptions\VisitAlreadyClosedException;
 use App\Http\Resources\ResidencyResource;
 use App\Services\AccessDenialRecorder;
 use Illuminate\Foundation\Application;
@@ -183,6 +188,66 @@ return Application::configure(basePath: dirname(__DIR__))
          * document and the revision so the client knows which text to show.
          */
         $exceptions->render(fn (ConsentRequiredException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 409));
+
+        /*
+         * §3.5.4: an illegal transition is HTTP 409. The caller had the right
+         * to ask and the body was well formed; the request is simply no longer
+         * in the state the move starts from, which is usually because somebody
+         * else moved it first. The body names both ends so the client can say
+         * «already refused» rather than «something went wrong».
+         */
+        $exceptions->render(fn (IllegalTransitionException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 409));
+
+        /*
+         * §3.3.4 maps the quota breach to 422, and the body carries which of
+         * the two ceilings was hit and the count that hit it: a duty officer
+         * told only «quota exceeded» cannot tell a resident's third guest from
+         * the dormitory's sixtieth.
+         */
+        $exceptions->render(fn (GuestQuotaExceededException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 422));
+
+        /*
+         * FR-23, second criterion. 422 rather than 409: the same call with the
+         * responsible officer's mark attached succeeds, so what is wrong is
+         * the request and not the state of the world.
+         */
+        $exceptions->render(fn (ResponsibleOfficerMarkRequiredException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 422));
+
+        /*
+         * FR-18, FR-19, and §2.4.2's second scenario in the shape the terminal
+         * reads it.
+         *
+         * 422: the entry asked for is not one the rules admit as it stands.
+         * `reason_code` is the discriminator — the officer's screen has to
+         * tell «outside the permitted interval», which an officer's decision
+         * may set aside, from «this code belongs to another dormitory», which
+         * it may not — and `override_available` says which of the two this is
+         * without anybody parsing a sentence.
+         *
+         * The refusal is already in the audit log by the time this runs: the
+         * service records it, outside any transaction, because a refusal
+         * written inside the transaction it refuses is carried off by the
+         * rollback.
+         */
+        $exceptions->render(fn (EntryNotPermittedException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 422));
+
+        /*
+         * FR-21, second criterion. An exit offered for a visit that already
+         * carries one. 409, and the message says what to do instead — the
+         * register is append-only and a mistake is put right by a correcting
+         * entry, not by an overwrite.
+         */
+        $exceptions->render(fn (VisitAlreadyClosedException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ] + $exception->context(), 409));
     })->create();
