@@ -113,6 +113,34 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Announcements (FR-09, FR-11, FR-12)
+    |---------------------------------------------------------------------------
+    |
+    | The validity period of an announcement is not here: it is a column, set
+    | per notice by the person publishing it, because «until Friday» is a
+    | property of the shutdown and not of the deployment. What is here is what
+    | the system as a whole decides.
+    |
+    */
+
+    'announcements' => [
+
+        // Page size of the feed. A dormitory posts a few notices a week, so
+        // the first page is normally the whole of what a resident wants; the
+        // figure matters for the archive, which grows without bound.
+        'page_size' => (int) env('ANNOUNCEMENTS_PAGE_SIZE', 20),
+
+        // NFR-01, in seconds: «all other pages ≤ 3 s». The budget the feed is
+        // spot-measured against in the test suite (§4.7.3 states this clause
+        // is checked by spot measurement rather than by a load run). It is
+        // configuration for the same reason NFR-02's budget is — so that the
+        // requirement and the assertion cannot drift apart.
+        'feed_budget_seconds' => (float) env('ANNOUNCEMENTS_FEED_BUDGET_SECONDS', 3),
+
+    ],
+
+    /*
+    |---------------------------------------------------------------------------
     | Consent to the processing of personal data (FR-35)
     |---------------------------------------------------------------------------
     |

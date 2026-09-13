@@ -151,6 +151,21 @@ final class BuildingPolicy
     }
 
     /**
+     * FR-09 and FR-12: publishing an announcement into this dormitory, and
+     * reading who has acknowledged one.
+     *
+     * The warden, the manager beneath him and the administrator — the same
+     * circle as the register work, because §1.1.4's revision 2 puts
+     * announcements with it. An announcement addressed to *every* dormitory is
+     * not decided here at all: it names no building for this method to receive,
+     * and `AnnouncementPolicy::publish` keeps it to the administrator.
+     */
+    public function publishAnnouncements(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::PublishAnnouncements, $building);
+    }
+
+    /**
      * FR-41: granting or revoking one staff role in this building.
      *
      * The role being handed out is part of the question, not a detail checked
