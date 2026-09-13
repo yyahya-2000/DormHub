@@ -1,0 +1,482 @@
+openapi: 3.1.0
+
+info:
+  title: Dormitory support system — API v1
+  version: 0.1.0
+  summary: Role model, authentication and audit log
+  description: |
+    The implemented part of the REST contract of §3.3.6. This iteration covers one
+    vertical slice — FR-07 (role model), FR-08 (authentication and sessions) and
+    FR-33 (audit log) — and nothing else. The remaining routes of §3.3.6 belong to
+    later increments and are deliberately absent from this document rather than
+    described as unimplemented: the file is the input for client generation, and a
+    generated client should not carry methods that answer 404.
+
+    Two properties of the contract are worth reading before the paths.
+
+    Authorisation is scoped by building, not only by role. A grant of a role names
+    the dormitory it holds in, and every building-addressed route decides on the
+    object rather than on the role alone. A warden of one building asking about
+    another gets 403, at the API and not merely in the interface.
+
+    The sign-in route has two distinct refusals. 401 means the credential did not
+    resolve to an account that may sign in; it never says whether the login exists.
+    429 means the login is inside its block window after the configured number of
+    failed attempts, and the reply carries the seconds remaining.
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+  - url: /api/v1
+    description: Same origin as the client
+
+tags:
+  - name: Authentication
+    description: FR-08. Sign-in, sign-out and the identity of the current session.
+  - name: Buildings
+    description: FR-07. The routes the role-and-building scope is demonstrated on.
+  - name: Audit
+    description: FR-33. Append-only, readable by the administrator alone.
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Sign in and receive an API token
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: The credential was accepted and a token was issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IssuedToken'
+        '401':
+          description: |
+            The login or the password is wrong, or the account is not active. The
+            body carries how many attempts remain before the block; zero means this
+            attempt was the last one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvalidCredentials'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          description: |
+            The login is blocked. Either the configured number of failed attempts
+            was reached — five attempts, fifteen minutes by default — or the
+            per-address request limit on this route was exceeded.
+          headers:
+            Retry-After:
+              description: Seconds until the login is accepted again.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginLocked'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the token used for this request
+      operationId: logout
+      responses:
+        '204':
+          description: The token is revoked and the sign-out is recorded in the audit log.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: The account behind the current token, with its role grants
+      operationId: currentUser
+      responses:
+        '200':
+          description: The authenticated account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /buildings/{building}:
+    get:
+      tags: [Buildings]
+      summary: The card of one building
+      description: |
+        Readable by the administrator and by anyone holding a role in this
+        building. A staff member of another building gets 403.
+      operationId: showBuilding
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '200':
+          description: The building card. The read is recorded in the audit log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Building'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /buildings/{building}/users:
+    get:
+      tags: [Buildings]
+      summary: The people holding a role in this building
+      description: |
+        Personal data, so the circle is narrower than for the card: the
+        administrator, and the warden or duty officer **of this building**. A
+        resident of the building gets 403, and so does the warden of any other
+        building. The answer never carries a person attached to a different
+        dormitory.
+      operationId: listBuildingUsers
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '200':
+          description: The roll of the building. The read is recorded in the audit log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: Read the audit log
+      description: |
+        The administrator alone. Reading the log is itself a recorded event, so
+        every call adds one entry of its own. The log has no write route and can
+        have none: the database has revoked UPDATE and DELETE on the table from
+        the role the application connects as.
+      operationId: listAuditLogs
+      parameters:
+        - name: action
+          in: query
+          required: false
+          description: Return only the entries of one action.
+          schema:
+            $ref: '#/components/schemas/AuditAction'
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: One page of the log, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The plain-text token returned by `POST /auth/login`, issued by Laravel Sanctum.
+
+  parameters:
+    BuildingId:
+      name: building
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+
+  responses:
+    Unauthenticated:
+      description: No token, or a token that has been revoked or has expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: |
+        The account is authenticated but holds no role that covers this object.
+        The two cases behind it are a role that is wrong for the route and a role
+        that is right but held in a different building.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: No such object.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationFailed:
+      description: The payload did not pass validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+  schemas:
+
+    RoleCode:
+      type: string
+      description: |
+        The five roles of §1.1.4. The colloquial Russian word for a
+        porter-caretaker is used nowhere: the entrance function belongs to the
+        security service.
+      enum: [admin, duty_officer, warden, security, student]
+
+    UserStatus:
+      type: string
+      enum: [active, blocked, archived]
+
+    AuditAction:
+      type: string
+      enum:
+        - auth.login_succeeded
+        - auth.login_failed
+        - auth.login_locked
+        - auth.login_blocked
+        - auth.logout_succeeded
+        - building.viewed
+        - building.users_viewed
+        - audit_log.viewed
+
+    AuditResult:
+      type: string
+      enum: [success, failure, denied]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          maxLength: 255
+          description: |
+            The secret the configured identity provider verifies. With the default
+            provider that is the account password; behind a university SSO it is
+            whatever that provider accepts, and the field keeps its name.
+
+    IssuedToken:
+      type: object
+      required: [token, token_type, identity_provider, user]
+      properties:
+        token:
+          type: string
+          description: >-
+            Send it in the Authorization header as a Bearer token. It is not
+            retrievable afterwards.
+        token_type:
+          type: string
+          const: Bearer
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null when the token expires only on sign-out.
+        identity_provider:
+          type: string
+          description: Which provider verified the credential.
+          examples: [database]
+        user:
+          $ref: '#/components/schemas/User'
+
+    RoleGrant:
+      type: object
+      description: |
+        One role held in one scope. `building_id` null means the role is held over
+        the system as a whole, which in this iteration is the administrator alone.
+      required: [role, building_id]
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleCode'
+        role_name:
+          type: string
+        building_id:
+          type: [integer, 'null']
+          format: int64
+        granted_at:
+          type: [string, 'null']
+          format: date-time
+
+    User:
+      type: object
+      required: [id, full_name, email, status]
+      properties:
+        id: { type: integer, format: int64 }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: [string, 'null'] }
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        roles:
+          type: array
+          description: Present when the grants were loaded for this response.
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+
+    Building:
+      type: object
+      required: [id, name, address, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        address: { type: string }
+        floors_count: { type: integer, minimum: 1 }
+        visiting_from:
+          type: string
+          description: Start of the visiting window, per building (NFR-09).
+          examples: ['08:00:00']
+        visiting_to:
+          type: string
+          examples: ['23:00:00']
+        curfew_at:
+          type: string
+          examples: ['23:00:00']
+        is_active: { type: boolean }
+
+    AuditEntry:
+      type: object
+      description: |
+        The record format of §3.9.6: who, what, over which object, when, from which
+        address, with what result.
+      required: [id, action, user, subject, result, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        user:
+          type: object
+          properties:
+            id: { type: [integer, 'null'], format: int64 }
+            full_name: { type: [string, 'null'] }
+        subject:
+          type: object
+          properties:
+            type:
+              type: [string, 'null']
+              description: The short class name of the object acted on.
+              examples: [Building]
+            id: { type: [integer, 'null'], format: int64 }
+        payload:
+          type: [object, 'null']
+          additionalProperties: true
+        ip_address: { type: [string, 'null'] }
+        result:
+          $ref: '#/components/schemas/AuditResult'
+        created_at: { type: string, format: date-time }
+
+    InvalidCredentials:
+      type: object
+      required: [message, attempts_left]
+      properties:
+        message: { type: string }
+        attempts_left:
+          type: integer
+          minimum: 0
+          description: Attempts remaining before the block. Zero means the block has just started.
+
+    LoginLocked:
+      type: object
+      required: [message, retry_after]
+      properties:
+        message: { type: string }
+        retry_after:
+          type: integer
+          minimum: 0
+          description: Seconds until the login is accepted again.
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+
+    ValidationError:
+      type: object
+      required: [message, errors]
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: [string, 'null'] }
+        last: { type: [string, 'null'] }
+        prev: { type: [string, 'null'] }
+        next: { type: [string, 'null'] }
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        from: { type: [integer, 'null'] }
+        last_page: { type: integer }
+        path: { type: string }
+        per_page: { type: integer }
+        to: { type: [integer, 'null'] }
+        total: { type: integer }
