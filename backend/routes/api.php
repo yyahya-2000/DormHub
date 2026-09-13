@@ -7,8 +7,10 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BedController;
 use App\Http\Controllers\Api\V1\BuildingController;
 use App\Http\Controllers\Api\V1\ResidencyController;
+use App\Http\Controllers\Api\V1\ResidentAccountController;
 use App\Http\Controllers\Api\V1\ResidentCardController;
 use App\Http\Controllers\Api\V1\RoomController;
+use App\Http\Controllers\Api\V1\StaffController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,11 +21,13 @@ use Illuminate\Support\Facades\Route;
 | Versioning sits in the path, as §3.3.6 fixes it; the `api/v1` prefix is
 | applied in bootstrap/app.php, so the paths below are relative to it.
 |
-| This file covers two slices. The first is the role model (FR-07),
+| This file covers three slices. The first is the role model (FR-07),
 | authentication and sessions (FR-08) and the audit log the second of those
 | writes to (FR-33). The second is the housing register: dormitories (FR-01),
 | rooms and places (FR-02), moving in (FR-03), moving out (FR-05) and the
-| resident card (FR-06).
+| resident card (FR-06). The third follows revision 2 of the role model: the
+| warden appoints the staff of his own building (FR-41), and he or the manager
+| beneath him issues an account to an incoming resident (FR-42).
 |
 | The remaining routes of §3.3.6 — guest requests, the checkpoint,
 | announcements, lost-and-found and maintenance — belong to later increments
@@ -41,6 +45,16 @@ use Illuminate\Support\Facades\Route;
 Route::post('auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:login')
     ->name('auth.login');
+
+/*
+ * FR-42, the resident's end of it. Unauthenticated by necessity — the account
+ * has no password yet — and behind the same per-address limiter as the sign-in
+ * route, because a one-time code is a secret and guessing at it is the same
+ * kind of attempt.
+ */
+Route::post('auth/password', [ResidentAccountController::class, 'setPassword'])
+    ->middleware('throttle:login')
+    ->name('auth.password.set');
 
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
@@ -70,6 +84,26 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::get('buildings/{building}/users', [BuildingController::class, 'people'])
         ->name('buildings.users');
+
+    /*
+     * FR-41. The staff of a building, as a sub-resource of that building:
+     * there is no route by which a role is granted without naming the
+     * dormitory it holds in. The warden appoints the manager, the duty officer
+     * and the security officer here; the manager appoints nobody, and the
+     * administrator and warden roles are not on offer to anyone.
+     */
+    Route::post('buildings/{building}/staff', [StaffController::class, 'store'])
+        ->name('buildings.staff.store');
+
+    Route::delete('buildings/{building}/staff/{user}/{role}', [StaffController::class, 'destroy'])
+        ->name('buildings.staff.destroy');
+
+    /*
+     * FR-42. The account of an incoming resident. The credential it produces
+     * leaves by the route above the sanctum group, not in this response.
+     */
+    Route::post('buildings/{building}/residents', [ResidentAccountController::class, 'store'])
+        ->name('buildings.residents.store');
 
     /*
      * FR-02. The register of rooms and places, kept per building.
