@@ -84,14 +84,49 @@ return [
             ]) : [],
         ],
 
+        /*
+        | Two connections to the same database, under two different roles.
+        |
+        | §4.4.4 makes the audit log append-only by revoking UPDATE and DELETE
+        | on `audit_logs` from the role the application connects as. A role
+        | cannot revoke those rights from itself, and the owner of a table
+        | cannot be locked out of it, so the guarantee only holds if the
+        | service runs as a role that owns nothing:
+        |
+        |   pgsql        the application role, used to serve requests, to run
+        |                the queue worker and the scheduler. This is the
+        |                default connection.
+        |   pgsql_owner  the owning role, used by `migrate` and `db:seed` and
+        |                by nothing else.
+        |
+        | Run schema work with --database=pgsql_owner. Under the application
+        | role the revocation migration would find itself connected as the very
+        | role it revokes from, and would skip.
+        */
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
+            'username' => env('DB_USERNAME', 'app_rw'),
             'password' => env('DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
+        'pgsql_owner' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_OWNER_URL', env('DB_URL')),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_OWNER_USERNAME', 'postgres'),
+            'password' => env('DB_OWNER_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
