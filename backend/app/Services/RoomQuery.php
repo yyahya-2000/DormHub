@@ -46,6 +46,7 @@ final readonly class RoomQuery
             payload: [
                 'rooms' => $rooms->count(),
                 'free_places' => $rooms->sum(fn (Room $room): int => $room->freePlaces()),
+                'vacant_beds' => $rooms->sum(fn (Room $room): int => $room->vacantBeds()),
             ],
             ipAddress: $ipAddress,
         );

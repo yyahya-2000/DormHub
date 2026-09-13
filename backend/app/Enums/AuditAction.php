@@ -41,6 +41,7 @@ enum AuditAction: string
     case BuildingRoomsViewed = 'building.rooms_viewed';
     case RoomCreated = 'room.created';
     case RoomUpdated = 'room.updated';
+    case RoomUpdateRefused = 'room.update_refused';
     case BedCreated = 'bed.created';
     case BedCreationRefused = 'bed.creation_refused';
 
