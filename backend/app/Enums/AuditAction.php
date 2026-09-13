@@ -52,4 +52,17 @@ enum AuditAction: string
     // FR-06. The card carries personal data, so reading it is recorded —
     // §3.9.6 counts that among the events, and FR-33 repeats it.
     case ResidentCardViewed = 'resident.card_viewed';
+
+    // FR-41. Who gave whom which role in which building, and who took it back.
+    // A change to the role model is a change to what everybody afterwards may
+    // do, so it belongs in the log for the same reason §3.9.6 puts refusals
+    // there: the record is the only way to reconstruct why an account could
+    // act at all.
+    case StaffAppointed = 'staff.appointed';
+    case StaffRevoked = 'staff.revoked';
+
+    // FR-42. An account handed to an incoming resident, and the moment that
+    // resident replaced the one-time credential with a password of their own.
+    case ResidentAccountIssued = 'resident.account_issued';
+    case PasswordSet = 'auth.password_set';
 }
