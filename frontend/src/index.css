@@ -1,111 +1,138 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import 'tailwindcss';
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+/*
+  The palette is small and named on purpose. This is the administrative system
+  of a dormitory — a screen someone reads at the security post at seven in the
+  morning — so the look borrows from printed institutional forms: paper ground,
+  ink text, ruled lines, one dark blue for the chrome and two earth tones for
+  the states that matter. Six colours, no gradients, no drop shadows.
+*/
+@theme {
+  --color-paper: #f4f1ea;
+  --color-paper-raised: #fbfaf6;
+  --color-ink: #17191c;
+  --color-steel: #5c6770;
+  --color-rule: #d7d1c4;
+  --color-prussian: #0e3a53;
+  --color-prussian-bright: #17597d;
+  --color-prussian-wash: #e4ecf1;
+  --color-brick: #9b3022;
+  --color-brick-wash: #f6e7e4;
+  --color-brass: #8a6a1f;
+  --color-brass-wash: #f6eedb;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /*
+    NFR-10: the minimum size of body text is 16 px, because the interface has to
+    be legible from the security officer's working position. The scale is
+    redefined rather than merely avoided — `text-sm` and `text-xs` exist in
+    third-party component source, and here they cannot fall below 1rem.
+  */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.5rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.125rem;
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --font-sans:
+    'Inter', 'Segoe UI', 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  /* Square corners throughout: forms on paper do not have rounded fields. */
+  --radius: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
+/*
+  The variables shadcn/ui components read, pointed at the palette above so the
+  imported components take this system's colours instead of the default grey.
+*/
+@layer base {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --background: var(--color-paper);
+    --foreground: var(--color-ink);
+    --card: var(--color-paper-raised);
+    --card-foreground: var(--color-ink);
+    --popover: var(--color-paper-raised);
+    --popover-foreground: var(--color-ink);
+    --primary: var(--color-prussian);
+    --primary-foreground: var(--color-paper-raised);
+    --secondary: var(--color-prussian-wash);
+    --secondary-foreground: var(--color-prussian);
+    --muted: var(--color-prussian-wash);
+    --muted-foreground: var(--color-steel);
+    --accent: var(--color-brass-wash);
+    --accent-foreground: var(--color-brass);
+    --destructive: var(--color-brick);
+    --destructive-foreground: var(--color-paper-raised);
+    --border: var(--color-rule);
+    --input: var(--color-rule);
+    --ring: var(--color-prussian-bright);
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  * {
+    border-color: var(--color-rule);
+  }
+
+  html {
+    /* NFR-10 again, at the root: the browser default is already 16 px and the
+       application never scales it down. */
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-prussian-bright);
+    outline-offset: 2px;
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
 }
 
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* A label style used on every field caption and column head. */
+@utility label-caps {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-steel);
 }
