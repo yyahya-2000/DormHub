@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { useLogin } from '@/api/generated/dormitory'
@@ -283,6 +283,19 @@ export function LoginPage() {
             <Button type="submit" size="lg" disabled={isLocked || login.isPending}>
               {login.isPending ? `${t('login.submitting')}…` : t('login.submit')}
             </Button>
+
+            {/*
+              FR-42 leaves a resident whose account was issued minutes ago with
+              a one-time code and no password, and this screen is where they
+              arrive. Without this link the only way to the form that spends the
+              code would be the address in the letter, and a letter that has
+              been closed is gone.
+            */}
+            <p className="m-0">
+              <Link className="text-prussian underline" to="/set-password">
+                {t('login.firstPassword')}
+              </Link>
+            </p>
 
             <p className="text-steel">{t('login.note')}</p>
           </form>
