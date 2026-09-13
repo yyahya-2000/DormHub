@@ -28,6 +28,14 @@ use Illuminate\Support\Facades\Schema;
  * reason for the choice of database, and this is the place the reason is
  * cashed in.
  *
+ * **Superseded.** Both partial indexes are dropped by
+ * `2026_09_13_180100_forbid_overlapping_residencies`, which restates the rule
+ * over the period rather than over the open flag: «at most one open row» is
+ * narrower than «no overlapping periods», and the gap between them admitted
+ * two residents to one bed through the ordinary API. They are left written out
+ * here because this file is the history of the schema and not its current
+ * state, and because the later migration is only readable against them.
+ *
  * Two columns stand outside the diagram and are here because FR-03 and FR-05
  * ask for them in prose: the ground on which the residency begins, and the
  * ground on which it ends. FR-05's first criterion — «termination of residency
