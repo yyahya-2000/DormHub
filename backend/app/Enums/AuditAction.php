@@ -66,4 +66,17 @@ enum AuditAction: string
     // resident replaced the one-time credential with a password of their own.
     case ResidentAccountIssued = 'resident.account_issued';
     case PasswordSet = 'auth.password_set';
+
+    // FR-35. Consent to the processing of personal data, given and withdrawn.
+    //
+    // These two are in the log for a reason none of the others share. Art. 19
+    // part 2 cl. 8 of Federal Law No. 152-FZ requires the operator to keep a
+    // registration and accounting of the actions performed with personal data,
+    // and art. 9 part 3 puts on the operator the burden of proving that
+    // consent was given. The consent record itself is the primary evidence;
+    // the log entry is what says who gave it, from where and at what moment,
+    // and — for the withdrawal — from which point the processing that rested
+    // on it had to stop.
+    case ConsentGranted = 'consent.granted';
+    case ConsentWithdrawn = 'consent.withdrawn';
 }

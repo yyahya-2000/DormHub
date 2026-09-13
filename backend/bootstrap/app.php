@@ -3,9 +3,11 @@
 use App\Exceptions\BedAlreadyOccupiedException;
 use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
+use App\Exceptions\ConsentRequiredException;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
+use App\Exceptions\MandatoryNotificationCategoryException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Http\Resources\ResidencyResource;
@@ -137,4 +139,28 @@ return Application::configure(basePath: dirname(__DIR__))
             'message' => $exception->getMessage(),
             'bed_id' => $exception->bedId,
         ], 422));
+
+        /*
+         * FR-34, second criterion. An attempt to switch off a category that
+         * carries what the dormitory is obliged to tell the person. 422: the
+         * request was well-formed and the value in it is not one the settings
+         * admit, which is what a validation failure is.
+         */
+        $exceptions->render(fn (MandatoryNotificationCategoryException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 422));
+
+        /*
+         * FR-35, first criterion, at the point it bites: the operation
+         * processes personal data and there is no consent on record for it.
+         *
+         * 409 and not 403 — the caller's role covers the object perfectly
+         * well, and what stands in the way is the state of the world. 403 in
+         * this application means something else and is written to the audit
+         * log as `access.denied`, which this is not. The body names the
+         * document and the revision so the client knows which text to show.
+         */
+        $exceptions->render(fn (ConsentRequiredException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 409));
     })->create();
