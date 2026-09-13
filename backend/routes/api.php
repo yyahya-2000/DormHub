@@ -33,8 +33,13 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+/*
+ * The named limiter rather than `throttle:10,1`: the anonymous form answers
+ * with the framework's own body, which the contract does not describe. The
+ * limit itself, and the shape of its refusal, are defined in AppServiceProvider.
+ */
 Route::post('auth/login', [AuthController::class, 'login'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:login')
     ->name('auth.login');
 
 Route::middleware('auth:sanctum')->group(function (): void {

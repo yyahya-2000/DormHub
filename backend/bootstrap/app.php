@@ -8,10 +8,12 @@ use App\Exceptions\LoginLockedException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Http\Resources\ResidencyResource;
+use App\Services\AccessDenialRecorder;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -40,10 +42,34 @@ return Application::configure(basePath: dirname(__DIR__))
             'attempts_left' => $exception->attemptsLeft,
         ], 401));
 
+        /*
+         * The 429 of FR-08. `reason` is the discriminator the contract
+         * describes: the same status also answers the per-address request
+         * limit of the sign-in route, and a client must be able to tell «your
+         * account is blocked» from «you are calling too often» without reading
+         * the message.
+         */
         $exceptions->render(fn (LoginLockedException $exception) => response()->json([
             'message' => $exception->getMessage(),
             'retry_after' => $exception->secondsRemaining,
+            'reason' => $exception->reason->value,
         ], 429, ['Retry-After' => (string) $exception->secondsRemaining]));
+
+        /*
+         * §3.9.6 counts a refusal among the events the log must hold, and a
+         * refusal is the one event no service raises: the request never
+         * reaches the service that would record it. This is the single place
+         * every 403 of the application passes through, so the record is
+         * written here rather than repeated in each authorisation check.
+         *
+         * The callback returns nothing, so the response itself is still the
+         * framework's — recording is all that is added.
+         */
+        $exceptions->render(function (HttpExceptionInterface $exception, Request $request): void {
+            if ($exception->getStatusCode() === 403) {
+                app(AccessDenialRecorder::class)->record($request, $exception);
+            }
+        });
 
         /*
          * FR-01, second criterion: the deletion is blocked and the reason is
