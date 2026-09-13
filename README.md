@@ -137,6 +137,58 @@ npm run build
 npm run lint
 ```
 
+## Continuous integration
+
+`.gitlab-ci.yml` describes a GitLab CI pipeline that runs on every push and on every merge request.
+Four jobs in three stages:
+
+| Stage | Job | What it runs |
+|---|---|---|
+| `style` | `backend:style` | `pint --test` over `backend/` |
+| `style` | `frontend:style` | `oxlint` over `frontend/` |
+| `test` | `backend:test` | migrations and `php artisan test` against PostgreSQL 17 and Redis, with line coverage |
+| `build` | `frontend:build` | `tsc -b` and `vite build`, publishing `frontend/dist` |
+
+The PHP jobs start from `php:8.3-cli-alpine` and build the same extensions as `docker/php/Dockerfile`,
+plus PCOV. PCOV is the coverage driver rather than Xdebug: it counts executed lines and nothing else,
+which is what NFR-12 asks for, and it costs a fraction of Xdebug's run time. Neither driver belongs in
+the application image — coverage is a property of the pipeline, not of the deployable unit.
+Composer's download cache and `backend/vendor` are keyed on `composer.lock`, npm's cache on
+`package-lock.json`, so a run that changes no dependency downloads nothing. `node_modules` is not
+cached, because `npm ci` deletes it before it starts.
+
+### The test job
+
+`postgres:17-alpine` and `redis:8-alpine` run as service containers. A service container cannot be
+handed the repository's init directory, so the job runs
+`docker/postgres/initdb/10-application-role.sh` against the database itself — the same script Compose
+runs at first boot. The restricted `app_rw` role and the `dormitory_test` database therefore exist in
+CI exactly as they do locally, and the privilege assertion of the audit log test has something real to
+assert against instead of skipping. The suite then runs on the `pgsql_owner` connection against
+`dormitory_test`, because `RefreshDatabase` creates and drops tables.
+
+The cache, session and queue stores stay pointed at Redis in the job environment, which is deliberate.
+The isolation those tests need lives in `backend/tests/TestCase.php`, not in `phpunit.xml`, for the
+reason «Tests» above gives; leaving the production-shaped stores configured in CI is what keeps
+that guard honest. If it ever stops working, the login throttle tests of FR-08 fail in the pipeline
+rather than on somebody's machine.
+
+The job writes an empty `.env` before it starts. Laravel's test runner reads the environment file to
+restore it around the run, and the repository carries none; every value comes from the job variables.
+
+### Coverage
+
+`php artisan test --coverage --min=70` prints the percentage per file and a total over `app/`. The
+job exposes it three ways: the `Total: NN.N %` line, which the `coverage:` expression in the job turns
+into the pipeline's coverage figure and badge; a Cobertura report, which annotates the changed lines
+of a merge request; and a JUnit report, which puts failures on the merge request itself.
+
+`--min=70` is the threshold of NFR-12, and **the job fails below it**. The suite measured 80.9 % of the
+lines of `app/` when this section was written, so the gate has room as it stands; a gate that only
+warns is a gate that gets ignored, and a requirement no pipeline enforces is a requirement on paper.
+Relaxing it to a warning is one line — `allow_failure: true` on the job — if a later increment needs
+room to land code before its tests.
+
 ## Shutting down
 
 ```sh
