@@ -7,9 +7,13 @@ import { AuditLogPage } from '@/pages/audit-log-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
+import { ConsentHistoryPage } from '@/pages/consent-history-page'
+import { ConsentPage } from '@/pages/consent-page'
 import { FloorPlanPage } from '@/pages/floor-plan-page'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
+import { NotificationSettingsPage } from '@/pages/notification-settings-page'
+import { NotificationsPage } from '@/pages/notifications-page'
 import { ResidentAccountPage } from '@/pages/resident-account-page'
 import { ResidentCardPage } from '@/pages/resident-card-page'
 import { RoomsPage } from '@/pages/rooms-page'
@@ -36,6 +40,16 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
           <Route element={<RequireSession />}>
+            {/*
+              The consent of FR-35 is behind the token and outside the frame of
+              the application, and both halves of that are deliberate. Behind
+              the token, because a consent belongs to an account. Outside the
+              frame, because art. 9 part 1 of Federal Law No. 152-FZ has consent
+              «executed separately from other documents» — a row of section tabs
+              above the text would put the document among the screens of a
+              system instead of leaving it a document being signed.
+            */}
+            <Route path="consent" element={<ConsentPage />} />
             <Route element={<AppShell />}>
               <Route index element={<BuildingRegisterPage />} />
               <Route path="buildings" element={<BuildingRegisterPage />} />
@@ -48,6 +62,18 @@ export default function App() {
                 element={<ResidentAccountPage />}
               />
               <Route path="residents/:residentId" element={<ResidentCardPage />} />
+              {/*
+                The personal account. Neither route takes a parameter naming a
+                person: both are scoped to the account the token belongs to, so
+                there is no capability to ask about and no tab to hide —
+                everyone who can sign in has one.
+              */}
+              <Route path="notifications" element={<NotificationsPage />} />
+              <Route
+                path="notifications/settings"
+                element={<NotificationSettingsPage />}
+              />
+              <Route path="consents" element={<ConsentHistoryPage />} />
               <Route path="audit-logs" element={<AuditLogPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

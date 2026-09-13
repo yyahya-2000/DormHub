@@ -1,10 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import { buildingsOf, showsAuditLink } from '@/auth/navigation'
+import { awaitsConsent, buildingsOf, showsAuditLink } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Button } from '@/components/ui/button'
+import { useUnreadNotifications } from '@/hooks/use-unread-notifications'
+import { useFormatters } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -12,18 +14,31 @@ import { cn } from '@/lib/utils'
  * tabs, and the page. The tabs are drawn from the grants of the current
  * account — see `auth/navigation.ts` for why that is a matter of drawing and
  * not of permission.
+ *
+ * Two things of the personal account live here rather than on a page, because
+ * both have to be true of every screen. The count of unread messages (FR-34),
+ * which is on the tab that leads to them so that a message arriving while
+ * somebody is three screens deep in the housing register is still noticed. And
+ * the standing offer of the consent text (FR-35), which is a strip and not a
+ * modal: art. 9 part 1 wants consent free, and a dialog that has to be
+ * dismissed before the application can be used is the opposite of that.
  */
 export function AppShell() {
   const { t } = useTranslation()
+  const formatters = useFormatters()
   const { session, signOut, isSigningOut } = useSession()
 
-  if (session.status !== 'authenticated') {
+  const authenticated = session.status === 'authenticated'
+  const unread = useUnreadNotifications(authenticated)
+
+  if (!authenticated) {
     return null
   }
 
   const user = session.user
   const buildings = buildingsOf(user)
   const primaryBuilding = buildings[0]
+  const pendingConsents = awaitsConsent(user)
 
   /*
    * The sections, built from the grants of the account. A tab is drawn when the
@@ -33,7 +48,7 @@ export function AppShell() {
    * refuses everyone else. None of this is a permission: every route below
    * stays reachable by hand and is decided by the API (§3.3.2).
    */
-  const tabs: { to: string; label: string; end?: boolean }[] = [
+  const tabs: { to: string; label: string; end?: boolean; badge?: number }[] = [
     { to: '/', label: t('app.section.register'), end: true },
   ]
   if (primaryBuilding !== undefined) {
@@ -43,6 +58,14 @@ export function AppShell() {
     })
   }
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
+  // The personal account is nobody's privilege: the routes behind these two
+  // are scoped to the token and take no parameter naming anyone else.
+  tabs.push({
+    to: '/notifications',
+    label: t('app.section.notifications'),
+    ...(unread !== null && unread > 0 ? { badge: unread } : {}),
+  })
+  tabs.push({ to: '/consents', label: t('app.section.personalData') })
   if (showsAuditLink(user)) {
     tabs.push({ to: '/audit-logs', label: t('app.section.audit') })
   }
@@ -90,11 +113,39 @@ export function AppShell() {
                   }
                 >
                   {tab.label}
+                  {tab.badge !== undefined ? (
+                    <>
+                      {' '}
+                      <span
+                        className="inline-block border border-brick/40 bg-brick-wash px-2 py-0.5 font-semibold text-brick"
+                        aria-label={t('notifications.unreadCount', { count: tab.badge })}
+                      >
+                        {formatters.count(tab.badge)}
+                      </span>
+                    </>
+                  ) : null}
                 </NavLink>
               </li>
             ))}
           </ul>
         </nav>
+      ) : null}
+
+      {/*
+        FR-35, first criterion, on every screen rather than only at sign-in. The
+        offer stands until the person decides, and it never stands in the way:
+        it is a strip that scrolls with the page, and nothing below it is
+        disabled while it is there.
+      */}
+      {pendingConsents ? (
+        <div className="border-b border-rule bg-brass-wash">
+          <div className="mx-auto flex w-full max-w-5xl flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-4 py-3">
+            <p className="m-0 min-w-0 text-ink">{t('consent.strip')}</p>
+            <Link className="font-medium text-prussian underline" to="/consent">
+              {t('consent.stripAction')}
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       <main className="mx-auto w-full max-w-5xl grow px-4 py-8">

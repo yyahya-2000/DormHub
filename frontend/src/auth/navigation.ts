@@ -200,6 +200,26 @@ export function showsAuditLink(user: User): boolean {
 }
 
 /**
+ * FR-35. Whether a consent text is waiting for this person's decision.
+ *
+ * This is the one question in this module that is not about a role, and it is
+ * here for the same reason as the rest: it decides what is drawn. The answer
+ * comes from `consent_required` on the session, which the server puts on the
+ * sign-in reply and on `GET /auth/me` and nowhere else. It is not worked out
+ * from the history of consents, and could not be — a consent given against a
+ * wording that has since been superseded counts as pending, and only the server
+ * knows which revision is in force.
+ *
+ * An account whose session was loaded without the field reads as nothing
+ * outstanding, which is the safe direction here: the offer is a strip, and the
+ * cost of a missing one is that the person meets the text at the next sign-in
+ * instead of this one.
+ */
+export function awaitsConsent(user: User): boolean {
+  return (user.consent_required ?? []).length > 0
+}
+
+/**
  * The roll carries personal data, so the API narrows it to the administrator
  * and to the staff of that same building. The section is drawn only for those;
  * for everyone else the building card stands alone.
