@@ -53,7 +53,10 @@
  * send only what changes.
  */
 export interface BuildingInput {
-  /** @maxLength 255 */
+  /**
+     * Unique across the register. A collision comes back as a 422 on this field, from the form rule or, in a race between two requests, from the unique index behind it.
+     * @maxLength 255
+     */
   name?: string;
   /** @maxLength 255 */
   address?: string;

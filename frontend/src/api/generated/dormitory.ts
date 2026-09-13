@@ -619,6 +619,11 @@ export const getListBuildingsUrl = () => {
  * The administrator sees every dormitory; every other role sees the ones its
  * grants name. This is the «empty scoped result» half of FR-07's criterion:
  * the route is not refused, the answer is narrowed.
+ *
+ * A resident the register shows as moved out is narrowed out too, even
+ * though eviction revokes no role grant. The listing and
+ * `GET /buildings/{building}` answer the same question, so no row here
+ * leads to a 403 there.
  * @summary The register of dormitories, scoped to the caller
  */
 export const listBuildings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listBuildingsResponse> => {
@@ -976,8 +981,10 @@ export const getListBuildingRoomsUrl = (building: number,) => {
 
 /**
  * FR-02. Each entry carries the capacity, the places registered, the places
- * occupied and the free remainder, so that a client never has to subtract
- * and arrive at a figure the server did not refuse on.
+ * occupied, how many further places may be registered (`free_places`) and
+ * how many registered places are free for somebody to move into
+ * (`vacant_beds`), so that a client never has to subtract and arrive at a
+ * figure the server did not refuse on.
  *
  * The administrator, and the warden, manager or duty officer **of this
  * building**. A resident does not read the occupancy of the whole dormitory.
@@ -1632,11 +1639,18 @@ export const getCreateResidencyUrl = () => {
  * to write the row.
  *
  * Two residents cannot hold one place over overlapping periods. The refusal
- * comes from the partial unique index `residencies_active_bed_uniq` in the
+ * comes from the exclusion constraint `residencies_bed_no_overlap` in the
  * database, not from a check in the application, and the 409 it produces
  * carries the conflicting record under `conflict`. A resident already
- * holding another place is refused the same way, from the index on the
- * resident.
+ * holding another place is refused the same way, by
+ * `residencies_user_no_overlap`.
+ *
+ * The rule is about **periods**, not about open records. A `moved_in_at`
+ * backdated underneath a residency that is already running is refused, and
+ * so is a place whose termination has been recorded for a date still to
+ * come. The bounds are closed below and open above, so a move-in on the
+ * very day the last occupant leaves is admitted: a bed changes hands
+ * without a night of nobody in it.
  * @summary Place a resident in a bed
  */
 export const createResidency = async (residencyInput: ResidencyInput, options?: Parameters<typeof apiFetch>[1]): Promise<createResidencyResponse> => {
@@ -1760,14 +1774,20 @@ export const getTerminateResidencyUrl = (residency: number,) => {
 
 /**
  * FR-05. The row is **not** deleted: the ground and the date are written,
- * the place is freed at once, and the history stays readable on the card of
- * FR-06.
+ * and the history stays readable on the card of FR-06.
  *
- * `moved_out_at` may lie in the future. The place is free from the moment
- * the termination is recorded, while the person's access to building-bound
- * routes runs until the stated date and is gone on it — «no later than the
- * stated date». `is_open` and `is_current` on the returned record are the
- * two halves of that and can differ.
+ * `moved_out_at` may lie in the future, and then nothing else changes yet.
+ * The record stays `active`, the place stays `occupied`, and the person's
+ * access to building-bound routes runs until the stated date and is gone on
+ * it — «no later than the stated date». `is_open` becomes false because a
+ * departure date is now written down; `is_current` stays true because the
+ * person is still living there. The two are the halves of that distinction
+ * and they are meant to differ.
+ *
+ * On the stated date the record becomes `ended` and the place becomes
+ * `free`, done by the nightly `housing:settle-residencies` when no request
+ * happens to be doing it. A termination dated today does all of it at
+ * once.
  *
  * The ground is required. A termination with an empty reason is refused with
  * 422.
@@ -1890,13 +1910,18 @@ export const getShowResidentCardUrl = (resident: number,) => {
 
 /**
  * FR-06. Visible to the warden and the manager **of that dormitory** and to
- * the administrator; a resident sees only their own. The warden of building 1
- * requesting a card of building 2 gets 403, at the API and not merely in the
- * interface.
+ * the administrator; a resident sees only their own. Nobody else: the duty
+ * officer's work is the guest request and the security officer's is the
+ * entrance, and neither needs a citizenship or a telephone number. The
+ * warden of building 1 requesting a card of building 2 gets 403, at the API
+ * and not merely in the interface.
  *
  * The card carries the name, the study status, the citizenship, the contact,
  * the current place, the whole residency history and the open obligations.
- * Reading it is recorded in the audit log, because it carries personal data.
+ * `current_bed` and `open_obligations` are read as «resident today», not as
+ * «no departure date written»: somebody leaving at the end of December has
+ * a current place until the end of December. Reading the card is recorded in
+ * the audit log, because it carries personal data.
  * @summary The resident card
  */
 export const showResidentCard = async (resident: number, options?: Parameters<typeof apiFetch>[1]): Promise<showResidentCardResponse> => {
@@ -2288,13 +2313,21 @@ export const getDeleteBuildingUrl = (building: number,) => {
 }
 
 /**
- * FR-01, second criterion. A dormitory that has rooms attached cannot be
- * deleted, and the refusal states why: 409 with the number of rooms standing
- * in the way and the two ways out — move or delete the rooms, or archive the
- * dormitory instead.
+ * FR-01, second criterion. A dormitory that still has anything attached
+ * cannot be deleted, and the refusal states **which** thing: 409 whose
+ * `blocked_by` carries both counts and whose message names the one that
+ * actually refused.
  *
- * The block is `ON DELETE RESTRICT` on `rooms.building_id`. It is the
- * database that refuses, so it holds against code that forgot to ask.
+ * Two foreign keys point at a dormitory and either can block the delete:
+ * `rooms.building_id` and `role_user.building_id`, both `ON DELETE
+ * RESTRICT`. It is the database that refuses, so the rule holds against
+ * code that forgot to ask.
+ *
+ * The way out depends on which it was. A staff grant is revoked through
+ * `DELETE /buildings/{building}/staff/{user}/{role}`. Rooms are not:
+ * this API has no route that deletes or moves one, so the message points at
+ * archiving instead, which keeps the rooms and their residency history
+ * readable.
  * @summary Delete a dormitory
  */
 export const deleteBuilding = async (building: number, options?: Parameters<typeof apiFetch>[1]): Promise<deleteBuildingResponse> => {

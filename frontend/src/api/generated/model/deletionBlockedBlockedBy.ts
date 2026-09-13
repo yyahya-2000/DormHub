@@ -49,6 +49,6 @@
  */
 
 /**
- * What is attached, by kind and count.
+ * What is attached, by kind and count. Every known kind is present, including the ones that are nought, so that the numbers and the message cannot contradict each other.
  */
 export type DeletionBlockedBlockedBy = {[key: string]: number};

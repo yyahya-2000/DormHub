@@ -67,10 +67,15 @@ export interface Room {
   /** Places currently held. */
   occupied_beds_count?: number;
   /**
-     * `capacity` minus the places registered. This is the figure the capacity rejection names, sent so that a client never computes its own.
+     * How many further places may still be **registered**: `capacity` minus the places registered. This is the figure the capacity rejection names, sent so that a client never computes its own. It is not the number of places somebody could move into — see `vacant_beds`.
      * @minimum 0
      */
   free_places: number;
+  /**
+     * How many registered places are free for somebody to move into today. A blocked place counts for neither this nor `occupied_beds_count`. A room of four places with one occupant reports `free_places: 0` and `vacant_beds: 3`, and the two answer different questions.
+     * @minimum 0
+     */
+  vacant_beds: number;
   /** Present when the places were loaded for this response. */
   beds?: Bed[];
 }

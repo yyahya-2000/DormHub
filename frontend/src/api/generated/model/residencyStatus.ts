@@ -48,6 +48,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * A projection of the period, and of nothing else. A residency is `active`
+ * while the person is resident and `ended` once the stated departure date
+ * has arrived — never before it, however long ago the notice was written.
+ */
 export type ResidencyStatus = typeof ResidencyStatus[keyof typeof ResidencyStatus];
 
 

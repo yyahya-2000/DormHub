@@ -53,6 +53,11 @@
  * the authority. `blocked` is the one value the register knows nothing
  * about: an administrative decision that the place takes nobody, and the
  * reason the field is stored rather than computed.
+ *
+ * A place whose occupant leaves at midnight reads `occupied` until the
+ * nightly settlement runs. It never reads `free` while somebody holds it,
+ * and a residency written against a place that is in fact held is refused
+ * by the exclusion constraint whatever this field says.
  */
 export type BedStatus = typeof BedStatus[keyof typeof BedStatus];
 

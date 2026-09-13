@@ -69,6 +69,7 @@ export const AuditAction = {
   buildingrooms_viewed: 'building.rooms_viewed',
   roomcreated: 'room.created',
   roomupdated: 'room.updated',
+  roomupdate_refused: 'room.update_refused',
   bedcreated: 'bed.created',
   bedcreation_refused: 'bed.creation_refused',
   residencyassigned: 'residency.assigned',

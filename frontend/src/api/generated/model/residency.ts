@@ -50,10 +50,11 @@
 import type { ResidencyStatus } from './residencyStatus';
 
 /**
- * One residency, past or present. `is_open` says the place is still held;
- * `is_current` says the person may still use the dormitory. A termination
- * dated in the future makes the two differ, which is FR-05's third
- * criterion.
+ * One residency, past or present. `is_open` says no departure date has been
+ * written down; `is_current` says the person is resident today. A
+ * termination dated in the future makes the two differ — `is_open: false`
+ * with `is_current: true` — which is FR-05's third criterion. `is_current`
+ * is the one to filter a list of residents on; `status` follows it.
  */
 export interface Residency {
   id: number;
