@@ -30,13 +30,94 @@ final class BuildingPolicy
             return true;
         }
 
-        foreach ([RoleCode::Warden, RoleCode::DutyOfficer, RoleCode::SecurityOfficer, RoleCode::Resident] as $role) {
+        foreach ([RoleCode::Warden, RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $role) {
             if ($user->hasRoleInBuilding($role, $building)) {
                 return true;
             }
         }
 
+        /*
+         * A resident reaches the card of the dormitory they live in, and FR-05
+         * adds the word «live». Once the register records that the person has
+         * moved out, the building-bound functions close on the stated date and
+         * not later, and the card is one of them. A resident the register has
+         * never heard of keeps the access their grant gives them: absence of a
+         * residency row is not eviction, it is silence.
+         */
+        if ($user->hasRoleInBuilding(RoleCode::Resident, $building)) {
+            return ! $user->hasMovedOutOf($building);
+        }
+
         return false;
+    }
+
+    /**
+     * The register of dormitories, listed. Everyone sees their own scope; the
+     * administrator's grant names no building and so covers all of them. The
+     * filtering itself is the service's business (`BuildingRegistry::visibleTo`),
+     * and this method only says that an authenticated account may ask.
+     */
+    public function viewAny(User $user): bool
+    {
+        return true;
+    }
+
+    /**
+     * FR-01, first criterion: create, edit and archive belong to the
+     * administrator and to nobody else. Three methods rather than one, because
+     * the gate is asked by name and a single `manage` would blur which of the
+     * three a route actually needs.
+     */
+    public function create(User $user): bool
+    {
+        return $user->isAdministrator();
+    }
+
+    public function update(User $user, Building $building): bool
+    {
+        return $user->isAdministrator();
+    }
+
+    public function archive(User $user, Building $building): bool
+    {
+        return $user->isAdministrator();
+    }
+
+    public function delete(User $user, Building $building): bool
+    {
+        return $user->isAdministrator();
+    }
+
+    /**
+     * FR-02: the register of rooms and places of this building. The warden
+     * keeps it, the duty officer reads it to know which room a guest is bound
+     * for, and the administrator sees every building. A resident does not: the
+     * occupancy of the whole dormitory is not theirs to read.
+     */
+    public function viewRooms(User $user, Building $building): bool
+    {
+        return $user->isAdministrator()
+            || $user->hasRoleInBuilding(RoleCode::Warden, $building)
+            || $user->hasRoleInBuilding(RoleCode::DutyOfficer, $building);
+    }
+
+    /**
+     * Keeping the register — rooms and places — is the warden's own work
+     * (FR-02), inside the warden's own building.
+     */
+    public function manageRooms(User $user, Building $building): bool
+    {
+        return $user->isAdministrator()
+            || $user->hasRoleInBuilding(RoleCode::Warden, $building);
+    }
+
+    /**
+     * FR-03 and FR-05: moving people in and out. The same circle as the
+     * register above, and for the same reason — a residency is an entry in it.
+     */
+    public function manageResidencies(User $user, Building $building): bool
+    {
+        return $this->manageRooms($user, $building);
     }
 
     /**
