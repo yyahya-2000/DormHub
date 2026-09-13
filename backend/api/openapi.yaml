@@ -41,8 +41,8 @@ info:
     unique index in the database, and the refusal carries the conflicting record.
 
 servers:
-  - url: http://localhost:8000/api/v1
-    description: Local development
+  - url: http://localhost:8080/api/v1
+    description: Local development — the port docker-compose publishes the web container on
   - url: /api/v1
     description: Same origin as the client
 
@@ -103,17 +103,25 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '429':
           description: |
-            The login is blocked. Either the configured number of failed attempts
-            was reached — five attempts, fifteen minutes by default — or the
-            per-address request limit on this route was exceeded.
+            The request was refused for a while, and `reason` says by which of the
+            three limits. `login_locked`: the account reached the configured number
+            of failed attempts — five attempts, fifteen minutes by default.
+            `address_locked`: the network address reached its own ceiling, counted
+            across every login tried from it. `rate_limited`: the address sent more
+            requests to this route than it admits per minute, which says nothing
+            about credentials at all — a caller with a correct password and no
+            failed attempt can meet it.
+
+            All three carry the same body, so a client reads `retry_after` without
+            branching and branches on `reason` only where the wording matters.
           headers:
             Retry-After:
-              description: Seconds until the login is accepted again.
+              description: Seconds until the request is accepted again.
               schema: { type: integer, minimum: 1 }
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginLocked'
+                $ref: '#/components/schemas/TooManyRequests'
 
   /auth/logout:
     post:
@@ -789,6 +797,9 @@ components:
         The account is authenticated but holds no role that covers this object.
         The two cases behind it are a role that is wrong for the route and a role
         that is right but held in a different building.
+
+        Every refusal is written to the audit log as `access.denied`, with the
+        account, the object and the address it came from (FR-33, §3.9.6).
       content:
         application/json:
           schema:
@@ -828,6 +839,7 @@ components:
         - auth.login_locked
         - auth.login_blocked
         - auth.logout_succeeded
+        - access.denied
         - building.viewed
         - building.users_viewed
         - audit_log.viewed
@@ -1271,15 +1283,25 @@ components:
           minimum: 0
           description: Attempts remaining before the block. Zero means the block has just started.
 
-    LoginLocked:
+    ThrottleReason:
+      type: string
+      description: |
+        Which limit refused the request. The field is the discriminator of the
+        429: the block that follows failed attempts and the request limit of the
+        route are different events and must not be reported as one.
+      enum: [login_locked, address_locked, rate_limited]
+
+    TooManyRequests:
       type: object
-      required: [message, retry_after]
+      required: [message, retry_after, reason]
       properties:
         message: { type: string }
         retry_after:
           type: integer
           minimum: 0
-          description: Seconds until the login is accepted again.
+          description: Seconds until the request is accepted again. Mirrors the Retry-After header.
+        reason:
+          $ref: '#/components/schemas/ThrottleReason'
 
     Error:
       type: object
@@ -1312,7 +1334,25 @@ components:
         current_page: { type: integer }
         from: { type: [integer, 'null'] }
         last_page: { type: integer }
+        links:
+          type: array
+          description: |
+            One entry per page button, in the order they are drawn, with the
+            previous and next arrows first and last. `page` is null on an arrow
+            that leads nowhere, and absent on the ellipsis that stands for a gap
+            in a long sequence.
+          items:
+            $ref: '#/components/schemas/PaginationLink'
         path: { type: string }
         per_page: { type: integer }
         to: { type: [integer, 'null'] }
         total: { type: integer }
+
+    PaginationLink:
+      type: object
+      required: [url, label, active]
+      properties:
+        url: { type: [string, 'null'] }
+        label: { type: string }
+        page: { type: [integer, 'null'] }
+        active: { type: boolean }
