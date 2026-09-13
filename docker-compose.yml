@@ -1,0 +1,166 @@
+# Local development environment for the dormitory student activity support system.
+#
+# Seven services, one per container of the design (thesis §3.2.3, §4.2):
+#   app        REST API application, Laravel 13 on PHP 8.3 (PHP-FPM)
+#   web        web server in front of the application
+#   queue      queue worker, php artisan queue:work
+#   scheduler  scheduler, php artisan schedule:work
+#   postgres   PostgreSQL 17, system of record
+#   redis      queue, cache, sessions, rate-limit counters
+#   minio      S3-compatible object storage
+#
+# The worker and the scheduler are separate containers here for the same reason
+# they are separate in the design: a scheduled sweep that only runs when someone
+# remembers to trigger it proves nothing.
+
+name: dormitory-system
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/php/Dockerfile
+  image: dormitory-system/php:8.3
+
+x-app-env: &app-env
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_URL: http://localhost:${APP_PORT:-8080}
+
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: ${POSTGRES_DB:-dormitory}
+  DB_USERNAME: ${POSTGRES_USER:-dormitory}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+
+  # The role the running service is meant to connect as. UPDATE and DELETE on
+  # audit_logs are revoked from it by migration (§4.4.4), which is why the
+  # migration must connect as the owning role above and not as this one.
+  DB_APPLICATION_ROLE: ${APP_DB_ROLE:-app_rw}
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_CLIENT: phpredis
+
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+
+  FILESYSTEM_DISK: s3
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dormitory}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dormitory-secret}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: ${MINIO_BUCKET:-dormitory}
+  AWS_ENDPOINT: http://minio:9000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+x-app-depends: &app-depends
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  app:
+    <<: *app-image
+    container_name: dormitory-app
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      COMPOSER_INSTALL_ON_BOOT: "1"
+    volumes:
+      - ./backend:/var/www/html
+    depends_on: *app-depends
+
+  web:
+    image: nginx:1.29-alpine
+    container_name: dormitory-web
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+  queue:
+    <<: *app-image
+    container_name: dormitory-queue
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - ./backend:/var/www/html
+    depends_on: *app-depends
+    command: php artisan queue:work --tries=3 --max-time=3600
+
+  scheduler:
+    <<: *app-image
+    container_name: dormitory-scheduler
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - ./backend:/var/www/html
+    depends_on: *app-depends
+    command: php artisan schedule:work
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: dormitory-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dormitory}
+      POSTGRES_USER: ${POSTGRES_USER:-dormitory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      # Read by docker/postgres/initdb/10-application-role.sh.
+      APP_DB_ROLE: ${APP_DB_ROLE:-app_rw}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-app-secret}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dormitory} -d ${POSTGRES_DB:-dormitory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: dormitory-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: dormitory-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dormitory}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dormitory-secret}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
