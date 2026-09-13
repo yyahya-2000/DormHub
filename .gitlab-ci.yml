@@ -1,0 +1,213 @@
+# Continuous integration for the dormitory student activity support system.
+#
+# Three stages run on every push and on every merge request:
+#
+#   style  code style of both applications; no database, no services
+#   test   the PHP suite against PostgreSQL 17 and Redis, with a line-coverage
+#          report measured against the 70 % of NFR-12
+#   build  the production bundle of the single-page application
+#
+# The pipeline reuses the artefacts of the development environment instead of
+# restating them. The database roles come from the very script the Compose
+# environment runs, docker/postgres/initdb/10-application-role.sh, so the two
+# cannot drift apart; the PHP extension list is the one of
+# docker/php/Dockerfile, plus the coverage driver.
+
+stages:
+  - style
+  - test
+  - build
+
+workflow:
+  rules:
+    # Without these two a merge request would run the same jobs twice, once for
+    # the branch and once for the merge request.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+variables:
+  # GitLab caches nothing outside the project directory, so both package
+  # managers are told to download inside it.
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.cache/composer"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
+  COMPOSER_ALLOW_SUPERUSER: "1"
+  GIT_DEPTH: "20"
+
+default:
+  interruptible: true
+
+# ---------------------------------------------------------------------------
+# PHP jobs
+#
+# php:8.3-cli-alpine ships without extensions, so each PHP job builds the set
+# that docker/php/Dockerfile builds and adds PCOV. PCOV rather than Xdebug: it
+# counts executed lines and nothing else, which is exactly what NFR-12 asks
+# for, and it costs a fraction of Xdebug's run time. Neither driver is in the
+# application image, and neither belongs there — coverage is a property of the
+# pipeline, not of the deployable unit.
+#
+# Composer is pinned to the version the application image carries. `vendor/`
+# and the Composer download cache are keyed on composer.lock, so a run that
+# changes no dependency downloads nothing.
+#
+# Both PHP jobs share this one toolchain, so the style job builds a database
+# driver it never uses. That costs about a minute and buys the guarantee that
+# the two jobs run the same PHP as each other and as the application image.
+# ---------------------------------------------------------------------------
+.php:
+  image: php:8.3-cli-alpine
+  cache:
+    key:
+      prefix: composer
+      files:
+        - backend/composer.lock
+    paths:
+      - .cache/composer
+      - backend/vendor
+  before_script:
+    - apk add --no-cache git postgresql-client
+    - apk add --no-cache icu-dev libzip-dev linux-headers postgresql-dev
+    - apk add --no-cache --virtual .build-deps $PHPIZE_DEPS
+    - docker-php-ext-install -j"$(nproc)" bcmath intl pcntl pdo_pgsql pgsql zip
+    # Pinned, so that a release of either extension cannot turn a green
+    # pipeline red without a commit.
+    - pecl install redis-6.3.0 pcov-1.0.12
+    - docker-php-ext-enable redis pcov
+    - apk del .build-deps
+    - curl -sSLo /usr/local/bin/composer https://getcomposer.org/download/2.10.3/composer.phar
+    - chmod +x /usr/local/bin/composer
+    - cd backend
+    - composer install --prefer-dist --no-progress --no-interaction
+
+backend:style:
+  extends: .php
+  stage: style
+  script:
+    - vendor/bin/pint --test
+
+backend:test:
+  extends: .php
+  stage: test
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+    - name: redis:8-alpine
+      alias: redis
+  variables:
+    # Read by the PostgreSQL service container. It creates the owning role and
+    # the development database; the init script in the job below adds the
+    # restricted application role and the test database on top, because a
+    # service container cannot be given the repository's init directory.
+    POSTGRES_DB: dormitory
+    POSTGRES_USER: dormitory
+    POSTGRES_PASSWORD: secret
+    APP_DB_ROLE: app_rw
+    APP_DB_PASSWORD: app-secret
+    TEST_DB_NAME: dormitory_test
+
+    # Read by psql inside that init script.
+    PGHOST: postgres
+    PGPASSWORD: secret
+
+    APP_ENV: testing
+    # A throwaway key. The pipeline encrypts nothing that outlives the job, and
+    # a repository holds no real one.
+    APP_KEY: base64:qsgSD/9V+1Yy5o8lH7xR2mUvKpZ4a0cN6eJtBwXbF3g=
+
+    # The suite runs on the owning connection and against its own database:
+    # RefreshDatabase creates and drops tables, which the application role is
+    # not allowed to do and must not be allowed to do (§4.4.4).
+    DB_CONNECTION: pgsql_owner
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: dormitory_test
+    DB_USERNAME: app_rw
+    DB_PASSWORD: app-secret
+    DB_OWNER_USERNAME: dormitory
+    DB_OWNER_PASSWORD: secret
+    DB_APPLICATION_ROLE: app_rw
+
+    # Deliberately the production-shaped stores, not the test ones. The cache,
+    # session, queue and mail stores a test run must not share are pinned in
+    # tests/TestCase.php, because the <env> entries of phpunit.xml do not
+    # overwrite a variable the environment already defines. Leaving Redis
+    # configured here is what keeps that guard honest: if it ever stops
+    # working, the login throttle tests of FR-08 fail here rather than on
+    # somebody's machine.
+    REDIS_CLIENT: phpredis
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    CACHE_STORE: redis
+    SESSION_DRIVER: redis
+    QUEUE_CONNECTION: redis
+    FILESYSTEM_DISK: local
+  script:
+    # Laravel's test runner reads the environment file to restore it around the
+    # run, and the repository carries none. An empty one satisfies it and
+    # leaves every value coming from the variables above.
+    - ': > .env'
+    - sh "$CI_PROJECT_DIR/docker/postgres/initdb/10-application-role.sh"
+    - php artisan migrate --database=pgsql_owner --force
+    - mkdir -p build
+    - >
+      php artisan test
+      --coverage
+      --min=70
+      --coverage-cobertura=build/cobertura.xml
+      --log-junit=build/junit.xml
+  # The percentage the job prints as «Total: NN.N %». Set the same expression
+  # in Settings → CI/CD → General pipelines if the project prefers to keep it
+  # there; the job-level value takes precedence.
+  coverage: '/Total:\s*(\d+\.\d+)\s*%/'
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - backend/build/cobertura.xml
+    reports:
+      junit: backend/build/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/build/cobertura.xml
+
+# ---------------------------------------------------------------------------
+# Frontend jobs
+#
+# `npm ci` installs from package-lock.json and from frontend/.npmrc, which
+# pins the public registry — without it npm would fall back to whatever mirror
+# the runner is configured with (NFR-13). node_modules is not cached: `npm ci`
+# deletes it before it starts, so caching it would be wasted work. The
+# package download cache is cached instead, which is what makes the install
+# fast.
+# ---------------------------------------------------------------------------
+.node:
+  image: node:22-alpine
+  cache:
+    key:
+      prefix: npm
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .cache/npm
+  before_script:
+    - cd frontend
+    - npm ci --no-audit --no-fund
+
+frontend:style:
+  extends: .node
+  stage: style
+  script:
+    - npx oxlint
+
+frontend:build:
+  extends: .node
+  stage: build
+  script:
+    # `npm run build` runs tsc -b itself; running it first separates a type
+    # error from a bundler error in the log.
+    - npx tsc -b
+    - npm run build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - frontend/dist
