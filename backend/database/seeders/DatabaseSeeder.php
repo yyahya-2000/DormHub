@@ -14,10 +14,12 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Reference data first: the demo accounts are grants of roles that
-        // must already exist.
+        // must already exist, and the housing register grants the resident
+        // role to every person it accommodates.
         $this->call([
             RoleSeeder::class,
             DemoSeeder::class,
+            HousingSeeder::class,
         ]);
     }
 }
