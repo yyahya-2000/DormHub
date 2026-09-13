@@ -138,4 +138,65 @@ return [
 
     ],
 
+    /*
+    |---------------------------------------------------------------------------
+    | Guest requests and the security post (FR-16 … FR-23)
+    |---------------------------------------------------------------------------
+    |
+    | The visiting window, the control time and the lead time are **not** here.
+    | They live on the BUILDING row, because NFR-09 makes them per-building and
+    | Table 1.1 shows the sector does not agree on any of them; a value in this
+    | file would be this deployment's regime imposed on every dormitory it
+    | serves. What is here is what the system as a whole decides.
+    |
+    */
+
+    'guests' => [
+
+        /*
+        | The daily ceilings §3.3.4 has `approve()` assert. No norm sets them —
+        | the HSE rules of internal order fix the hours and say nothing about
+        | numbers — so they are a house rule, and a house rule belongs in
+        | configuration with a stated default rather than in a service as a
+        | literal nobody can find.
+        |
+        | Per resident: how many guests one resident may have approved for one
+        | day. Per building: how many the dormitory admits in a day at all,
+        | which is the figure a security post can actually work through.
+        */
+        'daily_quota_per_resident' => (int) env('GUESTS_DAILY_QUOTA_PER_RESIDENT', 2),
+
+        'daily_quota_per_building' => (int) env('GUESTS_DAILY_QUOTA_PER_BUILDING', 60),
+
+        /*
+        | FR-23, first criterion: «attaches the warning about the procedure in
+        | force at the university».
+        |
+        | The text is configuration because the procedure is the university's
+        | and not the program's, and because §2.7.4 leaves open a question the
+        | legal service has to answer — whether a dormitory counts as an
+        | accommodation facility under art. 20 part 3 of Federal Law
+        | No. 109-FZ, which is the difference between one working day and
+        | seven. Both deadlines are named and neither is asserted.
+        */
+        'foreign_document_warning' => env('GUESTS_FOREIGN_WARNING', <<<'TEXT'
+            This guest presents a foreign document. A visit that ends the same day creates no place of
+            stay: art. 2 cl. 4 of Federal Law No. 109-FZ requires premises the person regularly uses
+            for sleep and rest. An overnight stay is a different matter — the arrival notification is
+            the receiving party's duty under art. 20 part 2, within seven working days, or one working
+            day if the dormitory falls within the class of accommodation facilities of art. 20 part 3.
+            The system does not submit that notification. Before approving an interval that runs past
+            midnight, obtain the mark of the officer responsible for migration registration.
+            TEXT),
+
+        /*
+        | FR-21. The page a period export is read in. The register of a
+        | dormitory over an academic year is tens of thousands of rows, and a
+        | client that asked for all of them at once would get a timeout instead
+        | of an answer.
+        */
+        'register_page_size' => (int) env('GUESTS_REGISTER_PAGE_SIZE', 100),
+
+    ],
+
 ];

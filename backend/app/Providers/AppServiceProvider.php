@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Contracts\IdentityProvider;
 use App\Enums\ThrottleReason;
+use App\Guests\GuestQuota;
 use App\Services\AuditLogReader;
 use App\Services\AuditRecorder;
 use App\Services\AuthenticationService;
@@ -50,6 +51,18 @@ class AppServiceProvider extends ServiceProvider
             audit: $app->make(AuditRecorder::class),
             tokenName: (string) config('dormitory.auth.token_name'),
             tokenTtlMinutes: config('dormitory.auth.token_ttl_minutes'),
+        ));
+
+        /*
+         * FR-17, the quota §3.3.4 has `approve()` assert. No norm fixes the
+         * numbers, so they are a house rule and arrive from configuration for
+         * the same reason «five attempts, fifteen minutes» does: a literal
+         * inside the checker would be this deployment's rule imposed on every
+         * dormitory the code is ever installed in.
+         */
+        $this->app->bind(GuestQuota::class, fn ($app) => new GuestQuota(
+            perResident: (int) config('dormitory.guests.daily_quota_per_resident'),
+            perBuilding: (int) config('dormitory.guests.daily_quota_per_building'),
         ));
 
         $this->app->bind(AuditLogReader::class, fn ($app) => new AuditLogReader(
