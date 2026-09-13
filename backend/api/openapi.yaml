@@ -3,14 +3,19 @@ openapi: 3.1.0
 info:
   title: Dormitory support system — API v1
   version: 0.1.0
-  summary: Role model, authentication, audit log, the housing register and staff
+  summary: >-
+    Role model, authentication, audit log, the housing register, staff, and the
+    personal account
   description: |
-    The implemented part of the REST contract of §3.3.6, in three slices. The
+    The implemented part of the REST contract of §3.3.6, in four slices. The
     first is FR-07 (role model), FR-08 (authentication and sessions) and FR-33
     (audit log). The second is the housing register: FR-01 (dormitories), FR-02
     (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
     resident card). The third follows revision 2 of the role model: FR-41 (staff
-    appointment inside a building) and FR-42 (issuing a resident account).
+    appointment inside a building) and FR-42 (issuing a resident account). The
+    fourth is the personal account: FR-34 (notifications and the switches that
+    decide which of them arrive) and FR-35 (consent to the processing of
+    personal data).
 
     The remaining routes of §3.3.6 — guest requests, the checkpoint,
     announcements, lost-and-found and maintenance — belong to later increments and
@@ -48,6 +53,14 @@ info:
     residents holding one place over overlapping periods is refused by a partial
     unique index in the database, and the refusal carries the conflicting record.
 
+    Consent to the processing of personal data has routes of its own, and that
+    is the requirement rather than an arrangement. Art. 9 part 1 of Federal Law
+    No. 152-FZ has consent «executed separately from other documents», so no
+    other request in this document carries a field that records one: not the
+    sign-in, not the first password, not the account form. `POST /consents`
+    names exactly one document and one text revision, and it is the only way a
+    consent record comes into being.
+
 servers:
   - url: http://localhost:8080/api/v1
     description: Local development — the port docker-compose publishes the web container on
@@ -71,6 +84,14 @@ tags:
     description: >-
       FR-41. Appointing and dismissing the staff of one dormitory. The warden's
       route: the manager appoints nobody.
+  - name: Notifications
+    description: >-
+      FR-34. A person's own messages, and the switches that decide which
+      categories reach them at all.
+  - name: Consent
+    description: >-
+      FR-35. Consent to the processing of personal data, on routes of its own,
+      as art. 9 part 1 of Federal Law No. 152-FZ requires.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -965,6 +986,330 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: The messages of the personal account
+      description: |
+        FR-34, the in-app half. One person's own messages, newest first. The
+        route is scoped to the account the token names and has no parameter for
+        any other, which is why it carries no role check: there is nothing here
+        to be authorised against.
+
+        `payload` is the body of the message and its shape depends on the
+        category — each notification decides its own in `toDatabase()`. `category`
+        is lifted out of it into a field of its own, because that is what a
+        client groups and filters by.
+
+        The field is called `payload` and not `data` on purpose: a resource
+        whose top-level object carried a key called `data` would be taken by the
+        framework to have wrapped itself, and this one route would answer
+        without the `data` envelope every other route in this document has.
+      operationId: listNotifications
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          description: Return only the messages that have not been marked read.
+          schema: { type: boolean, default: false }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: One page of the person's messages, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /notifications/{notification}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark one message read
+      description: |
+        FR-34. Idempotent: a message already read keeps the moment it was first
+        read rather than acquiring a new one.
+
+        A message belonging to another account answers 404 and not 403. The
+        difference is deliberate — a 403 would confirm that the identifier
+        exists, which is more than a stranger should be told.
+      operationId: markNotificationRead
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: The message, now carrying `read_at`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notification-settings:
+    get:
+      tags: [Notifications]
+      summary: Which categories of notification reach this person
+      description: |
+        FR-34, second criterion. Every category is listed, including the ones
+        nobody has decided about — those come back `enabled: true`, which is the
+        default.
+
+        `mandatory` says whether the switch may be moved at all. It is in the
+        answer rather than left to the client to keep a list of its own: which
+        categories are mandatory is a matter of the legal ground the message
+        rests on, the server decides it, and a client that duplicated the
+        decision would eventually draw a switch the server refuses to move.
+      operationId: listNotificationSettings
+      responses:
+        '200':
+          description: Every category, with its state for this person.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    put:
+      tags: [Notifications]
+      summary: Switch notification categories on or off
+      description: |
+        FR-34, second criterion: «the user can disable non-mandatory
+        categories».
+
+        The map may be partial — the screen sends what it changed, and a request
+        carrying one category must not switch the rest back on. The answer is
+        the whole state all the same, so the client redraws from one response
+        and cannot end up showing a switch the server did not accept.
+
+        A mandatory category is refused with 422 rather than ignored. Ignoring
+        it would answer «saved» and go on sending, and the person would be left
+        believing they had switched something off.
+
+        Turning a category on does not by itself guarantee delivery: the
+        categories that rest on consent stop when the consent of FR-35 is
+        withdrawn, whatever the switch says.
+      operationId: updateNotificationSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettingsInput'
+      responses:
+        '200':
+          description: The settings as they now stand, in full.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: |
+            Either the payload failed validation — an unknown category among the
+            keys, or a value that is not a boolean — or it asked for a mandatory
+            category to be switched off, which is the `MandatoryCategory` shape.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/MandatoryCategory'
+
+  /consents/pending:
+    get:
+      tags: [Consent]
+      summary: The consent texts this person has not yet decided on
+      description: |
+        FR-35, first criterion, the «displayed» half. The wording comes with it:
+        art. 9 part 1 of Federal Law No. 152-FZ requires consent to be informed,
+        and a title with a checkbox beside it is not that.
+
+        A consent given against a text that has since been superseded counts as
+        pending — the person agreed to a wording, and the wording has changed.
+        Nothing in the code says so; it falls out of comparing the revision on
+        the record with the revision in force.
+
+        The list is empty when nothing is outstanding. Nothing blocks the
+        session while it is not: consent has to be free (art. 9 part 1), and a
+        system that locked the account until it was given would be extracting
+        consent rather than receiving it.
+      operationId: listPendingConsents
+      responses:
+        '200':
+          description: The texts awaiting a decision, in full.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConsentText'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /consents:
+    get:
+      tags: [Consent]
+      summary: This person's history of consent
+      description: |
+        Given, withdrawn, given again — newest first, withdrawn rows included.
+        They are the history of a legal act and are never pruned: art. 9 part 3
+        of Federal Law No. 152-FZ puts on the operator the burden of proving
+        that consent was given, and the proof has to survive the withdrawal.
+      operationId: listConsents
+      responses:
+        '200':
+          description: Every act of consent this person has performed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConsentRecord'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Consent]
+      summary: Give consent to one document
+      description: |
+        FR-35, first criterion, the «recorded» half, and the second criterion in
+        its entirety.
+
+        One document per request, named explicitly. There is no «accept all»,
+        no array, and no other route in this document that records a consent as
+        a by-product — art. 9 part 1 has consent «executed separately from other
+        documents», which is a rule about the act and not about the layout of a
+        page.
+
+        `revision` is the text the person actually read, and it is checked
+        against the revision in force. A client that held the screen open while
+        the operator published a new text is sent back for the current one: a
+        record naming a wording this person never saw would prove nothing.
+
+        Consenting again to the revision already in force answers with the
+        standing record rather than writing a second one. Consenting to a new
+        revision supersedes the old, which is marked withdrawn on the same day.
+
+        `guest_personal_data` is refused here: the guest's consent is taken at
+        the security post, in person, before the entry is recorded.
+      operationId: giveConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentInput'
+      responses:
+        '201':
+          description: >-
+            The consent is recorded with the fact, the date, the text revision
+            and the address it was given from. The act is in the audit log as
+            `consent.granted`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConsentRecord'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /consents/{document}/withdrawal:
+    post:
+      tags: [Consent]
+      summary: Withdraw consent to one document
+      description: |
+        FR-35, fourth criterion: withdrawal, from the personal account.
+
+        **What the withdrawal does.** It writes `revoked_at` and stops the
+        processing that rested on consent. It does not delete the record — art.
+        9 part 3 puts on the operator the burden of proving consent, and the
+        proof is needed for the period before the withdrawal as much as after.
+
+        **What it does not do.** For a resident it closes nothing: the housing
+        register, the resident card and the notifications the dormitory is
+        obliged to send all rest on the accommodation contract (art. 6 part 1
+        cl. 5) and continue. What stops is the optional half of FR-34's
+        categories, which have no other ground. The person becomes pending
+        again and is offered the text at the next sign-in; they are not locked
+        out, because consent that could only be withheld at the price of the
+        service would not be free.
+
+        For a **guest** the same withdrawal is absolute, and that asymmetry is
+        the point of §2.7.1: a guest is not a party to the accommodation
+        contract, so consent is the sole ground there is and without it no entry
+        can be recorded at the post.
+
+        A withdrawal when nothing stands is 204 rather than 404: the caller
+        asked for a state, and the state is what they get.
+      operationId: withdrawConsent
+      parameters:
+        - $ref: '#/components/parameters/ConsentDocumentCode'
+      responses:
+        '200':
+          description: >-
+            The consent that stood, now carrying `revoked_at`. The act is in the
+            audit log as `consent.withdrawn`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConsentRecord'
+        '204':
+          description: There was no consent of this document in force.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /audit-logs:
     get:
       tags: [Audit]
@@ -1046,6 +1391,22 @@ components:
       required: true
       description: The account whose role is being revoked.
       schema: { type: integer, format: int64, minimum: 1 }
+    NotificationId:
+      name: notification
+      in: path
+      required: true
+      description: >-
+        The identifier of one message. A UUID, and not a sequence: the
+        identifier travels to the client, and a guessable one would let a
+        stranger probe for the existence of other people's messages.
+      schema: { type: string, format: uuid }
+    ConsentDocumentCode:
+      name: document
+      in: path
+      required: true
+      description: The document whose consent is being withdrawn.
+      schema:
+        $ref: '#/components/schemas/ConsentDocument'
     StaffRole:
       name: role
       in: path
@@ -1143,6 +1504,8 @@ components:
         - staff.revoked
         - resident.account_issued
         - auth.password_set
+        - consent.granted
+        - consent.withdrawn
 
     AuditResult:
       type: string
@@ -1222,6 +1585,18 @@ components:
             account issued under FR-42 whose one-time code has not been spent
             yet. It says that much and carries no secret; setting a password at
             `POST /auth/password` clears it.
+        consent_required:
+          type: array
+          description: >-
+            FR-35. The documents this person has not yet consented to, or has
+            consented to under a wording that has since been superseded. Present
+            on the sign-in answer and on `GET /auth/me`, and absent everywhere
+            else this schema is used — the listings of people would otherwise
+            pay a query per person for a field nobody reads there. An empty
+            array means nothing is outstanding; the texts themselves are at
+            `GET /consents/pending`.
+          items:
+            $ref: '#/components/schemas/ConsentDocument'
         roles:
           type: array
           description: Present when the grants were loaded for this response.
@@ -1685,6 +2060,200 @@ components:
           description: Seconds until the request is accepted again. Mirrors the Retry-After header.
         reason:
           $ref: '#/components/schemas/ThrottleReason'
+
+    NotificationCategory:
+      type: string
+      description: |
+        FR-34's occasions, as the categories delivery is decided against.
+
+        `account_issued` is the one-time credential of FR-42. `request_decision`
+        is a decision on a guest request, `visit_overdue` a guest still recorded
+        inside after the hour clause 2.2 of the rules of internal order sets,
+        `maintenance_status` a movement of a maintenance request, and
+        `document_signature` a document waiting to be signed.
+
+        Three of them are mandatory and cannot be switched off — see
+        `NotificationSetting.mandatory` for the ground the line is drawn on.
+      enum:
+        - account_issued
+        - request_decision
+        - visit_overdue
+        - maintenance_status
+        - document_signature
+
+    Notification:
+      type: object
+      required: [id, type, payload, read_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        category:
+          oneOf:
+            - $ref: '#/components/schemas/NotificationCategory'
+            - type: 'null'
+        type:
+          type: string
+          description: The short name of the message class, e.g. `GuestVisitOverdue`.
+        payload:
+          type: object
+          additionalProperties: true
+          description: >-
+            The body of the message. Its shape depends on the category — each
+            notification decides its own — so it is deliberately open here
+            rather than enumerated: a category added in a later increment must
+            not require this document to change for the existing ones to keep
+            working.
+        read_at:
+          type: [string, 'null']
+          format: date-time
+        created_at: { type: string, format: date-time }
+
+    NotificationSetting:
+      type: object
+      required: [category, label, description, enabled, mandatory]
+      properties:
+        category:
+          $ref: '#/components/schemas/NotificationCategory'
+        label: { type: string }
+        description:
+          type: string
+          description: What the person reads beside the switch, so the choice is informed.
+        enabled:
+          type: boolean
+          description: >-
+            Whether messages of this category are to reach this person. True for
+            a category nobody has decided about, which is the default.
+        mandatory:
+          type: boolean
+          description: |
+            Whether the switch may be moved at all.
+
+            The line is drawn by the ground the message rests on. A mandatory
+            category carries what the accommodation contract or the rules of
+            internal order oblige the dormitory to tell the person — the
+            credential without which the account cannot be used, a guest overdue
+            at the post, a document with a deadline — and declining it would be
+            a refusal of the service rather than a preference. The rest are
+            conveniences whose only ground is consent, and they stop when the
+            consent of FR-35 is withdrawn even while this flag says `enabled`.
+
+    NotificationSettingsInput:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: object
+          minProperties: 1
+          description: >-
+            A map of category to whether it is to be received. May be partial:
+            the screen sends what it changed, and the categories left out keep
+            the state they had.
+          additionalProperties:
+            type: boolean
+          propertyNames:
+            $ref: '#/components/schemas/NotificationCategory'
+
+    MandatoryCategory:
+      type: object
+      required: [message, category, category_label]
+      description: >-
+        The refusal of an attempt to switch off a category that carries what the
+        dormitory is obliged to tell the person.
+      properties:
+        message: { type: string }
+        category:
+          $ref: '#/components/schemas/NotificationCategory'
+        category_label: { type: string }
+
+    ConsentDocument:
+      type: string
+      description: |
+        The documents a person is asked to consent to, and they are two rather
+        than one because the ground behind them differs (§2.7.1).
+
+        `resident_personal_data` covers the processing that goes beyond the
+        accommodation contract — the optional notifications, the guest-visiting
+        service — and is asked for at first sign-in.
+
+        `guest_personal_data` is the guest's own, taken at the security post
+        before the entry is recorded. A guest is not a party to the
+        accommodation contract, so consent is the **only** ground there is: with
+        none on record the entry cannot be written at all.
+      enum: [resident_personal_data, guest_personal_data]
+
+    ConsentText:
+      type: object
+      required: [document, revision, title, body]
+      properties:
+        document:
+          $ref: '#/components/schemas/ConsentDocument'
+        revision:
+          type: string
+          maxLength: 32
+          description: >-
+            The identifier of the wording. It names a file under version
+            control, which is what makes a record demonstrable afterwards: art.
+            9 part 3 of Federal Law No. 152-FZ puts the burden of proving
+            consent on the operator, and a revision whose text could not be
+            produced would prove nothing.
+        title: { type: string }
+        body:
+          type: string
+          description: The wording itself, in Markdown. Shown to the person before they decide.
+
+    ConsentRecord:
+      type: object
+      required: [id, document, title, revision, accepted_at, revoked_at, in_force]
+      properties:
+        id: { type: integer, format: int64 }
+        document:
+          $ref: '#/components/schemas/ConsentDocument'
+        title: { type: string }
+        revision: { type: string, maxLength: 32 }
+        accepted_at: { type: string, format: date-time }
+        revoked_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            When the consent was withdrawn, or superseded by a consent to a
+            newer wording. The row is never deleted and never rewritten: the
+            history is the evidence.
+        in_force:
+          type: boolean
+          description: Whether this consent stands today.
+        ip_address:
+          type: [string, 'null']
+          maxLength: 45
+
+    ConsentInput:
+      type: object
+      required: [document, revision]
+      properties:
+        document:
+          $ref: '#/components/schemas/ConsentDocument'
+        revision:
+          type: string
+          maxLength: 32
+          description: >-
+            The revision the person was shown, as it came from
+            `GET /consents/pending`. Sending it back is what makes the record
+            name the text they actually read; a revision that is not the one in
+            force is refused with 422.
+
+    ConsentRequired:
+      type: object
+      required: [message, document, revision]
+      description: >-
+        The refusal of an operation that would process personal data with no
+        consent on record. 409 rather than 403: the caller's role covers the
+        object, and what stands in the way is a missing document. The first
+        route to answer with it is the security post's `check-in`, in increment 1.
+      properties:
+        message: { type: string }
+        document:
+          $ref: '#/components/schemas/ConsentDocument'
+        revision:
+          type: string
+          description: The revision in force, so the client knows which text to put on the screen.
 
     Error:
       type: object
