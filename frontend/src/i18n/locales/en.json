@@ -4,7 +4,9 @@
     "fullName": "Dormitory support system",
     "documentTitle": "Dormitory — residence support system",
     "section": {
+      "register": "Buildings",
       "building": "Building",
+      "myCard": "My card",
       "audit": "Audit log"
     }
   },
@@ -15,6 +17,9 @@
     "signOut": "Sign out",
     "signingOut": "Signing out",
     "open": "Open",
+    "save": "Save",
+    "saving": "Saving",
+    "cancel": "Cancel",
     "language": "Interface language",
     "languageRu": "Rus",
     "languageEn": "Eng",
@@ -24,9 +29,60 @@
   "errors": {
     "network": "The server is not answering. Check the connection and try again.",
     "forbidden": "The server refused: your role does not cover this object.",
-    "notFound": "No such building.",
+    "notFound": "No such object.",
     "unexpected": "The server refused the request. Status {{status}}.",
     "notFoundPage": "Page not found."
+  },
+  "refusal": {
+    "title": "The request was refused",
+    "forbiddenTitle": "Not permitted",
+    "notFoundTitle": "Object not found",
+    "blockedTitle": "Deletion is blocked",
+    "blockedBy": {
+      "rooms_one": "{{count, number}} room is attached to this dormitory.",
+      "rooms_other": "{{count, number}} rooms are attached to this dormitory."
+    },
+    "blockedByOther": "Standing in the way: {{kind}} — {{count}}.",
+    "blockedWayOut": "Move or delete the rooms first — or archive the dormitory instead, and the residency history stays readable.",
+    "capacityTitle": "The capacity is used up",
+    "capacityBody": "Room {{room}}: capacity {{capacity}}, places already registered {{beds}}.",
+    "capacityRemainder_one": "{{count, number}} place remains free.",
+    "capacityRemainder_other": "{{count, number}} places remain free.",
+    "conflictTitle": "The place is taken",
+    "conflictBody": "{{name}} has lived here since {{since}}.",
+    "conflictWhere": "Room {{room}}, place {{bed}}, contract {{contract}}. Record the move-out first.",
+    "conflictAnonymous": "a resident the answer did not name",
+    "conflictUnknown": "The server refused but attached no conflicting record.",
+    "validationTitle": "The form is filled in incorrectly",
+    "serverSays": "The server said: {{message}}",
+    "serverFault": "The server failed to process the request. Its own message is withheld here: a fault is not a refusal, and its text is for the log, not for the screen."
+  },
+  "fields": {
+    "name": "Name",
+    "address": "Address",
+    "floors_count": "Floors",
+    "visiting_from": "Visiting from",
+    "visiting_to": "Visiting until",
+    "curfew_at": "Entrance closes",
+    "is_active": "The dormitory is in service",
+    "number": "Room number",
+    "floor": "Floor",
+    "capacity": "Capacity",
+    "type": "Room type",
+    "status": "Room state",
+    "label": "Place label",
+    "user_id": "Resident",
+    "contract_number": "Contract number",
+    "moved_in_at": "Move-in date",
+    "moved_out_at": "Move-out date",
+    "ground": "Ground",
+    "full_name": "Full name",
+    "study_status": "Study status",
+    "citizenship": "Citizenship",
+    "contact": "Contact",
+    "account_status": "Account state",
+    "email": "Email",
+    "password": "Password"
   },
   "login": {
     "title": "Sign in",
@@ -54,15 +110,30 @@
     "sessionExpired": "The session ended. Sign in again.",
     "note": "The token is kept until the tab is closed, so a session does not outlive a shift on the shared computer at the security post."
   },
-  "picker": {
-    "title": "Choose a building",
-    "fromGrants": "Your account holds a role in these buildings:",
-    "adminLead": "The administrator holds the role over the whole system, so the building is opened by its number.",
-    "numberLabel": "Building number",
-    "noGrants": "Your account holds no role in any building. Ask the administrator."
+  "register": {
+    "heading": "Register of dormitories",
+    "leadAdmin": "Creating, editing, archiving and deleting belong to the administrator. The server takes the decision: a request from another role is refused.",
+    "leadScoped": "The dormitories your account is attached to. The server narrows the list.",
+    "add": "Add a dormitory",
+    "addTitle": "New dormitory",
+    "editTitle": "Editing: {{name}}",
+    "edit": "Edit",
+    "archive": "Archive",
+    "archived": "Already archived",
+    "delete": "Delete",
+    "deleteConfirm": "Delete for good",
+    "count_one": "{{count, number}} dormitory",
+    "count_other": "{{count, number}} dormitories",
+    "empty": "No dormitory is visible to you. If that is wrong, ask the administrator."
   },
   "building": {
     "heading": "Building card",
+    "views": {
+      "label": "Views of this building",
+      "card": "Card",
+      "rooms": "Rooms and places",
+      "plan": "Floor plan"
+    },
     "fields": {
       "id": "Number in the system",
       "name": "Name",
@@ -77,6 +148,99 @@
     "inactive": "Closed",
     "visitingNote": "The visiting window is the span in which a guest may stay in the building in the presence of the resident who invited them."
   },
+  "rooms": {
+    "heading": "Rooms and places",
+    "lead": "Capacity is the ceiling the warden registers places up to. The free remainder and the vacancies are two different figures, and both are named below.",
+    "add": "Add a room",
+    "addTitle": "New room",
+    "edit": "Edit the room",
+    "showPlaces": "Show the places",
+    "hidePlaces": "Hide the places",
+    "count_one": "{{count, number}} room",
+    "count_other": "{{count, number}} rooms",
+    "empty": "This dormitory has no rooms yet.",
+    "floor": "floor {{floor}}",
+    "occupancy": "Occupied {{occupied}} of {{capacity}}",
+    "places": "places registered {{beds}} of {{capacity}}",
+    "vacancies_one": "{{count, number}} vacancy",
+    "vacancies_other": "{{count, number}} vacancies",
+    "remainder_one": "{{count, number}} more place may be registered",
+    "remainder_other": "{{count, number}} more places may be registered",
+    "numberNote": "Unique inside the dormitory. Usually the floor and two digits: 305 is room 5 on the third floor.",
+    "capacityNote": "How many places the room may hold. Lowering it below the places already registered is refused by the server.",
+    "statusNote": "A room that is not in service takes no new residents, however many of its places are empty."
+  },
+  "places": {
+    "none": "The room holds no places yet.",
+    "add": "Add a place",
+    "addTitle": "New place in room {{room}}",
+    "label": "Place {{label}}",
+    "labelNote": "Unique inside the room: 1, 2, 2a.",
+    "since": "since {{date}}",
+    "remainder_one": "{{count, number}} place short of the capacity of {{capacity}}.",
+    "remainder_other": "{{count, number}} places short of the capacity of {{capacity}}.",
+    "resolving": "Reading the cards",
+    "unnamed": "Name not read: the resident card is not available",
+    "blockedNote": "The place is closed administratively",
+    "roomClosedNote": "The room is not in service"
+  },
+  "residency": {
+    "assign": "Move in",
+    "release": "Move out",
+    "assignTitle": "Move-in: room {{room}}, place {{bed}}",
+    "releaseTitle": "Move-out: {{name}}, place {{bed}}",
+    "noCandidates": "The roll of this dormitory lists no residents. An account for an incoming resident is issued by the administrator in this version.",
+    "candidateNote": "The choice is limited to people already attached to this dormitory: this version of the contract has no route for creating a resident account.",
+    "choosePerson": "Choose a person",
+    "alreadyPlaced": "{{name}} — already holds a place",
+    "groundNote": "The ground is recorded verbatim: an order number, a decision of the committee.",
+    "assignSummary": "To be recorded: room {{room}}, place {{bed}}, from {{date}}",
+    "releaseGroundNote": "Without a ground the server refuses. It is recorded verbatim — for instance, “graduation, art. 105 cl. 2 of the Housing Code”.",
+    "releaseDateNote": "The place is free at once. The resident's access to building-bound functions ends on the stated date, which may be set forward.",
+    "unknownRecord": "The residency record has not been read, so the move-out cannot be filed. Open the resident card instead."
+  },
+  "plan": {
+    "heading": "Floor plan",
+    "notAPlan": "This is not a drawing of the premises. The data holds a floor number and a room number and nothing about where the doors are, so the rooms are laid out as a grid per floor rather than as a layout.",
+    "legend": "Legend",
+    "legendFree": "has vacancies",
+    "legendFull": "no vacancies",
+    "legendClosed": "not in service",
+    "floor": "Floor {{floor}}",
+    "floorSummary": "{{rooms}} rooms · occupied {{occupied}} of {{capacity}}",
+    "tileOccupancy": "occupied {{occupied}} of {{capacity}}",
+    "noVacancies": "no vacancies",
+    "namesFromCards": "The names come from the resident cards of this dormitory. Every card read is written to the audit log — it is a read of personal data.",
+    "namesWithheld": "Resident names are not shown: the cards are closed to your role in this dormitory.",
+    "cardsRefused_one": "The server refused {{count, number}} card — that place is left unnamed.",
+    "cardsRefused_other": "The server refused {{count, number}} cards — those places are left unnamed.",
+    "emptyFloors_one": "Floor with no registered rooms: {{floors}}.",
+    "emptyFloors_other": "Floors with no registered rooms: {{floors}}."
+  },
+  "resident": {
+    "heading": "Resident card",
+    "auditNote": "The card carries personal data, so reading it is written to the audit log.",
+    "notRecorded": "not recorded",
+    "noRoles": "No roles granted",
+    "currentPlace": "Current place",
+    "noPlace": "Holds no place at the moment.",
+    "history": "Residency history",
+    "historyCount_one": "{{count, number}} record",
+    "historyCount_other": "{{count, number}} records",
+    "noHistory": "No residency records.",
+    "obligations": "Open obligations",
+    "obligationsCount_one": "{{count, number}} obligation",
+    "obligationsCount_other": "{{count, number}} obligations",
+    "noObligations": "No open obligations.",
+    "obligationsNote": "In this version the register knows one kind of obligation — an accommodation contract that has not been terminated. Obligations arising from the inventory handover come later.",
+    "contract": "Contract {{number}}",
+    "period": "{{from}} to {{to}}",
+    "stillHere": "present day",
+    "placement": "floor {{floor}}, room {{room}}, place {{bed}}",
+    "movedInGround": "Ground for the accommodation: {{ground}}",
+    "movedOutGround": "Ground for the move-out: {{ground}}",
+    "endsAhead": "move-out dated ahead"
+  },
   "people": {
     "heading": "People of the building",
     "count_one": "{{count}} account",
@@ -89,12 +253,13 @@
     },
     "empty": "Nobody is listed in this building yet.",
     "noPhone": "No phone on file",
-    "hint": "The roll is open to the administrator and to the warden or duty officer of this building. Other roles are refused by the server."
+    "hint": "The roll is open to the administrator and to the warden, manager or duty officer of this building. Other roles are refused by the server."
   },
   "roles": {
     "admin": "Administrator",
     "duty_officer": "Duty officer",
     "warden": "Warden",
+    "manager": "Building manager",
     "security": "Security",
     "student": "Resident",
     "scopeSystem": "whole system",
@@ -104,6 +269,34 @@
     "active": "Active",
     "blocked": "Blocked",
     "archived": "Archived"
+  },
+  "roomType": {
+    "corridor": "corridor type",
+    "block": "block type",
+    "apartment": "apartment type"
+  },
+  "roomStatus": {
+    "in_service": "In service",
+    "under_repair": "Under repair",
+    "withdrawn": "Withdrawn"
+  },
+  "bedStatus": {
+    "free": "free",
+    "occupied": "occupied",
+    "blocked": "blocked"
+  },
+  "studyStatus": {
+    "enrolled": "Enrolled",
+    "academic_leave": "Academic leave",
+    "graduated": "Graduated",
+    "expelled": "Expelled"
+  },
+  "residencyStatus": {
+    "active": "Active",
+    "ended": "Ended"
+  },
+  "obligationKind": {
+    "accommodation_contract": "Accommodation contract"
   },
   "audit": {
     "heading": "Audit log",
@@ -129,9 +322,28 @@
       "auth.login_locked": "Sign-in blocked",
       "auth.login_blocked": "Blocked account refused",
       "auth.logout_succeeded": "Signed out",
+      "access.denied": "Access denied",
       "building.viewed": "Building card viewed",
       "building.users_viewed": "Building roll viewed",
-      "audit_log.viewed": "Audit log viewed"
+      "audit_log.viewed": "Audit log viewed",
+      "building.created": "Dormitory created",
+      "building.updated": "Dormitory edited",
+      "building.archived": "Dormitory archived",
+      "building.deleted": "Dormitory deleted",
+      "building.deletion_blocked": "Dormitory deletion blocked",
+      "building.rooms_viewed": "Room register viewed",
+      "room.created": "Room added",
+      "room.updated": "Room edited",
+      "bed.created": "Place added",
+      "bed.creation_refused": "Place refused",
+      "residency.assigned": "Resident moved in",
+      "residency.assignment_refused": "Move-in refused",
+      "residency.terminated": "Resident moved out",
+      "resident.card_viewed": "Resident card viewed",
+      "staff.appointed": "Staff member appointed",
+      "staff.revoked": "Staff role revoked",
+      "resident.account_issued": "Resident account issued",
+      "auth.password_set": "Account password set"
     },
     "results": {
       "success": "Success",
