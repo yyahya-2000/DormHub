@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Permission;
 use App\Enums\RoleCode;
 use App\Enums\StudyStatus;
 use App\Enums\UserStatus;
@@ -36,6 +37,7 @@ use Laravel\Sanctum\HasApiTokens;
     'study_status',
     'citizenship',
     'password_hash',
+    'password_change_required',
     'status',
 ])]
 #[Hidden(['password_hash', 'remember_token'])]
@@ -60,6 +62,7 @@ class User extends Authenticatable
     {
         return [
             'password_hash' => 'hashed',
+            'password_change_required' => 'boolean',
             'status' => UserStatus::class,
             'study_status' => StudyStatus::class,
         ];
@@ -166,6 +169,54 @@ class User extends Authenticatable
 
         return $this->grants()->contains(function (RoleUser $grant) use ($code, $buildingId): bool {
             if ($grant->role?->code !== $code) {
+                return false;
+            }
+
+            return $grant->building_id === null || $grant->building_id === $buildingId;
+        });
+    }
+
+    /**
+     * Whether the user may do this **in this building**.
+     *
+     * The same shape as `hasRoleInBuilding()` above, asked one step further
+     * back: not «which role is this» but «what does the role let its holder
+     * do». A policy phrased this way survives a new role — the building
+     * manager was added to `RoleCode::permissions()` and to nothing else — and
+     * it keeps the horizontal boundary of FR-07 in the one place that has ever
+     * enforced it, the `building_id` of the grant.
+     */
+    public function hasPermissionInBuilding(Permission $permission, Building|int|null $building): bool
+    {
+        $buildingId = $building instanceof Building ? $building->getKey() : $building;
+
+        return $this->grants()->contains(function (RoleUser $grant) use ($permission, $buildingId): bool {
+            if ($grant->role?->code?->grants($permission) !== true) {
+                return false;
+            }
+
+            return $grant->building_id === null || $grant->building_id === $buildingId;
+        });
+    }
+
+    /**
+     * FR-41: whether the user may grant or revoke this role in this building.
+     *
+     * Two conditions in one question, and they must stay in one question. The
+     * role has to be one the holder's own role may hand out
+     * (`RoleCode::grantableRoles()`), and the grant that carries that right
+     * has to name the building being written into. Asked separately, a warden
+     * of block 1 holding a duty officer's grant in block 2 could appoint staff
+     * in block 2, which is precisely the leak FR-07 exists to close.
+     */
+    public function mayGrantInBuilding(RoleCode $code, Building|int|null $building): bool
+    {
+        $buildingId = $building instanceof Building ? $building->getKey() : $building;
+
+        return $this->grants()->contains(function (RoleUser $grant) use ($code, $buildingId): bool {
+            $holder = $grant->role?->code;
+
+            if ($holder === null || ! in_array($code, $holder->grantableRoles(), true)) {
                 return false;
             }
 

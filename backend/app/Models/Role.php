@@ -10,8 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
- * ROLE of the ER model (§3.4.3). Five rows, inserted by the reference seeder
- * and not editable through the application.
+ * ROLE of the ER model (§3.4.3). Six rows since revision 2 of the role model,
+ * inserted by the reference seeder from `RoleCode::cases()` and not editable
+ * through the application.
  */
 #[Fillable(['code', 'name'])]
 class Role extends Model
