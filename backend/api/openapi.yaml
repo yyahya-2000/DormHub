@@ -3,13 +3,14 @@ openapi: 3.1.0
 info:
   title: Dormitory support system — API v1
   version: 0.1.0
-  summary: Role model, authentication, audit log and the housing register
+  summary: Role model, authentication, audit log, the housing register and staff
   description: |
-    The implemented part of the REST contract of §3.3.6, in two slices. The first
-    is FR-07 (role model), FR-08 (authentication and sessions) and FR-33 (audit
-    log). The second is the housing register: FR-01 (dormitories), FR-02 (rooms
-    and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the resident
-    card).
+    The implemented part of the REST contract of §3.3.6, in three slices. The
+    first is FR-07 (role model), FR-08 (authentication and sessions) and FR-33
+    (audit log). The second is the housing register: FR-01 (dormitories), FR-02
+    (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
+    resident card). The third follows revision 2 of the role model: FR-41 (staff
+    appointment inside a building) and FR-42 (issuing a resident account).
 
     The remaining routes of §3.3.6 — guest requests, the checkpoint,
     announcements, lost-and-found and maintenance — belong to later increments and
@@ -17,12 +18,19 @@ info:
     unimplemented: the file is the input for client generation, and a generated
     client should not carry methods that answer 404.
 
-    Four properties of the contract are worth reading before the paths.
+    Five properties of the contract are worth reading before the paths.
 
     Authorisation is scoped by building, not only by role. A grant of a role names
     the dormitory it holds in, and every building-addressed route decides on the
     object rather than on the role alone. A warden of one building asking about
     another gets 403, at the API and not merely in the interface.
+
+    There are six roles, and the two in the middle differ in exactly one thing.
+    The warden heads the dormitory; the manager beneath him does the register
+    work — rooms, places, moving in and out, resident cards and accounts — and
+    appoints nobody. Everywhere in this document that says «the warden of this
+    building» about operative work, the manager of that building is included.
+    Where a route is the warden's alone, it says so.
 
     The sign-in route has two distinct refusals. 401 means the credential did not
     resolve to an account that may sign in; it never says whether the login exists.
@@ -58,7 +66,11 @@ tags:
   - name: Residencies
     description: FR-03 and FR-05. Moving in, and moving out.
   - name: Residents
-    description: FR-06. The resident card.
+    description: FR-06 and FR-42. The resident card, and the account behind it.
+  - name: Staff
+    description: >-
+      FR-41. Appointing and dismissing the staff of one dormitory. The warden's
+      route: the manager appoints nobody.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -117,6 +129,58 @@ paths:
           headers:
             Retry-After:
               description: Seconds until the request is accepted again.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TooManyRequests'
+
+  /auth/password:
+    post:
+      tags: [Authentication]
+      summary: Set a password with a one-time code
+      description: |
+        FR-42, third criterion. An account issued to an incoming resident is
+        created with a secret nobody holds; what the resident receives, at their
+        own contact and never on the screen of the person who created the
+        account, is a one-time code. This route spends that code and puts a
+        password of the resident's own in its place.
+
+        Unauthenticated, of necessity: the account has no password to sign in
+        with yet. The code takes the place of a session, works once, and expires
+        an hour after it is issued. Every API token the account already held is
+        revoked with the change.
+
+        The refusal says nothing about which of the four causes it was — no such
+        address, a code that never existed, one already spent, one expired — for
+        the same reason the sign-in route never says whether a login exists.
+      operationId: setPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPasswordInput'
+      responses:
+        '204':
+          description: The password is set and the code is spent. The event is in the audit log.
+        '422':
+          description: |
+            Either the payload failed validation, or the code did not resolve.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/Error'
+        '429':
+          description: >-
+            The address sent more requests to this route than it admits per
+            minute. The same limiter as the sign-in route, for the same reason:
+            a one-time code is a secret, and guessing at it is an attempt.
+          headers:
+            Retry-After:
               schema: { type: integer, minimum: 1 }
           content:
             application/json:
@@ -247,8 +311,8 @@ paths:
         occupied and the free remainder, so that a client never has to subtract
         and arrive at a figure the server did not refuse on.
 
-        The administrator, and the warden or duty officer **of this building**. A
-        resident does not read the occupancy of the whole dormitory.
+        The administrator, and the warden, manager or duty officer **of this
+        building**. A resident does not read the occupancy of the whole dormitory.
       operationId: listBuildingRooms
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -275,8 +339,8 @@ paths:
       tags: [Rooms]
       summary: Register a room
       description: |
-        FR-02. The warden of this building, or the administrator. A room number is
-        unique inside its building and free across buildings.
+        FR-02. The warden or the manager of this building, or the administrator. A
+        room number is unique inside its building and free across buildings.
       operationId: createRoom
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -436,8 +500,8 @@ paths:
       summary: Place a resident in a bed
       description: |
         FR-03. The scope is read off the bed: a residency names no building, and
-        the warden of the building the bed stands in is the one allowed to write
-        the row.
+        the warden or manager of the building the bed stands in is the one allowed
+        to write the row.
 
         Two residents cannot hold one place over overlapping periods. The refusal
         comes from the partial unique index `residencies_active_bed_uniq` in the
@@ -551,8 +615,8 @@ paths:
       tags: [Residents]
       summary: The resident card
       description: |
-        FR-06. Visible to the warden **of that dormitory** and to the
-        administrator; a resident sees only their own. The warden of building 1
+        FR-06. Visible to the warden and the manager **of that dormitory** and to
+        the administrator; a resident sees only their own. The warden of building 1
         requesting a card of building 2 gets 403, at the API and not merely in the
         interface.
 
@@ -682,9 +746,9 @@ paths:
       summary: The people holding a role in this building
       description: |
         Personal data, so the circle is narrower than for the card: the
-        administrator, and the warden or duty officer **of this building**. A
-        resident of the building gets 403, and so does the warden of any other
-        building. The answer never carries a person attached to a different
+        administrator, and the warden, manager or duty officer **of this
+        building**. A resident of the building gets 403, and so does the warden of
+        any other building. The answer never carries a person attached to a different
         dormitory.
       operationId: listBuildingUsers
       parameters:
@@ -708,6 +772,158 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /buildings/{building}/staff:
+    post:
+      tags: [Staff]
+      summary: Appoint a member of staff in this dormitory
+      description: |
+        FR-41. The warden of **this** building grants the manager, duty officer
+        or security role inside it. Three refusals are worth telling apart, and
+        all three are 403 because all three are a question of who the caller is:
+
+        - the same call against another dormitory — the scope of the caller's own
+          grant is what decides, and the path is what it is compared against;
+        - a grant of the administrator or the warden role — the chain of
+          appointment runs downwards only, and the administrator's grant is
+          issued outside the application entirely;
+        - any staff grant at all attempted by a manager — the one capability
+          revision 2 of the role model withheld from him.
+
+        The grant names the building from the path. A `building_id` in the
+        payload is ignored, because a body that could nominate the scope would
+        be nominating the scope the caller's own authorisation is checked
+        against.
+
+        Appointing twice is one appointment: the answer is 200 rather than 201,
+        no second grant is written, and the log keeps one entry per grant.
+      operationId: appointStaff
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffAppointmentInput'
+      responses:
+        '200':
+          description: The account already held this role here. Nothing changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RoleGrant'
+        '201':
+          description: The role is granted. The appointment is in the audit log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RoleGrant'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/staff/{user}/{role}:
+    delete:
+      tags: [Staff]
+      summary: Dismiss a member of staff of this dormitory
+      description: |
+        FR-41, the revocation half. The same circle of roles as the appointment,
+        and deliberately the same: a warden able to revoke another warden could
+        remove the one account above him in his own building.
+
+        404 means the account holds no such role here — a revocation that
+        revoked nothing must not read as a success.
+      operationId: revokeStaff
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+        - $ref: '#/components/parameters/StaffUserId'
+        - $ref: '#/components/parameters/StaffRole'
+      responses:
+        '204':
+          description: The role is revoked. The dismissal is in the audit log.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such dormitory or account, or the account holds no such role here.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/residents:
+    post:
+      tags: [Residents]
+      summary: Issue an account to an incoming resident
+      description: |
+        FR-42. The warden or the manager of **this** dormitory creates the
+        account of a person moving in: name, contact, study status, citizenship.
+
+        There is no `role` field and no `password` field, and both absences are
+        the requirement rather than an omission.
+
+        The grant the account receives is always the resident role, always
+        scoped to the building in the path, so no staff role can be issued this
+        way — there is no parameter through which one could be asked for.
+
+        The credential does not travel in this response. The account is created
+        with a secret that is generated, hashed and forgotten in the same step;
+        what reaches the resident is a one-time code, sent to the address on the
+        account and spent at `POST /auth/password`. The response describes the
+        account and carries `password_change_required: true`, which is how a
+        client knows the account is still waiting for its first password.
+
+        Constraint C-03 leaves one delivery channel in this iteration, and it is
+        mail. The message is queued rather than sent inline: creating an account
+        must not wait on a mail server.
+      operationId: issueResidentAccount
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResidentAccountInput'
+      responses:
+        '201':
+          description: >-
+            The account exists, the resident role is granted in this dormitory,
+            and the one-time code is on its way to the contact. The issue is in
+            the audit log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
 
   /audit-logs:
     get:
@@ -784,6 +1000,22 @@ components:
       required: true
       description: The account the card belongs to.
       schema: { type: integer, format: int64, minimum: 1 }
+    StaffUserId:
+      name: user
+      in: path
+      required: true
+      description: The account whose role is being revoked.
+      schema: { type: integer, format: int64, minimum: 1 }
+    StaffRole:
+      name: role
+      in: path
+      required: true
+      description: >-
+        The role being revoked. Only the roles the caller may grant are
+        accepted; anything else is 403, and a string naming no role at all is
+        422.
+      schema:
+        $ref: '#/components/schemas/RoleCode'
 
   responses:
     Unauthenticated:
@@ -822,10 +1054,19 @@ components:
     RoleCode:
       type: string
       description: |
-        The five roles of §1.1.4. The colloquial Russian word for a
-        porter-caretaker is used nowhere: the entrance function belongs to the
-        security service.
-      enum: [admin, duty_officer, warden, security, student]
+        The six roles of §1.1.4 as revision 2 of the role model leaves them.
+
+        `admin` holds the register of dormitories and is the one role granted
+        over the system as a whole. `warden` heads one dormitory: he appoints
+        his own staff and does everything `manager` does. `manager` is the
+        register work of that dormitory — rooms, places, moving in and out,
+        resident cards and accounts — and no appointments at all.
+        `duty_officer` approves guest requests, `security` checks the guest at
+        the entrance, `student` lives there.
+
+        The colloquial Russian word for a porter-caretaker is used nowhere: the
+        entrance function belongs to the security service.
+      enum: [admin, duty_officer, warden, manager, security, student]
 
     UserStatus:
       type: string
@@ -857,6 +1098,10 @@ components:
         - residency.assignment_refused
         - residency.terminated
         - resident.card_viewed
+        - staff.appointed
+        - staff.revoked
+        - resident.account_issued
+        - auth.password_set
 
     AuditResult:
       type: string
@@ -921,7 +1166,7 @@ components:
 
     User:
       type: object
-      required: [id, full_name, email, status]
+      required: [id, full_name, email, status, password_change_required]
       properties:
         id: { type: integer, format: int64 }
         full_name: { type: string }
@@ -929,6 +1174,13 @@ components:
         phone: { type: [string, 'null'] }
         status:
           $ref: '#/components/schemas/UserStatus'
+        password_change_required:
+          type: boolean
+          description: >-
+            True while the account is waiting for its first password — an
+            account issued under FR-42 whose one-time code has not been spent
+            yet. It says that much and carries no secret; setting a password at
+            `POST /auth/password` clears it.
         roles:
           type: array
           description: Present when the grants were loaded for this response.
@@ -1087,8 +1339,8 @@ components:
           type: integer
           format: int64
           description: >-
-            The place. It also fixes the scope: the warden of the building this
-            bed stands in is the one allowed to write the row.
+            The place. It also fixes the scope: the warden or manager of the
+            building this bed stands in is the one allowed to write the row.
         contract_number: { type: string, maxLength: 64 }
         moved_in_at: { type: string, format: date }
         ground:
@@ -1143,7 +1395,7 @@ components:
     ResidentCard:
       type: object
       description: |
-        FR-06. `study_status` and `citizenship` are nullable by design: a warden
+        FR-06. `study_status` and `citizenship` are nullable by design: a staff
         account is not a student and has neither, and the card renders what is
         known rather than a default that looks like a fact.
       required: [id, full_name, contact, residency_history, open_obligations]
@@ -1197,6 +1449,66 @@ components:
               placement:
                 $ref: '#/components/schemas/Placement'
 
+    StaffAppointmentInput:
+      type: object
+      description: |
+        FR-41. Who, and which role. The dormitory is not here: it comes from the
+        path, so the payload cannot nominate the scope the caller's own
+        authorisation is checked against.
+      required: [user_id, role]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+          description: The account receiving the role. It need not exist in this dormitory yet.
+        role:
+          description: >-
+            One of the roles the caller may grant. A warden may grant `manager`,
+            `duty_officer` and `security`; the administrator may grant `warden`.
+            Anything else is 403.
+          allOf:
+            - $ref: '#/components/schemas/RoleCode'
+
+    ResidentAccountInput:
+      type: object
+      description: |
+        FR-42. The fields of an incoming resident, and nothing else. There is no
+        `role` — it is always the resident role in the dormitory named by the
+        path — and no `password`: a password the caller could set is a password
+        the caller knows.
+      required: [full_name, email]
+      properties:
+        full_name: { type: string, maxLength: 255 }
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: >-
+            The confirmed contact the one-time code is delivered to, which is
+            why it is the one field that can be neither omitted nor duplicated.
+        phone: { type: [string, 'null'], maxLength: 32 }
+        study_status:
+          oneOf:
+            - $ref: '#/components/schemas/StudyStatus'
+            - type: 'null'
+        citizenship: { type: [string, 'null'], maxLength: 64 }
+
+    SetPasswordInput:
+      type: object
+      description: |
+        FR-42. The one-time code, and the password replacing it. The address is
+        validated for shape and not for existence: a rule that checked it
+        against the table would tell an unauthenticated caller which addresses
+        hold an account.
+      required: [email, token, password, password_confirmation]
+      properties:
+        email: { type: string, format: email, maxLength: 255 }
+        token:
+          type: string
+          description: The one-time code delivered to the account's contact. Works once.
+        password: { type: string, minLength: 8 }
+        password_confirmation: { type: string, minLength: 8 }
+
     CapacityExceeded:
       type: object
       description: |
@@ -1215,7 +1527,7 @@ components:
       type: object
       description: |
         FR-03, second criterion: the record standing in the way, so that the
-        warden reads which residency must end before this one can begin.
+        warden or manager reads which residency must end before this one can begin.
       required: [message]
       properties:
         message: { type: string }
