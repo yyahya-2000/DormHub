@@ -36,6 +36,8 @@ final class AuthController extends Controller
 
     public function me(Request $request): UserResource
     {
-        return new UserResource($request->user()->load('roleGrants.role'));
+        // The consent history comes with it, so that the answer says which
+        // document is still outstanding (FR-35, first criterion).
+        return new UserResource($request->user()->load(['roleGrants.role', 'consentRecords']));
     }
 }

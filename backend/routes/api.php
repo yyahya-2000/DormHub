@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BedController;
 use App\Http\Controllers\Api\V1\BuildingController;
+use App\Http\Controllers\Api\V1\ConsentController;
+use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\NotificationSettingController;
 use App\Http\Controllers\Api\V1\ResidencyController;
 use App\Http\Controllers\Api\V1\ResidentAccountController;
 use App\Http\Controllers\Api\V1\ResidentCardController;
@@ -27,7 +30,9 @@ use Illuminate\Support\Facades\Route;
 | rooms and places (FR-02), moving in (FR-03), moving out (FR-05) and the
 | resident card (FR-06). The third follows revision 2 of the role model: the
 | warden appoints the staff of his own building (FR-41), and he or the manager
-| beneath him issues an account to an incoming resident (FR-42).
+| beneath him issues an account to an incoming resident (FR-42). The fourth is
+| the personal account itself: notifications and their switches (FR-34), and
+| consent to the processing of personal data (FR-35).
 |
 | The remaining routes of §3.3.6 — guest requests, the checkpoint,
 | announcements, lost-and-found and maintenance — belong to later increments
@@ -140,4 +145,48 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::get('audit-logs', [AuditLogController::class, 'index'])
         ->name('audit-logs.index');
+
+    /*
+     * FR-34. The personal account's own messages, and the switches that decide
+     * which of them arrive at all. Every route below is scoped to the account
+     * the token names: there is no parameter through which one person could
+     * ask about another's, which is why none of them carries a policy.
+     */
+    Route::get('notifications', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])
+        ->name('notifications.read');
+
+    Route::get('notification-settings', [NotificationSettingController::class, 'index'])
+        ->name('notification-settings.index');
+
+    Route::put('notification-settings', [NotificationSettingController::class, 'update'])
+        ->name('notification-settings.update');
+
+    /*
+     * FR-35. Consent, on routes of its own.
+     *
+     * That they are routes of their own is the requirement and not a matter of
+     * arrangement: art. 9 part 1 of Federal Law No. 152-FZ has consent
+     * «executed separately from other documents», so no other request in this
+     * file carries a field that could record one, and this is the only way a
+     * consent record comes into being.
+     *
+     * The guest's consent is taken at the security post and not here; the
+     * mechanism is the same one, and the point it plugs into is
+     * `ConsentRegistry::requireGranted()`, called by the checkpoint service of
+     * increment 1 before an entry is written.
+     */
+    Route::get('consents/pending', [ConsentController::class, 'pending'])
+        ->name('consents.pending');
+
+    Route::get('consents', [ConsentController::class, 'index'])
+        ->name('consents.index');
+
+    Route::post('consents', [ConsentController::class, 'store'])
+        ->name('consents.store');
+
+    Route::post('consents/{document}/withdrawal', [ConsentController::class, 'withdraw'])
+        ->name('consents.withdraw');
 });

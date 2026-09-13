@@ -23,7 +23,13 @@ final class IssuedTokenResource extends JsonResource
             'token_type' => 'Bearer',
             'expires_at' => $this->expiresAt?->format(DATE_ATOM),
             'identity_provider' => $this->provider,
-            'user' => new UserResource($this->user->load('roleGrants.role')),
+            /*
+             * The consent history is loaded beside the grants so that the
+             * sign-in answer can say which consent is outstanding (FR-35,
+             * first criterion). One query, at the one moment a client needs to
+             * know whether to draw the consent screen next.
+             */
+            'user' => new UserResource($this->user->load(['roleGrants.role', 'consentRecords'])),
         ];
     }
 }
