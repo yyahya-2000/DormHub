@@ -40,6 +40,7 @@ export const Permission = {
   manageResidencies: 'residencies.manage',
   viewPeople: 'people.view',
   viewResidentCard: 'resident_card.view',
+  issueResidentAccount: 'resident_account.issue',
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -58,6 +59,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.manageResidencies,
     Permission.viewPeople,
     Permission.viewResidentCard,
+    Permission.issueResidentAccount,
   ],
   warden: [
     Permission.viewBuilding,
@@ -66,12 +68,13 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.manageResidencies,
     Permission.viewPeople,
     Permission.viewResidentCard,
+    Permission.issueResidentAccount,
   ],
   // The manager relieves the warden of the register work and of nothing else.
-  // Over the housing domain the two sets are identical, which is why no screen
-  // of this slice draws a difference between them; appointing staff is the one
-  // capability the warden keeps to himself, and it belongs to the routes of
-  // FR-41, which are not part of these screens.
+  // Over the housing domain the two sets are identical, and issuing an account
+  // to an incoming resident (FR-42) is register work, so the manager carries it
+  // too. Appointing staff is the one capability the warden keeps to himself,
+  // and it is not a capability at all — see `GRANTABLE` below.
   manager: [
     Permission.viewBuilding,
     Permission.viewRooms,
@@ -79,6 +82,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.manageResidencies,
     Permission.viewPeople,
     Permission.viewResidentCard,
+    Permission.issueResidentAccount,
   ],
   // The duty officer approves guest requests, and for that he needs the room a
   // guest is bound for and the roll of the building. Not the resident card: it
@@ -90,6 +94,53 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
   duty_officer: [Permission.viewBuilding, Permission.viewRooms, Permission.viewPeople],
   security: [Permission.viewBuilding],
   student: [],
+}
+
+/**
+ * FR-41, the chain of appointment, mirrored from `RoleCode::grantableRoles()`.
+ *
+ * It is kept apart from `CAPABILITIES` because it is not a capability: what a
+ * grant lets its holder appoint is a set of roles, not a yes or a no. «May this
+ * warden appoint here» and «may he appoint *this*» have different answers for
+ * the same account — a manager yes, another warden no — and the server settles
+ * both in one call. Flattening the pair into a single `staff.appoint` flag here
+ * would draw a role in the form that the API would then refuse.
+ *
+ * The manager is absent, and that absence is the requirement: revision 2 of the
+ * role model withheld appointment from him, so the screen is never drawn for
+ * him at all.
+ */
+const GRANTABLE: Record<string, readonly KnownRole[]> = {
+  admin: [RoleCode.warden],
+  warden: [RoleCode.manager, RoleCode.duty_officer, RoleCode.security],
+}
+
+/**
+ * The roles this account may grant and revoke inside this building. Empty for
+ * everyone the chain of appointment does not name, which is what hides the
+ * screen rather than merely emptying it.
+ */
+export function grantableRolesIn(user: User, buildingId: number): KnownRole[] {
+  const roles = new Set<KnownRole>()
+  for (const grant of user.roles ?? []) {
+    if (grant.building_id !== null && grant.building_id !== buildingId) {
+      continue
+    }
+    for (const role of GRANTABLE[grant.role] ?? []) {
+      roles.add(role)
+    }
+  }
+  return [...roles]
+}
+
+/** FR-41. Whether there is any appointment at all for this account to make here. */
+export function appointsStaff(user: User, buildingId: number): boolean {
+  return grantableRolesIn(user, buildingId).length > 0
+}
+
+/** FR-42. The warden and the manager of this building, and the administrator. */
+export function issuesResidentAccounts(user: User, buildingId: number): boolean {
+  return may(user, Permission.issueResidentAccount, buildingId)
 }
 
 export function rolesOf(user: User): RoleCode[] {
