@@ -16,8 +16,10 @@ use Illuminate\Support\Collection;
  *
  * `open_obligations` deserves its note. The MVP model of §3.4.3 knows one kind
  * of outstanding obligation a resident can carry — an accommodation contract
- * that has not been terminated, whose term art. 105 cl. 2 of the Housing Code
- * ties to the term of study. Those are what the field lists. Property signed
+ * still running, whose term art. 105 cl. 2 of the Housing Code ties to the
+ * term of study. Those are what the field lists, and a contract with a
+ * departure date already written into it is still running until that date
+ * arrives: notice given is not notice served. Property signed
  * for and not returned would come from the inventory-handover entities §3.4.2
  * lists as deferred, and none of it is invented here: a card that showed an
  * empty list where the data does not exist would read as «owes nothing», which
@@ -34,14 +36,26 @@ final class ResidentCardResource extends JsonResource
     {
         /*
          * The history arrives loaded from `ResidentDirectory`, newest first.
-         * The open residencies are read off it rather than queried again: the
-         * current bed and the open obligations are two views of the same rows,
-         * and a second query could see a third state.
+         * The residencies in force are read off it rather than queried again:
+         * the current bed and the open obligations are two views of the same
+         * rows, and a second query could see a third state.
+         *
+         * «In force today», not «no end recorded». The distinction is the one
+         * FR-05 turns on and it used to be got wrong here: a person evicted
+         * with effect from the 31st of December had a termination date, so
+         * their record was not open, so the card showed them today with no bed
+         * and no obligations — while the same record, one field further down
+         * the same response, was marked `is_current: true`. They live there
+         * until the 31st, and until the 31st the card says so.
          */
-        /** @var Collection<int, Residency> $open */
-        $open = $this->residencies->filter(fn (Residency $residency): bool => $residency->isOpen())->values();
+        $today = now();
 
-        $current = $open->first();
+        /** @var Collection<int, Residency> $inForce */
+        $inForce = $this->residencies
+            ->filter(fn (Residency $residency): bool => $residency->isCurrentOn($today))
+            ->values();
+
+        $current = $inForce->first();
 
         return [
             'id' => $this->id,
@@ -59,7 +73,7 @@ final class ResidentCardResource extends JsonResource
             'residency_history' => ResidencyResource::collection(
                 $this->whenLoaded('residencies', fn () => $this->residencies)
             ),
-            'open_obligations' => $open
+            'open_obligations' => $inForce
                 ->map(fn (Residency $residency): array => [
                     'kind' => 'accommodation_contract',
                     'residency_id' => $residency->getKey(),
