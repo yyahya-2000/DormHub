@@ -94,3 +94,15 @@ export function useFormatters(): Formatters {
   const { i18n } = useTranslation()
   return useMemo(() => buildFormatters(i18n.language), [i18n.language])
 }
+
+/**
+ * Today as the API writes a date: `YYYY-MM-DD`, taken from the local calendar
+ * rather than from UTC. A move-in recorded at nine in the evening in Moscow
+ * belongs to the day the warden is living in, not to the day in Greenwich.
+ */
+export function todayIso(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
