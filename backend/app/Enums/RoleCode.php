@@ -110,6 +110,7 @@ enum RoleCode: string
                 Permission::ViewPeople,
                 Permission::ViewResidentCard,
                 Permission::IssueResidentAccount,
+                Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
                 Permission::ViewGuestDocument,
@@ -122,6 +123,7 @@ enum RoleCode: string
                 Permission::ViewPeople,
                 Permission::ViewResidentCard,
                 Permission::IssueResidentAccount,
+                Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
                 Permission::ViewGuestDocument,
@@ -139,6 +141,7 @@ enum RoleCode: string
                 Permission::ViewPeople,
                 Permission::ViewResidentCard,
                 Permission::IssueResidentAccount,
+                Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
             ],
             /*

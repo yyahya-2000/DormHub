@@ -97,6 +97,35 @@ enum Permission: string
     case ViewVisitRegister = 'visit_register.view';
 
     /**
+     * Publishing an announcement, and reading who has acknowledged it
+     * (FR-09, FR-12).
+     *
+     * **One capability and not two, which is a decision rather than an
+     * oversight.** The obvious split — publish here, read the list of readers
+     * there — would produce two capabilities held by exactly the same three
+     * roles, because nothing in the requirements distinguishes them. The
+     * register of rooms is split into `ViewRooms` and `ManageRooms` for a
+     * reason this pair does not have: the duty officer needs the read and has
+     * no business with the write, so the two lists of holders genuinely
+     * differ. Here they would not, and a capability that never separates
+     * anybody is a line of code pretending to be a rule.
+     *
+     * The list of readers is the evidential half of the same act. FR-12 exists
+     * because SN-11 asks the warden to be able to show that a mandatory notice
+     * was delivered; the person who has to show it is the person who posted
+     * it.
+     *
+     * **The scope is the whole of the safety here.** A holder of this
+     * capability publishes into the dormitory their grant names and reads the
+     * readers of that dormitory. An announcement addressed to every building —
+     * `building_id` NULL — is the administrator's alone, whose grant names
+     * none, and the readers of such an announcement are narrowed to the
+     * caller's own building before a single name is returned. See
+     * `App\Policies\AnnouncementPolicy`.
+     */
+    case PublishAnnouncements = 'announcements.publish';
+
+    /**
      * Reading a guest's document number in full (NFR-06, §3.4.2).
      *
      * The column is stored encrypted and shown masked everywhere, so this is

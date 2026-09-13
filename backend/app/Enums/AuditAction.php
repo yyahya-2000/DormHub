@@ -143,4 +143,25 @@ enum AuditAction: string
     // NFR-06. The document number is stored encrypted and shown masked; asking
     // for it in full is a separate act and is recorded as one.
     case GuestDocumentNumberViewed = 'guest_request.document_viewed';
+
+    // FR-09. What was announced, to which dormitory, by whom and until when.
+    // A mandatory announcement is the ground a disciplinary conversation later
+    // stands on (SN-11), and «the notice was posted on the ninth» has to be
+    // answerable from something other than the row a warden could edit.
+    case AnnouncementPublished = 'announcement.published';
+
+    // FR-12, and the one act of this module that is recorded here rather than
+    // in a table of its own.
+    //
+    // The acknowledgement itself is **not** in the audit log: the
+    // `announcement_acks` row already carries the person, the announcement and
+    // the moment, which is the whole of what FR-12 asks to be recorded, and a
+    // second copy of it per resident per notice would bury the log in rows
+    // that say nothing the primary record does not.
+    //
+    // Reading the readers is a different act. It discloses a named list of
+    // residents who have not complied with an instruction — personal data
+    // assembled for a purpose — and §3.9.6 counts such a reading among the
+    // events for the same reason it counts `resident.card_viewed`.
+    case AnnouncementReadersViewed = 'announcement.readers_viewed';
 }

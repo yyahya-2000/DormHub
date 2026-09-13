@@ -61,6 +61,43 @@ enum NotificationCategory: string
     case DocumentSignature = 'document_signature';
 
     /**
+     * FR-09. A routine announcement has been published to this dormitory.
+     *
+     * Optional, by the principle stated above: the feed of FR-11 is on screen
+     * and the message only saves the resident from opening it. A film evening
+     * rests on nothing but convenience, and a resident who would rather read
+     * the feed themselves may say so.
+     */
+    case Announcement = 'announcement';
+
+    /**
+     * FR-09 and FR-12. An announcement the resident is required to acknowledge.
+     *
+     * **Two categories for one kind of object, and this is where the line of
+     * the class docblock actually falls.** The category is the unit a delivery
+     * rule is written against, so «sometimes mandatory» is not a thing one
+     * category can be; the choice was either to make every announcement
+     * optional or to split the enumeration along the column that already
+     * exists, `ANNOUNCEMENT.is_mandatory`. It is split, and the ground is the
+     * same one the whole enumeration is drawn on.
+     *
+     * A mandatory announcement rests on the rules of internal order and not on
+     * consent. Clause 4.2.7 of the HSE rules obliges the resident to comply
+     * with the lawful instructions of the administration, and a fire drill, an
+     * evacuation, a water shutoff or a change to the regime is such an
+     * instruction; the dormitory does not ask permission to issue one. FR-12
+     * then makes the delivery evidential — SN-11 wants «I was not told» to be
+     * a checkable statement — and a switch that could silence the message
+     * would hollow out the record it is supposed to support: the warden would
+     * hold a list of people who had not acknowledged a notice they were never
+     * sent.
+     *
+     * The optional case above keeps the resident's control over everything
+     * that is not an instruction, which is most of the feed.
+     */
+    case MandatoryAnnouncement = 'mandatory_announcement';
+
+    /**
      * Whether the category may not be switched off.
      *
      * @see self for the ground the line is drawn on.
@@ -68,8 +105,9 @@ enum NotificationCategory: string
     public function isMandatory(): bool
     {
         return match ($this) {
-            self::AccountIssued, self::VisitOverdue, self::DocumentSignature => true,
-            self::RequestDecision, self::MaintenanceStatus => false,
+            self::AccountIssued, self::VisitOverdue, self::DocumentSignature,
+            self::MandatoryAnnouncement => true,
+            self::RequestDecision, self::MaintenanceStatus, self::Announcement => false,
         };
     }
 
@@ -91,6 +129,8 @@ enum NotificationCategory: string
             self::VisitOverdue => 'Guest overdue at the checkpoint',
             self::MaintenanceStatus => 'Maintenance request status',
             self::DocumentSignature => 'Document awaiting signature',
+            self::Announcement => 'Announcements of the dormitory',
+            self::MandatoryAnnouncement => 'Announcements requiring acknowledgement',
         };
     }
 
@@ -105,6 +145,8 @@ enum NotificationCategory: string
             self::VisitOverdue => 'A guest you invited has not left by the hour the rules of internal order set.',
             self::MaintenanceStatus => 'A maintenance request you filed has moved to another state.',
             self::DocumentSignature => 'A document is waiting for your signature.',
+            self::Announcement => 'The warden has published an announcement for your dormitory.',
+            self::MandatoryAnnouncement => 'An announcement you are required to acknowledge, such as a change to the regime or a planned shutoff.',
         };
     }
 
