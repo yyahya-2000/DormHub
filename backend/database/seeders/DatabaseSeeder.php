@@ -13,13 +13,20 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
-        // Reference data first: the demo accounts are grants of roles that
-        // must already exist, and the housing register grants the resident
-        // role to every person it accommodates.
+        /*
+         * Reference data first: every seeder below writes grants of roles that
+         * must already exist.
+         *
+         * The housing register comes before the staff accounts, and the order
+         * is not arbitrary. Revision 2 of the role model puts a manager in
+         * every dormitory, so the seeder that appoints them has to run once
+         * the dormitories are there — otherwise «one per building» would mean
+         * one, for the single block the staff seeder creates for itself.
+         */
         $this->call([
             RoleSeeder::class,
-            DemoSeeder::class,
             HousingSeeder::class,
+            DemoSeeder::class,
         ]);
     }
 }
