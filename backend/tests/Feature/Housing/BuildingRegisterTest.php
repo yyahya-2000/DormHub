@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Housing;
 
 use App\Enums\AuditAction;
+use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
 use App\Models\Building;
 use App\Models\Room;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -114,6 +117,125 @@ final class BuildingRegisterTest extends TestCase
         $this->assertStringContainsString('room', strtolower((string) $response->json('message')));
 
         $this->assertDatabaseHas('buildings', ['id' => $this->building->id]);
+    }
+
+    public function test_a_refusal_caused_by_a_staff_grant_says_so_and_does_not_blame_the_rooms(): void
+    {
+        // No rooms at all, one staff appointment. The refusal used to read
+        // «0 room(s) are attached to it» with `blocked_by: {rooms: 0}` beside
+        // it — a sentence that contradicts itself and sends the reader to an
+        // empty register.
+        $this->userWith(RoleCode::Warden, $this->building, 'appointed@example.test');
+
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $response = $this->deleteJson("/api/v1/buildings/{$this->building->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('blocked_by.rooms', 0)
+            ->assertJsonPath('blocked_by.role_grants', 1);
+
+        $message = (string) $response->json('message');
+
+        $this->assertStringContainsString('role grant', $message);
+        $this->assertStringNotContainsString('0 room', $message);
+
+        // And the advice names something the API can actually do. There is no
+        // route that deletes or moves a room, so none is offered.
+        $this->assertStringNotContainsString('Move or delete the rooms', $message);
+    }
+
+    public function test_the_stated_reason_names_the_rooms_when_the_rooms_are_what_stand_in_the_way(): void
+    {
+        Room::factory()->for($this->building)->create(['number' => '305']);
+
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $response = $this->deleteJson("/api/v1/buildings/{$this->building->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('blocked_by.rooms', 1);
+
+        $this->assertStringContainsString('1 room(s)', (string) $response->json('message'));
+    }
+
+    public function test_creating_a_dormitory_answers_with_the_regime_settings_and_not_with_nulls(): void
+    {
+        // The contract declares `is_active` a required boolean and the three
+        // time columns non-null, and the read of the same building returns
+        // them. The create used to answer null for all four, because the model
+        // did not repeat the migration's defaults and the response is built
+        // from the instance that was just saved.
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $created = $this->postJson('/api/v1/buildings', [
+            'name' => 'Block 33',
+            'address' => '8 Klenovaya Street, Zarechny',
+            'floors_count' => 9,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('data.visiting_from', '08:00:00')
+            ->assertJsonPath('data.visiting_to', '23:00:00')
+            ->assertJsonPath('data.curfew_at', '23:00:00')
+            ->json('data');
+
+        // And the read of the same row agrees with the create, field for
+        // field. That is the property that was broken, not the values.
+        $read = $this->getJson("/api/v1/buildings/{$created['id']}")->assertOk()->json('data');
+
+        $this->assertSame($created, $read);
+    }
+
+    public function test_the_name_of_a_dormitory_is_unique_in_the_database_and_not_only_in_the_form(): void
+    {
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $this->postJson('/api/v1/buildings', [
+            'name' => 'Block 1',
+            'address' => '9 Sosnovaya Street, Zarechny',
+            'floors_count' => 5,
+        ])->assertStatus(422)->assertJsonValidationErrors('name');
+
+        // The form rule is what turns the collision into a field error; the
+        // index is what makes the rule true when two requests race past it.
+        // No service, no policy, no controller in the path.
+        $this->expectException(QueryException::class);
+
+        Building::query()->create([
+            'name' => 'Block 1',
+            'address' => '11 Sosnovaya Street, Zarechny',
+            'floors_count' => 5,
+        ]);
+    }
+
+    public function test_an_evicted_resident_no_longer_sees_the_dormitory_in_the_register_listing(): void
+    {
+        // The listing filtered on role grants, and eviction revokes no grant.
+        // The row came back and the card behind it answered 403 — a link to a
+        // door that is locked.
+        $room = Room::factory()->for($this->building)->withBeds(1)->create([
+            'number' => '305',
+            'capacity' => 1,
+        ]);
+
+        $resident = $this->userWith(RoleCode::Resident, $this->building, 'gone@example.test');
+
+        $residency = $resident->residencies()->create([
+            'bed_id' => $room->beds()->sole()->getKey(),
+            'contract_number' => 'DOG-GONE',
+            'moved_in_at' => CarbonImmutable::now()->subMonths(6)->toDateString(),
+        ]);
+
+        Sanctum::actingAs($resident);
+        $this->assertCount(1, $this->getJson('/api/v1/buildings')->assertOk()->json('data'));
+
+        $residency->update([
+            'moved_out_at' => CarbonImmutable::now()->subDay()->toDateString(),
+            'moved_out_ground' => 'Graduation',
+            'status' => ResidencyStatus::Ended,
+        ]);
+
+        $this->assertSame([], $this->getJson('/api/v1/buildings')->assertOk()->json('data'));
+        $this->getJson("/api/v1/buildings/{$this->building->id}")->assertStatus(403);
     }
 
     public function test_a_dormitory_without_rooms_is_deleted(): void

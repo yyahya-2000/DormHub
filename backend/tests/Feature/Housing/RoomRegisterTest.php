@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Housing;
 
+use App\Enums\AuditAction;
 use App\Enums\BedStatus;
 use App\Enums\RoleCode;
 use App\Models\Bed;
@@ -83,6 +84,99 @@ final class RoomRegisterTest extends TestCase
             ->assertJsonPath('free_places', 0);
 
         $this->assertStringContainsString('free places remaining: 0', (string) $rejection->json('message'));
+    }
+
+    public function test_a_refused_bed_creation_reaches_the_audit_log(): void
+    {
+        // `bed.creation_refused` was declared in the enumeration and in the
+        // contract and could not be reached by any request: the record was
+        // written inside the transaction the exception then rolled back, so
+        // the log held nought rows for it.
+        $room = Room::factory()->for($this->first)->withBeds(1)->create(['number' => '307', 'capacity' => 1]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->postJson("/api/v1/rooms/{$room->id}/beds", ['label' => '2'])->assertStatus(422);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $this->warden->id,
+            'action' => AuditAction::BedCreationRefused->value,
+            'subject_type' => Room::class,
+            'subject_id' => $room->id,
+            'result' => 'denied',
+        ]);
+    }
+
+    public function test_a_refused_lowering_of_the_capacity_reaches_the_audit_log(): void
+    {
+        // The other refusal of this register recorded nothing at all: the
+        // `throw` stood before the audit call rather than after it.
+        $room = Room::factory()->for($this->first)->withBeds(3)->create(['number' => '502', 'capacity' => 3]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->patchJson("/api/v1/rooms/{$room->id}", ['capacity' => 1])->assertStatus(422);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $this->warden->id,
+            'action' => AuditAction::RoomUpdateRefused->value,
+            'subject_type' => Room::class,
+            'subject_id' => $room->id,
+            'result' => 'denied',
+        ]);
+    }
+
+    public function test_the_register_tells_places_that_may_be_added_from_places_somebody_could_move_into(): void
+    {
+        // FR-02's rejection names the first number; a warden looking for
+        // somewhere to put an arrival is asking the second. A room of four
+        // places with one occupant reported nought free places and looked
+        // full.
+        $room = Room::factory()->for($this->first)->withBeds(4)->create(['number' => '308', 'capacity' => 4]);
+
+        $resident = $this->userWith(RoleCode::Resident, $this->first, 'occupant@example.test');
+        $bed = $room->beds()->orderBy('label')->firstOrFail();
+        $bed->update(['status' => BedStatus::Occupied]);
+        $resident->residencies()->create([
+            'bed_id' => $bed->getKey(),
+            'contract_number' => 'DOG-8',
+            'moved_in_at' => CarbonImmutable::now()->subMonth()->toDateString(),
+        ]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/rooms/{$room->id}")
+            ->assertOk()
+            ->assertJsonPath('data.capacity', 4)
+            ->assertJsonPath('data.beds_count', 4)
+            ->assertJsonPath('data.occupied_beds_count', 1)
+            // No further place may be registered …
+            ->assertJsonPath('data.free_places', 0)
+            // … and three of the registered ones are nobody's.
+            ->assertJsonPath('data.vacant_beds', 3);
+    }
+
+    public function test_the_manager_of_the_building_keeps_the_register_like_the_warden(): void
+    {
+        $manager = $this->userWith(RoleCode::Manager, $this->first, 'manager@example.test');
+
+        Sanctum::actingAs($manager);
+
+        $room = $this->postJson("/api/v1/buildings/{$this->first->id}/rooms", [
+            'number' => '601',
+            'floor' => 6,
+            'capacity' => 2,
+        ])->assertCreated()->json('data');
+
+        $this->postJson("/api/v1/rooms/{$room['id']}/beds", ['label' => '1'])->assertCreated();
+        $this->patchJson("/api/v1/rooms/{$room['id']}", ['capacity' => 3])->assertOk();
+
+        // And nothing of the sort in the building next door.
+        $this->postJson("/api/v1/buildings/{$this->second->id}/rooms", [
+            'number' => '602',
+            'floor' => 6,
+            'capacity' => 2,
+        ])->assertStatus(403);
     }
 
     public function test_a_bed_number_is_unique_inside_its_room(): void

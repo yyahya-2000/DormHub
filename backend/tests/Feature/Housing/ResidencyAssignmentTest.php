@@ -6,6 +6,7 @@ namespace Tests\Feature\Housing;
 
 use App\Enums\AuditAction;
 use App\Enums\BedStatus;
+use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
 use App\Models\Bed;
 use App\Models\Building;
@@ -22,11 +23,17 @@ use Tests\TestCase;
 /**
  * FR-03, «Residency assignment».
  *
- * The first test in this file runs against the database rather than the API,
- * and it is the one the verification clause singles out: the partial unique
- * index `residencies_active_bed_uniq` refuses the second open residency on one
- * bed by itself, with no application code in the path. It needs a real
- * PostgreSQL instance, which is what the documented test command provides.
+ * The first tests in this file run against the database rather than the API,
+ * and they are the ones the verification clause singles out: the exclusion
+ * constraint `residencies_bed_no_overlap` refuses a second residency whose
+ * period intersects an existing one, by itself, with no application code in
+ * the path. They need a real PostgreSQL instance, which is what the documented
+ * test command provides.
+ *
+ * The two API tests named «backdated» and «after a termination dated in the
+ * future» are the two routes acceptance drove a second occupant in through on
+ * 13.09.2026. Both returned 201 then. Neither touches an index that knows only
+ * about open rows, which is why the rule had to be restated over the period.
  */
 final class ResidencyAssignmentTest extends TestCase
 {
@@ -55,43 +62,219 @@ final class ResidencyAssignmentTest extends TestCase
         ]);
     }
 
-    public function test_the_partial_unique_index_refuses_a_second_active_residency_on_one_bed(): void
+    public function test_the_exclusion_constraint_refuses_a_second_active_residency_on_one_bed(): void
     {
         $bed = $this->bed();
 
         Residency::factory()->create([
             'user_id' => $this->resident('one@example.test')->getKey(),
             'bed_id' => $bed->getKey(),
+            'moved_in_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
         ]);
 
         $this->expectException(QueryException::class);
 
         // No service, no policy, no controller: the row goes straight at the
-        // table and the index stops it.
+        // table and the constraint stops it.
         Residency::factory()->create([
             'user_id' => $this->resident('two@example.test')->getKey(),
             'bed_id' => $bed->getKey(),
+            'moved_in_at' => CarbonImmutable::now()->subMonth()->toDateString(),
         ]);
     }
 
-    public function test_the_index_admits_a_second_residency_once_the_first_one_has_ended(): void
+    public function test_the_constraint_refuses_a_period_that_overlaps_a_closed_one(): void
     {
         $bed = $this->bed();
 
-        Residency::factory()->ended()->create([
+        // A residency that ran from March to August and is long since closed.
+        Residency::factory()->ended(CarbonImmutable::now()->subMonth()->toDateString())->create([
             'user_id' => $this->resident('past@example.test')->getKey(),
             'bed_id' => $bed->getKey(),
+            'moved_in_at' => CarbonImmutable::now()->subMonths(6)->toDateString(),
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        // A second residency backdated into the middle of it. Two closed rows,
+        // no open row anywhere, and still two people in one bed in June — the
+        // case the partial unique index could not see.
+        Residency::factory()->ended(CarbonImmutable::now()->subWeeks(2)->toDateString())->create([
+            'user_id' => $this->resident('overlapping@example.test')->getKey(),
+            'bed_id' => $bed->getKey(),
+            'moved_in_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
+        ]);
+    }
+
+    public function test_the_constraint_admits_a_second_residency_once_the_first_one_has_ended(): void
+    {
+        $bed = $this->bed();
+        $handover = CarbonImmutable::now()->subMonth();
+
+        Residency::factory()->ended($handover->toDateString())->create([
+            'user_id' => $this->resident('past@example.test')->getKey(),
+            'bed_id' => $bed->getKey(),
+            'moved_in_at' => CarbonImmutable::now()->subMonths(6)->toDateString(),
         ]);
 
         // The closed row stays where it is — the history is never deleted —
-        // and the bed takes a new occupant.
+        // and the bed takes a new occupant **on the very day the last one
+        // left**. The bounds are `[)`, so the two periods touch and do not
+        // overlap; were they `[]`, a bed could only change hands with a night
+        // of nobody in it.
         Residency::factory()->create([
             'user_id' => $this->resident('present@example.test')->getKey(),
             'bed_id' => $bed->getKey(),
+            'moved_in_at' => $handover->toDateString(),
         ]);
 
         $this->assertSame(2, Residency::query()->where('bed_id', $bed->getKey())->count());
         $this->assertSame(1, Residency::query()->where('bed_id', $bed->getKey())->open()->count());
+    }
+
+    public function test_a_residency_backdated_underneath_a_running_one_is_refused(): void
+    {
+        // Acceptance, reproduction 1: POST /residencies with a moved_in_at
+        // inside the period of a residency that is already running. The bed
+        // had one open row, so the partial unique index was never consulted
+        // about the new row's dates, and the answer was 201.
+        $bed = $this->bed();
+        $holder = $this->resident('holder@example.test');
+        $intruder = $this->resident('intruder@example.test');
+
+        Residency::factory()->create([
+            'user_id' => $holder->getKey(),
+            'bed_id' => $bed->getKey(),
+            'contract_number' => 'DOG-RUNNING',
+            'moved_in_at' => CarbonImmutable::now()->subMonths(8)->toDateString(),
+            'moved_out_at' => CarbonImmutable::now()->addMonths(9)->toDateString(),
+            'moved_out_ground' => 'End of the accommodation contract',
+        ]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->postJson('/api/v1/residencies', [
+            'user_id' => $intruder->getKey(),
+            'bed_id' => $bed->getKey(),
+            'contract_number' => 'DOG-BACKDATED',
+            'moved_in_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
+            'ground' => 'Accommodation order',
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('conflict.contract_number', 'DOG-RUNNING')
+            ->assertJsonPath('conflict.user_id', $holder->id);
+
+        $this->assertSame(
+            1,
+            Residency::query()->where('bed_id', $bed->getKey())->currentOn(CarbonImmutable::now())->count(),
+        );
+    }
+
+    public function test_a_bed_whose_termination_is_dated_in_the_future_takes_nobody_today(): void
+    {
+        // Acceptance, reproduction 2: record the eviction with a date three
+        // months out, which closed the row and freed the bed on the spot, then
+        // move somebody else in. Two current residents on one bed, by two
+        // ordinary requests.
+        $bed = $this->bed();
+        $leaving = $this->resident('leaving@example.test');
+        $arriving = $this->resident('arriving@example.test');
+
+        Sanctum::actingAs($this->warden);
+
+        $residency = $this->postJson('/api/v1/residencies', $this->payload($leaving, $bed, 'DOG-LEAVING'))
+            ->assertCreated()
+            ->json('data');
+
+        $departure = CarbonImmutable::now()->addMonths(3);
+
+        $this->postJson("/api/v1/residencies/{$residency['id']}/termination", [
+            'ground' => 'End of the accommodation contract',
+            'moved_out_at' => $departure->toDateString(),
+        ])
+            ->assertOk()
+            // Notice given, not yet served: the record still says so.
+            ->assertJsonPath('data.is_current', true)
+            ->assertJsonPath('data.status', ResidencyStatus::Active->value);
+
+        // The bed is not free while somebody is sleeping in it.
+        $this->assertSame(BedStatus::Occupied, $bed->fresh()?->status);
+
+        $this->postJson('/api/v1/residencies', $this->payload($arriving, $bed, 'DOG-ARRIVING'))
+            ->assertStatus(409)
+            ->assertJsonPath('conflict.contract_number', 'DOG-LEAVING');
+
+        $this->assertSame(
+            1,
+            Residency::query()->where('bed_id', $bed->getKey())->currentOn(CarbonImmutable::now())->count(),
+        );
+    }
+
+    public function test_a_resident_evicted_for_a_future_date_holds_no_second_bed_meanwhile(): void
+    {
+        // §3.4.4 broken by the same mechanism, read from the other side: one
+        // person on two beds at once.
+        $beds = $this->room->beds()->orderBy('label')->get();
+        $resident = $this->resident('twice@example.test');
+
+        Sanctum::actingAs($this->warden);
+
+        $residency = $this->postJson('/api/v1/residencies', $this->payload($resident, $beds[0], 'DOG-FIRST'))
+            ->assertCreated()
+            ->json('data');
+
+        $this->postJson("/api/v1/residencies/{$residency['id']}/termination", [
+            'ground' => 'Room transfer',
+            'moved_out_at' => CarbonImmutable::now()->addMonth()->toDateString(),
+        ])->assertOk();
+
+        $this->postJson('/api/v1/residencies', $this->payload($resident, $beds[1], 'DOG-SECOND'))
+            ->assertStatus(409)
+            ->assertJsonPath('conflict.bed_id', $beds[0]->id);
+    }
+
+    public function test_a_room_transfer_on_the_day_of_the_move_is_admitted(): void
+    {
+        // The boundary the `[)` bounds are chosen for, through the API: the
+        // termination takes effect today and the new residency starts today.
+        // A stricter constraint would make a resident spend a night nowhere.
+        $beds = $this->room->beds()->orderBy('label')->get();
+        $resident = $this->resident('transfer@example.test');
+
+        Sanctum::actingAs($this->warden);
+
+        $residency = $this->postJson('/api/v1/residencies', [
+            'user_id' => $resident->getKey(),
+            'bed_id' => $beds[0]->getKey(),
+            'contract_number' => 'DOG-OLD',
+            'moved_in_at' => CarbonImmutable::now()->subMonths(2)->toDateString(),
+        ])->assertCreated()->json('data');
+
+        $this->postJson("/api/v1/residencies/{$residency['id']}/termination", [
+            'ground' => 'Room transfer',
+            'moved_out_at' => CarbonImmutable::now()->toDateString(),
+        ])->assertOk();
+
+        $this->postJson('/api/v1/residencies', $this->payload($resident, $beds[1], 'DOG-NEW'))
+            ->assertCreated();
+
+        $this->assertSame(BedStatus::Free, $beds[0]->fresh()?->status);
+        $this->assertSame(BedStatus::Occupied, $beds[1]->fresh()?->status);
+    }
+
+    public function test_the_manager_of_the_building_places_residents_like_the_warden(): void
+    {
+        // Revision 2 of the role model: the manager carries the whole of the
+        // warden's operative work, and moving people in is part of it.
+        $manager = $this->userWith(RoleCode::Manager, $this->first, 'manager@example.test');
+
+        Sanctum::actingAs($manager);
+
+        $this->postJson('/api/v1/residencies', $this->payload(
+            $this->resident('placed-by-manager@example.test'),
+            $this->bed(),
+            'DOG-MGR',
+        ))->assertCreated();
     }
 
     public function test_two_residents_cannot_hold_the_same_bed_over_overlapping_periods(): void

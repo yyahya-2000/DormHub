@@ -153,13 +153,74 @@ final class ResidentCardTest extends TestCase
         $this->assertSame([], $card['open_obligations']);
     }
 
-    public function test_the_duty_officer_of_the_building_reads_the_card_and_the_security_officer_does_not(): void
+    public function test_a_resident_evicted_for_a_future_date_still_has_a_current_bed_on_the_card(): void
     {
-        Sanctum::actingAs($this->userWith(RoleCode::DutyOfficer, $this->first, 'duty@example.test'));
-        $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertOk();
+        // The card used to read «record open» where FR-05 says «resident
+        // today». A person leaving on the 31st of December lost their bed and
+        // their obligations from the moment the notice was written, while the
+        // same response marked the same residency `is_current: true` three
+        // fields further down.
+        $leaving = $this->resident($this->first, 'leaving@example.test');
+        $residency = $this->accommodate($leaving, $this->first, '402', '1');
 
-        Sanctum::actingAs($this->userWith(RoleCode::SecurityOfficer, $this->first, 'security@example.test'));
-        $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertStatus(403);
+        $warden = $this->userWith(RoleCode::Warden, $this->first, 'warden-1@example.test');
+        $departure = CarbonImmutable::now()->addMonths(3);
+
+        Sanctum::actingAs($warden);
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
+            'ground' => 'End of the accommodation contract',
+            'moved_out_at' => $departure->toDateString(),
+        ])->assertOk();
+
+        Sanctum::actingAs($leaving);
+        $card = $this->getJson("/api/v1/residents/{$leaving->id}")->assertOk()->json('data');
+
+        $this->assertSame('402', $card['current_bed']['room_number']);
+        $this->assertCount(1, $card['open_obligations']);
+        $this->assertTrue($card['residency_history'][0]['is_current']);
+
+        // On the stated date the card agrees with the register: no bed, no
+        // obligation, and the history still there.
+        $this->travelTo($departure);
+        $card = $this->getJson("/api/v1/residents/{$leaving->id}")->assertOk()->json('data');
+        $this->travelBack();
+
+        $this->assertNull($card['current_bed']);
+        $this->assertSame([], $card['open_obligations']);
+        $this->assertCount(1, $card['residency_history']);
+    }
+
+    public function test_the_card_is_visible_to_the_manager_of_that_building(): void
+    {
+        // Revision 2 of the role model puts the register work with the manager
+        // and leaves it with the warden. The card is part of that work, and
+        // the manager reaches it in his own building and nowhere else.
+        $residentOfSecond = $this->resident($this->second, 'resident-2@example.test');
+        $this->accommodate($residentOfSecond, $this->second, '101', '1');
+
+        Sanctum::actingAs($this->userWith(RoleCode::Manager, $this->first, 'manager-1@example.test'));
+
+        $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertOk();
+        $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
+    }
+
+    public function test_neither_the_duty_officer_nor_the_security_officer_reads_the_card(): void
+    {
+        // FR-06 names the warden of that building and the administrator, and
+        // the contract for this route says the same. The duty officer decides
+        // guest requests; that work needs the room register and the roll of
+        // the building, neither of which carries citizenship or a telephone
+        // number. The security officer's work is the entrance.
+        foreach ([RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $index => $role) {
+            Sanctum::actingAs($this->userWith($role, $this->first, sprintf('staff-%d@example.test', $index)));
+
+            $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertStatus(403);
+        }
+
+        // The roll of the building stays open to the duty officer: the
+        // narrowing is of the card, not of their work.
+        Sanctum::actingAs($this->userWith(RoleCode::DutyOfficer, $this->first, 'duty-roll@example.test'));
+        $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertOk();
     }
 
     public function test_reading_a_card_is_written_to_the_audit_log(): void

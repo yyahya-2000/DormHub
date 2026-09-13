@@ -162,6 +162,133 @@ final class EvictionTest extends TestCase
         $this->travelBack();
     }
 
+    public function test_a_termination_dated_in_the_future_leaves_the_record_active_and_the_bed_occupied(): void
+    {
+        // The second criterion of FR-05 says the bed becomes free after
+        // eviction, and the word that decides when is «eviction», not «the
+        // paperwork». The register used to close the record and free the bed
+        // the moment the notice was written, so a client filtering on `active`
+        // lost a living resident and the bed read free with somebody in it.
+        $bed = $this->bed();
+        $residency = $this->accommodate($this->resident('noticed@example.test'), $bed);
+
+        $departure = CarbonImmutable::now()->addMonths(2);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
+            'ground' => 'End of the accommodation contract',
+            'moved_out_at' => $departure->toDateString(),
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', ResidencyStatus::Active->value)
+            ->assertJsonPath('data.is_current', true)
+            ->assertJsonPath('data.is_open', false)
+            ->assertJsonPath('data.moved_out_at', $departure->toDateString());
+
+        $this->assertSame(BedStatus::Occupied, $bed->fresh()?->status);
+        $this->assertSame(ResidencyStatus::Active, $residency->fresh()?->status);
+    }
+
+    public function test_the_nightly_settlement_ends_the_record_and_frees_the_bed_on_the_stated_date(): void
+    {
+        // Somebody has to move the two projections on the morning the notice
+        // comes due, when no request is being served.
+        $bed = $this->bed();
+        $residency = $this->accommodate($this->resident('due@example.test'), $bed);
+
+        $departure = CarbonImmutable::now()->addMonths(2);
+
+        Sanctum::actingAs($this->warden);
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
+            'ground' => 'Graduation',
+            'moved_out_at' => $departure->toDateString(),
+        ])->assertOk();
+
+        // The night before: nothing due, nothing changed.
+        $this->travelTo($departure->subDay());
+        $this->artisan('housing:settle-residencies')->assertSuccessful();
+
+        $this->assertSame(ResidencyStatus::Active, $residency->fresh()?->status);
+        $this->assertSame(BedStatus::Occupied, $bed->fresh()?->status);
+
+        // The stated day itself.
+        $this->travelTo($departure);
+        $this->artisan('housing:settle-residencies')->assertSuccessful();
+
+        $this->assertSame(ResidencyStatus::Ended, $residency->fresh()?->status);
+        $this->assertSame(BedStatus::Free, $bed->fresh()?->status);
+
+        // And the place takes the next occupant.
+        Sanctum::actingAs($this->warden);
+        $this->postJson('/api/v1/residencies', [
+            'user_id' => $this->resident('next-in@example.test')->getKey(),
+            'bed_id' => $bed->getKey(),
+            'contract_number' => 'DOG-NEXT',
+            'moved_in_at' => $departure->toDateString(),
+        ])->assertCreated();
+
+        // Running it a second time is a no-op, which is what lets it be run
+        // every night without thought.
+        $this->artisan('housing:settle-residencies')->assertSuccessful();
+        $this->assertSame(BedStatus::Occupied, $bed->fresh()?->status);
+
+        $this->travelBack();
+    }
+
+    public function test_a_departure_date_cannot_be_moved_over_a_period_the_place_is_already_promised_for(): void
+    {
+        // A resident asks to stay another month and the month is already
+        // promised. The answer is the conflicting record, not a 500 out of the
+        // database.
+        $bed = $this->bed();
+        $leaving = $this->resident('extending@example.test');
+        $residency = $this->accommodate($leaving, $bed);
+
+        $departure = CarbonImmutable::now()->addDays(10);
+
+        Sanctum::actingAs($this->warden);
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
+            'ground' => 'End of the accommodation contract',
+            'moved_out_at' => $departure->toDateString(),
+        ])->assertOk();
+
+        // The place is booked from the day after the departure.
+        $successor = Residency::query()->create([
+            'user_id' => $this->resident('booked@example.test')->getKey(),
+            'bed_id' => $bed->getKey(),
+            'contract_number' => 'DOG-BOOKED',
+            'moved_in_at' => $departure->toDateString(),
+            'moved_in_ground' => 'Accommodation order',
+        ]);
+
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
+            'ground' => 'Extension at the resident request',
+            'moved_out_at' => $departure->addMonth()->toDateString(),
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('conflict.id', $successor->id)
+            ->assertJsonPath('conflict.contract_number', 'DOG-BOOKED');
+
+        // Nothing moved.
+        $this->assertSame($departure->toDateString(), $residency->fresh()?->moved_out_at?->toDateString());
+    }
+
+    public function test_a_blocked_bed_is_not_freed_by_an_eviction(): void
+    {
+        $bed = $this->bed();
+        $residency = $this->accommodate($this->resident('blocked-bed@example.test'), $bed);
+        $bed->update(['status' => BedStatus::Blocked]);
+
+        Sanctum::actingAs($this->warden);
+        $this->postJson("/api/v1/residencies/{$residency->id}/termination", ['ground' => 'Own request'])
+            ->assertOk();
+
+        // Eviction frees a bed that was occupied and says nothing about one
+        // withdrawn from use.
+        $this->assertSame(BedStatus::Blocked, $bed->fresh()?->status);
+    }
+
     public function test_an_evicted_resident_still_reads_their_own_card(): void
     {
         $resident = $this->resident('evicted@example.test');
