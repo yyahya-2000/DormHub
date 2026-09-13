@@ -27,7 +27,13 @@ use App\Services\ResidentDirectory;
  * So the question is asked over the object: which buildings is this card
  * attached to, and does the viewer hold a role in one of them. The set comes
  * from `ResidentDirectory`, which reads it from the residency register and the
- * role grants rather than from anything the request carries.
+ * resident grant rather than from anything the request carries.
+ *
+ * **Not from a staff grant** — see the docblock of `ResidentDirectory`. Until
+ * the acceptance of 14.09.2026 every grant counted, and a warden could
+ * manufacture the attachment he was then judged against by appointing the
+ * person he wanted to read. The set this method walks is now the buildings the
+ * person *lives* in, and nobody can write into it from the staff route.
  */
 final readonly class UserPolicy
 {
