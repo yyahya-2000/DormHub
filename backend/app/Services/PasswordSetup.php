@@ -26,6 +26,11 @@ use Illuminate\Support\Str;
  * Every token the account still holds is revoked with the change. A password
  * set is the moment the account changes hands — from nobody to the resident —
  * and a session issued before it has no claim to survive it.
+ *
+ * It is also the moment the address stops being a claim: a code went to it and
+ * somebody who reads it has just spent the code. `email_confirmed_at` records
+ * that, which is the whole of what FR-42 can honestly mean by a confirmed
+ * contact in this MVP — see the migration that adds the column.
  */
 final readonly class PasswordSetup
 {
@@ -50,6 +55,16 @@ final readonly class PasswordSetup
                     'password_hash' => $password,
                     'password_change_required' => false,
                     'remember_token' => Str::random(60),
+                    /*
+                     * The address is confirmed here and nowhere else. A code
+                     * was sent to it, and somebody reading that address has
+                     * just spent the code — which is the strongest statement
+                     * this system can make about an address, and the one
+                     * FR-42's criterion was narrowed to on 14.09.2026. Stamped
+                     * only if it is not already stamped: the fact is the first
+                     * proof, not the latest sign-in.
+                     */
+                    'email_confirmed_at' => $resident->email_confirmed_at ?? now(),
                 ])->save();
 
                 $resident->tokens()->delete();
@@ -58,6 +73,7 @@ final readonly class PasswordSetup
                     action: AuditAction::PasswordSet,
                     actor: $resident,
                     subject: $resident,
+                    payload: ['email_confirmed' => true],
                     ipAddress: $ipAddress,
                 );
             },

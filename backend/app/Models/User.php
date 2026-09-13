@@ -79,6 +79,9 @@ class User extends Authenticatable
         return [
             'password_hash' => 'hashed',
             'password_change_required' => 'boolean',
+            // FR-42: the address was proved by a one-time code being spent on
+            // it. Null for every account still waiting for its first password.
+            'email_confirmed_at' => 'datetime',
             'status' => UserStatus::class,
             'study_status' => StudyStatus::class,
         ];
