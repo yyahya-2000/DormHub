@@ -18,12 +18,28 @@ return [
 
     'auth' => [
 
-        // Failed attempts tolerated before the login is blocked.
+        // Failed attempts tolerated before the login is blocked. Counted per
+        // account, so that the block belongs to the account and does not fall
+        // away when the attacker changes address.
         'max_attempts' => (int) env('AUTH_MAX_ATTEMPTS', 5),
 
+        // Failed attempts tolerated from one network address, counted across
+        // every login tried from it. Deliberately higher than the per-account
+        // limit: a computer room or a university NAT is one address for many
+        // people, and a few mistyped passwords must not close it. Its purpose
+        // is the other attack — a dictionary of logins, which fills no account
+        // counter at all.
+        'max_attempts_per_address' => (int) env('AUTH_MAX_ATTEMPTS_PER_ADDRESS', 20),
+
         // Length of the block, in minutes, counted from the attempt that
-        // reached the limit.
+        // reached the limit. The same span serves both counters.
         'lockout_minutes' => (int) env('AUTH_LOCKOUT_MINUTES', 15),
+
+        // Requests per minute the sign-in route admits from one address,
+        // regardless of whether they carry a correct password. This is the
+        // cheap defence in front of the counters above, and its refusal is a
+        // different event: see App\Enums\ThrottleReason.
+        'login_requests_per_minute' => (int) env('AUTH_LOGIN_REQUESTS_PER_MINUTE', 10),
 
         // Lifetime of an issued API token, in minutes. NULL means the token
         // does not expire on its own and is revoked by signing out.

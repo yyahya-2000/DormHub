@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Contracts\IdentityProvider;
 use App\Enums\AuditAction;
 use App\Enums\AuditResult;
+use App\Enums\ThrottleReason;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\LoginLockedException;
 use App\Identity\Credentials;
@@ -49,17 +50,23 @@ final readonly class AuthenticationService
     {
         $login = $credentials->login;
 
-        if ($this->throttle->isLocked($login, $ipAddress)) {
+        $lockedBy = $this->throttle->lockedBy($login, $ipAddress);
+
+        if ($lockedBy !== null) {
             $remaining = $this->throttle->secondsUntilUnlocked($login, $ipAddress);
 
             $this->audit->record(
                 action: AuditAction::LoginBlocked,
-                payload: ['login' => $login, 'seconds_remaining' => $remaining],
+                payload: [
+                    'login' => $login,
+                    'reason' => $lockedBy->value,
+                    'seconds_remaining' => $remaining,
+                ],
                 result: AuditResult::Denied,
                 ipAddress: $ipAddress,
             );
 
-            throw new LoginLockedException($remaining);
+            throw new LoginLockedException($remaining, $lockedBy);
         }
 
         $user = $this->identityProvider->authenticate($credentials);
@@ -68,7 +75,7 @@ final readonly class AuthenticationService
             throw $this->refuse($login, $user, $ipAddress);
         }
 
-        $this->throttle->clear($login, $ipAddress);
+        $this->throttle->clear($login);
 
         return DB::transaction(function () use ($user, $ipAddress): IssuedToken {
             $expiresAt = $this->tokenTtlMinutes !== null
@@ -114,10 +121,11 @@ final readonly class AuthenticationService
 
     /**
      * One failed attempt: count it, log it, and log the block separately when
-     * this attempt is the one that reached the limit. The two records are
+     * this attempt is the one that reached a limit. The two records are
      * distinct events, because the administrator reading the log needs to see
      * the moment an account stopped accepting sign-ins, not only that several
-     * attempts failed.
+     * attempts failed. The record names which limit was reached: the account's
+     * own, or the ceiling the address had been filling across many logins.
      */
     private function refuse(string $login, ?User $user, ?string $ipAddress): InvalidCredentialsException
     {
@@ -132,12 +140,17 @@ final readonly class AuthenticationService
         );
 
         if ($attemptsLeft === 0) {
+            $reason = $this->throttle->lockedBy($login, $ipAddress) ?? ThrottleReason::LoginLocked;
+
             $this->audit->record(
                 action: AuditAction::LoginLocked,
                 actor: $user,
                 payload: [
                     'login' => $login,
-                    'failed_attempts' => $this->throttle->maxAttempts(),
+                    'reason' => $reason->value,
+                    'failed_attempts' => $reason === ThrottleReason::AddressLocked
+                        ? $this->throttle->maxAttemptsPerAddress()
+                        : $this->throttle->maxAttempts(),
                     'lockout_seconds' => $this->throttle->lockoutSeconds(),
                 ],
                 result: AuditResult::Denied,
