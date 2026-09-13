@@ -95,4 +95,52 @@ enum AuditAction: string
     // on it had to stop.
     case ConsentGranted = 'consent.granted';
     case ConsentWithdrawn = 'consent.withdrawn';
+
+    // FR-16, FR-17. The request, and every decision taken on it. §3.9.6 puts
+    // «every decision on a guest request» in the minimum event set without
+    // qualification, so the refusal is recorded as fully as the approval and
+    // the automatic rejection of an undecided request is recorded too — that
+    // one has no human actor at all, which is exactly why it needs a row.
+    case GuestRequestSubmitted = 'guest_request.submitted';
+    case GuestRequestApproved = 'guest_request.approved';
+    case GuestRequestRejected = 'guest_request.rejected';
+    case GuestRequestCancelled = 'guest_request.cancelled';
+    case GuestRequestExpired = 'guest_request.expired';
+    case GuestRequestDecisionRefused = 'guest_request.decision_refused';
+
+    // FR-18. A lookup at the post reads a guest's name and document; art. 19
+    // part 2 cl. 8 of Federal Law No. 152-FZ asks the operator to keep a
+    // registration and accounting of the actions performed with personal data,
+    // and a lookup is one of them even though it changes nothing.
+    case GuestVerifiedAtCheckpoint = 'checkpoint.guest_verified';
+
+    // FR-19. The two facts the paper journal of clause 2.1.2 exists to hold.
+    case GuestEntryRecorded = 'checkpoint.entry_recorded';
+    case GuestExitRecorded = 'checkpoint.exit_recorded';
+
+    // §3.9.6 names the refusal of entry explicitly, beside the entry itself.
+    // A guest turned away at the desk leaves no visit row, so without this the
+    // evening would have no record of them at all — which is the one thing the
+    // register may not do.
+    case GuestEntryRefused = 'checkpoint.entry_refused';
+
+    // FR-19, the exception written down as an event. An entry outside the
+    // permitted interval, admitted on the responsible officer's decision with
+    // a stated reason (§2.4.2, second scenario).
+    case GuestAdmittedOnDecision = 'checkpoint.admitted_on_decision';
+
+    // FR-20. One event per overdue visit, raised by the quarter-hourly sweep
+    // and never twice for the same visit.
+    case GuestVisitOverdue = 'guest_visit.overdue';
+
+    // FR-21. The register is read, exported, and corrected — and a correction
+    // is a new row here rather than an edit there, because the visit itself is
+    // immutable (NFR-14).
+    case VisitRegisterViewed = 'visit_register.viewed';
+    case VisitRegisterExported = 'visit_register.exported';
+    case GuestVisitCorrected = 'guest_visit.corrected';
+
+    // NFR-06. The document number is stored encrypted and shown masked; asking
+    // for it in full is a separate act and is recorded as one.
+    case GuestDocumentNumberViewed = 'guest_request.document_viewed';
 }

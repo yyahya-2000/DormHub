@@ -55,4 +55,55 @@ enum Permission: string
 
     /** Creating an account for an incoming resident (FR-42). */
     case IssueResidentAccount = 'resident_account.issue';
+
+    /** The queue of guest requests of the dormitory, read (FR-16, FR-17). */
+    case ViewGuestRequests = 'guest_requests.view';
+
+    /**
+     * Approving and refusing a guest request (FR-17).
+     *
+     * **The narrowest capability of the guest module, and the one line the
+     * role model is asked about most often.** The agreement of 13.09.2026 is
+     * that the duty officer decides and the warden does not, so this
+     * capability is on exactly one role — not on the warden, not on the
+     * manager, and not on the administrator either. The administrator holds
+     * the register of dormitories and appoints the staff of every building;
+     * the decision on a visitor is shift work at a particular post on a
+     * particular evening, and an administrator who could take it would be a
+     * duty officer of every building without ever being appointed one.
+     *
+     * The consequence is deliberate and worth stating plainly: on a dormitory
+     * with no duty officer appointed, nobody can approve a guest request. That
+     * is the correct failure. The remedy is an appointment, which is FR-41 and
+     * is itself recorded.
+     */
+    case DecideGuestRequests = 'guest_requests.decide';
+
+    /**
+     * Working the security post: looking a guest up, recording the entry and
+     * the exit (FR-18, FR-19).
+     */
+    case OperateCheckpoint = 'checkpoint.operate';
+
+    /**
+     * The visitor register of the dormitory, read and exported (FR-21).
+     *
+     * §3.9.6 names the circle — «the administrator and the warden of the
+     * building concerned» — and the manager is outside it. The register is the
+     * electronic replacement of the journal clause 2.1.2 makes the security
+     * service keep, and widening its readership is a decision for the
+     * operator's responsible officer rather than a convenience.
+     */
+    case ViewVisitRegister = 'visit_register.view';
+
+    /**
+     * Reading a guest's document number in full (NFR-06, §3.4.2).
+     *
+     * The column is stored encrypted and shown masked everywhere, so this is
+     * not «may you see the register» but «may you unmask one number in it».
+     * The security post does not hold it: at the desk the document itself is
+     * in the officer's hand and the last four characters are what a comparison
+     * needs. Reading in full is an event of the audit log in its own right.
+     */
+    case ViewGuestDocument = 'guest_document.view';
 }

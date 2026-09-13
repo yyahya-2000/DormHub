@@ -85,8 +85,24 @@ enum RoleCode: string
      */
     public function permissions(): array
     {
+        /*
+         * The three arms below held one list between them until the guest
+         * module arrived. It is split now because the guest module is the
+         * first place where the administrator, the warden and the manager
+         * differ from one another, and the difference is not decorative:
+         * §3.9.6 gives the visitor register to «the administrator and the
+         * warden of the building concerned» and not to the manager, and the
+         * agreement of 13.09.2026 gives the decision on a request to the duty
+         * officer and to nobody else. Sharing one arm and adding a condition
+         * afterwards would have hidden both rules inside a method that is
+         * supposed to state them.
+         *
+         * The register work — rooms, places, move-in, move-out, cards,
+         * accounts — is still identical for all three, and the manager still
+         * relieves the warden rather than replacing him.
+         */
         return match ($this) {
-            self::Administrator, self::Warden, self::Manager => [
+            self::Administrator => [
                 Permission::ViewBuilding,
                 Permission::ViewRooms,
                 Permission::ManageRooms,
@@ -94,6 +110,36 @@ enum RoleCode: string
                 Permission::ViewPeople,
                 Permission::ViewResidentCard,
                 Permission::IssueResidentAccount,
+                Permission::ViewGuestRequests,
+                Permission::ViewVisitRegister,
+                Permission::ViewGuestDocument,
+            ],
+            self::Warden => [
+                Permission::ViewBuilding,
+                Permission::ViewRooms,
+                Permission::ManageRooms,
+                Permission::ManageResidencies,
+                Permission::ViewPeople,
+                Permission::ViewResidentCard,
+                Permission::IssueResidentAccount,
+                Permission::ViewGuestRequests,
+                Permission::ViewVisitRegister,
+                Permission::ViewGuestDocument,
+            ],
+            /*
+             * The manager reads the guest queue, because a request names a
+             * room and the rooms are his work. He does not decide on one, does
+             * not export the register and does not unmask a document number.
+             */
+            self::Manager => [
+                Permission::ViewBuilding,
+                Permission::ViewRooms,
+                Permission::ManageRooms,
+                Permission::ManageResidencies,
+                Permission::ViewPeople,
+                Permission::ViewResidentCard,
+                Permission::IssueResidentAccount,
+                Permission::ViewGuestRequests,
             ],
             /*
              * The duty officer approves guest requests, and for that they need
@@ -111,9 +157,19 @@ enum RoleCode: string
                 Permission::ViewBuilding,
                 Permission::ViewRooms,
                 Permission::ViewPeople,
+                Permission::ViewGuestRequests,
+                Permission::DecideGuestRequests,
             ],
+            /*
+             * The security officer works the post and nothing else. FR-18 and
+             * FR-19 are the whole of it: find the guest, compare the document,
+             * record the entry, record the exit. He does not read the queue of
+             * undecided requests — there is nothing for him to do with one —
+             * and he does not export the register, which is §3.9.6's line.
+             */
             self::SecurityOfficer => [
                 Permission::ViewBuilding,
+                Permission::OperateCheckpoint,
             ],
             self::Resident => [],
         };
