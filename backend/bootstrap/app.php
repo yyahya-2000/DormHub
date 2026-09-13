@@ -4,6 +4,7 @@ use App\Exceptions\BedAlreadyOccupiedException;
 use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
 use App\Exceptions\InvalidCredentialsException;
+use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
@@ -70,6 +71,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 app(AccessDenialRecorder::class)->record($request, $exception);
             }
         });
+
+        /*
+         * FR-42: the one-time credential did not resolve — no such address, or
+         * a token that is spent, expired or invented. 422 rather than 401: the
+         * caller is not claiming a session, they are presenting a code, and the
+         * code is the thing the request got wrong. The message says nothing
+         * about which of the four causes it was (see the exception).
+         */
+        $exceptions->render(fn (InvalidPasswordTokenException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ], 422));
 
         /*
          * FR-01, second criterion: the deletion is blocked and the reason is
