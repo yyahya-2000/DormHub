@@ -29,6 +29,15 @@ final class ConsentRecordResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            /*
+             * Whose consent this is. Exactly one of the two is set, and the
+             * CHECK `consent_records_one_subject` is what makes «exactly» true:
+             * an account holder's consent names the account, a guest's names
+             * the request they arrived on, because a guest has no account to
+             * name (§2.7.1).
+             */
+            'user_id' => $this->user_id,
+            'guest_request_id' => $this->guest_request_id,
             'document' => $this->document_code->value,
             'title' => $this->document_code->title(),
             'revision' => $this->document_revision,

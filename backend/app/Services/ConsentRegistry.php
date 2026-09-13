@@ -9,6 +9,7 @@ use App\Enums\AuditAction;
 use App\Enums\ConsentDocument;
 use App\Exceptions\ConsentRequiredException;
 use App\Models\ConsentRecord;
+use App\Models\GuestRequest;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -253,6 +254,131 @@ final readonly class ConsentRegistry
 
             return $record;
         });
+    }
+
+    /**
+     * FR-35, first criterion, guest half: the consent taken at the post,
+     * recorded against the request rather than against an account.
+     *
+     * **Why this is a second method and not a nullable argument on the first.**
+     * `record()` above takes a `User` because every criterion it serves is
+     * about a person with a personal account: the pending list, the sign-in
+     * answer, the withdrawal button. A guest has none of those. They have a
+     * request, they are standing at a desk, and the officer in front of them
+     * is the one operating the screen — so the row names the request as its
+     * subject and the operator as the person who witnessed the act. Folding
+     * the two into one method with two nullable arguments would have produced
+     * exactly one call site for each branch and a signature that says neither.
+     *
+     * The revision is checked against the repository for the same reason as
+     * above: a record naming a wording nobody can produce proves nothing, and
+     * art. 9 part 3 of Federal Law No. 152-FZ puts the proving on the operator.
+     *
+     * A second act on a request that already carries a consent in force at the
+     * same revision answers with the standing record — the guest is not asked
+     * twice because the officer clicked twice, and the partial unique index
+     * `consent_records_guest_active_uniq` would refuse the duplicate anyway.
+     */
+    public function recordForGuest(
+        GuestRequest $request,
+        string $revision,
+        ?User $operator = null,
+        ?string $ipAddress = null,
+    ): ConsentRecord {
+        $document = ConsentDocument::GuestPersonalData;
+
+        if (! $this->texts->has($document, $revision)) {
+            throw new RuntimeException(sprintf(
+                'Revision «%s» of «%s» is not in the repository, so a record naming it would prove nothing.',
+                $revision,
+                $document->value,
+            ));
+        }
+
+        $standing = $this->inForceForGuest($request);
+
+        if ($standing !== null && $standing->document_revision === $revision) {
+            return $standing;
+        }
+
+        return DB::transaction(function () use ($request, $document, $revision, $operator, $ipAddress, $standing): ConsentRecord {
+            $standing?->forceFill(['revoked_at' => now()])->save();
+
+            $record = ConsentRecord::query()->create([
+                'user_id' => null,
+                'guest_request_id' => $request->getKey(),
+                'document_code' => $document->value,
+                'document_revision' => $revision,
+                'accepted_at' => now(),
+                'ip_address' => $ipAddress,
+            ]);
+
+            /*
+             * The actor is the officer, not the guest: the guest has no
+             * account and the log's `who` column is an account. Whose consent
+             * it was is in the payload and in the row itself, so the two
+             * questions the log has to answer — «who operated the screen» and
+             * «whose data is this» — keep separate answers.
+             */
+            $this->audit->record(
+                action: AuditAction::ConsentGranted,
+                actor: $operator,
+                subject: $record,
+                payload: [
+                    'document' => $document->value,
+                    'revision' => $revision,
+                    'guest_request_id' => $request->getKey(),
+                    'taken_at' => 'security post',
+                    'superseded_record_id' => $standing?->getKey(),
+                ],
+                ipAddress: $ipAddress,
+            );
+
+            return $record;
+        });
+    }
+
+    /**
+     * The guest's consent that stands on this request, if any.
+     */
+    public function inForceForGuest(GuestRequest $request): ?ConsentRecord
+    {
+        return ConsentRecord::query()
+            ->forGuestRequest($request)
+            ->forDocument(ConsentDocument::GuestPersonalData)
+            ->inForce()
+            ->latest('accepted_at')
+            ->first();
+    }
+
+    public function hasInForceForGuest(GuestRequest $request): bool
+    {
+        return $this->inForceForGuest($request) !== null;
+    }
+
+    /**
+     * The gate at the security post, and the first line of
+     * `CheckpointService::checkIn()`.
+     *
+     * It is the guest-shaped twin of `requireGranted()` below and refuses on
+     * exactly the same ground: for a guest, consent under art. 6 part 1 cl. 1
+     * of Federal Law No. 152-FZ is the **only** basis there is (§2.7.1), so an
+     * entry written without one would be processing with no ground at all. The
+     * refusal names the document and the revision, which is what the post
+     * needs in order to put the right text on the screen and take it properly.
+     *
+     * @throws ConsentRequiredException
+     */
+    public function requireGrantedForGuest(GuestRequest $request): void
+    {
+        if ($this->hasInForceForGuest($request)) {
+            return;
+        }
+
+        throw new ConsentRequiredException(
+            document: ConsentDocument::GuestPersonalData,
+            revision: $this->texts->currentRevision(ConsentDocument::GuestPersonalData),
+        );
     }
 
     /**

@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 #[Fillable([
     'user_id',
+    'guest_request_id',
     'document_code',
     'document_revision',
     'accepted_at',
@@ -39,6 +40,8 @@ class ConsentRecord extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
+            'guest_request_id' => 'integer',
             'document_code' => ConsentDocument::class,
             'accepted_at' => 'datetime',
             'revoked_at' => 'datetime',
@@ -51,6 +54,44 @@ class ConsentRecord extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The other subject a consent can have (§2.7.1, FR-35).
+     *
+     * A guest has no account, and the consent taken from them at the post
+     * therefore hangs on the request they arrived on. The CHECK constraint
+     * `consent_records_one_subject` makes this relation and `user()` mutually
+     * exclusive: exactly one of them is ever set.
+     *
+     * @return BelongsTo<GuestRequest, $this>
+     */
+    public function guestRequest(): BelongsTo
+    {
+        return $this->belongsTo(GuestRequest::class, 'guest_request_id');
+    }
+
+    /**
+     * Whether this is a guest's consent rather than an account holder's. The
+     * difference is not bookkeeping: for a guest, consent is the sole ground
+     * for the processing (§2.7.1), so its absence stops the entry being
+     * recorded at all.
+     */
+    public function belongsToAGuest(): bool
+    {
+        return $this->guest_request_id !== null;
+    }
+
+    /**
+     * @param  Builder<ConsentRecord>  $query
+     * @return Builder<ConsentRecord>
+     */
+    public function scopeForGuestRequest(Builder $query, GuestRequest|int $request): Builder
+    {
+        return $query->where(
+            'guest_request_id',
+            $request instanceof GuestRequest ? $request->getKey() : $request,
+        );
     }
 
     /**
