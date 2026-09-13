@@ -97,6 +97,15 @@ final readonly class ResidentDirectory
         $resident->load([
             'roleGrants.role',
             'residencies.bed.room.building',
+            /*
+             * FR-20, third criterion: «the fact is visible on the inviting
+             * resident's card». The overdue visits of this person's guests
+             * belong to the card for the same reason the open obligations do —
+             * clause 3.4 of the Model Rules makes the inviting resident
+             * answerable for the guest's timely departure, so an overdue visit
+             * is an unsettled matter of theirs and not only of the post's.
+             */
+            'overdueGuestVisits.request',
         ]);
 
         $this->audit->record(

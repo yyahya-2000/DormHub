@@ -34,6 +34,7 @@ class DatabaseSeeder extends Seeder
             DemoSeeder::class,
             ConsentSeeder::class,
             NotificationSeeder::class,
+            GuestSeeder::class,
         ]);
     }
 }
