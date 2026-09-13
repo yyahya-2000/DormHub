@@ -67,6 +67,22 @@ enum AuditAction: string
     case ResidentAccountIssued = 'resident.account_issued';
     case PasswordSet = 'auth.password_set';
 
+    // FR-42, the credential rather than the account.
+    //
+    // Two events and not one, because they commit at different moments and
+    // can fail independently. The account is written inside a transaction; the
+    // credential is handed to the queue after that transaction has committed,
+    // since a worker that reached the row before the commit would find no such
+    // user. The first version of this recorded «delivered to: email» inside
+    // the transaction, which meant a queue that refused the job left the log
+    // asserting a delivery that never happened — the one claim an audit log
+    // may not make. This entry is written after the dispatch returns, and
+    // never before.
+    //
+    // `reissue` tells the first code from a replacement, so the log shows how
+    // many codes an account was sent and by whom.
+    case ResidentCredentialIssued = 'resident.credential_issued';
+
     // FR-35. Consent to the processing of personal data, given and withdrawn.
     //
     // These two are in the log for a reason none of the others share. Art. 19

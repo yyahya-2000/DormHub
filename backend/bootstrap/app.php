@@ -4,12 +4,14 @@ use App\Exceptions\BedAlreadyOccupiedException;
 use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
 use App\Exceptions\ConsentRequiredException;
+use App\Exceptions\CredentialAlreadySpentException;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
 use App\Exceptions\MandatoryNotificationCategoryException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
+use App\Exceptions\ResidentOfAnotherDormitoryException;
 use App\Http\Resources\ResidencyResource;
 use App\Services\AccessDenialRecorder;
 use Illuminate\Foundation\Application;
@@ -84,6 +86,26 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidPasswordTokenException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ], 422));
+
+        /*
+         * FR-42, the re-issue of a one-time code. Two refusals, and the
+         * difference between them is the difference between «not here» and
+         * «not now».
+         *
+         * 404: the account is not a resident of the dormitory in the path, so
+         * inside the scope the caller works in there is nothing to act on.
+         *
+         * 409: the account already carries a password of its own, and sending
+         * it a fresh code would be a password reset in the hands of a member of
+         * staff. See the exception.
+         */
+        $exceptions->render(fn (ResidentOfAnotherDormitoryException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ], 404));
+
+        $exceptions->render(fn (CredentialAlreadySpentException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ], 409));
 
         /*
          * FR-01, second criterion: the deletion is blocked and the reason is
