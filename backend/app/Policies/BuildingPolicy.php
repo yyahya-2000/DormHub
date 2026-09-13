@@ -163,4 +163,60 @@ final class BuildingPolicy
     {
         return $user->mayGrantInBuilding($role, $building);
     }
+
+    /**
+     * FR-16, FR-17: the queue of guest requests of this dormitory.
+     *
+     * Reading the queue and deciding on it are two capabilities and two
+     * methods. The manager reads it because a request names a room and the
+     * rooms are his; only the duty officer decides.
+     */
+    public function viewGuestRequests(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::ViewGuestRequests, $building);
+    }
+
+    /**
+     * FR-17: approving and refusing.
+     *
+     * The check §4.7.2 singles out runs through this one line: a resident
+     * holds no such capability at all, and a duty officer of another building
+     * holds it in that building and not in this one. Both are 403, and both
+     * are recorded as `access.denied` by the handler.
+     */
+    public function decideGuestRequests(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::DecideGuestRequests, $building);
+    }
+
+    /**
+     * FR-18, FR-19: working the security post of this dormitory.
+     */
+    public function operateCheckpoint(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::OperateCheckpoint, $building);
+    }
+
+    /**
+     * FR-21 and §3.9.6: the visitor register, read and exported. «Available to
+     * the administrator and to the warden of the building concerned».
+     */
+    public function viewVisitRegister(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::ViewVisitRegister, $building);
+    }
+
+    /**
+     * FR-16: submitting a guest request for this dormitory.
+     *
+     * Decided against the residency register and not against a capability, for
+     * the same reason `view()` above is: living somewhere is not a role. The
+     * word that matters is «today» — FR-05 closes the building-bound functions
+     * on the stated departure date, and inviting a guest into a dormitory one
+     * no longer lives in is exactly such a function.
+     */
+    public function submitGuestRequest(User $user, Building $building): bool
+    {
+        return $user->residesIn($building);
+    }
 }

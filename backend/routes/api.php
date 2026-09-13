@@ -6,7 +6,9 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BedController;
 use App\Http\Controllers\Api\V1\BuildingController;
+use App\Http\Controllers\Api\V1\CheckpointController;
 use App\Http\Controllers\Api\V1\ConsentController;
+use App\Http\Controllers\Api\V1\GuestRequestController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationSettingController;
 use App\Http\Controllers\Api\V1\ResidencyController;
@@ -14,6 +16,7 @@ use App\Http\Controllers\Api\V1\ResidentAccountController;
 use App\Http\Controllers\Api\V1\ResidentCardController;
 use App\Http\Controllers\Api\V1\RoomController;
 use App\Http\Controllers\Api\V1\StaffController;
+use App\Http\Controllers\Api\V1\VisitRegisterController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -34,11 +37,15 @@ use Illuminate\Support\Facades\Route;
 | the personal account itself: notifications and their switches (FR-34), and
 | consent to the processing of personal data (FR-35).
 |
-| The remaining routes of §3.3.6 — guest requests, the checkpoint,
-| announcements, lost-and-found and maintenance — belong to later increments
-| and are deliberately absent rather than stubbed: the OpenAPI document beside
-| this file is the input for client generation, and a generated client should
-| not carry methods that answer 404.
+| The fifth is the guest module of increment 1: the request (FR-16), the duty
+| officer's decision (FR-17), the security post (FR-18, FR-19), the control of
+| the departure deadline (FR-20, which has no route — it is a scheduled sweep)
+| and the visitor register (FR-21).
+|
+| The remaining routes of §3.3.6 — announcements, lost-and-found and
+| maintenance — belong to later increments and are deliberately absent rather
+| than stubbed: the OpenAPI document beside this file is the input for client
+| generation, and a generated client should not carry methods that answer 404.
 |
 */
 
@@ -201,4 +208,97 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('consents/{document}/withdrawal', [ConsentController::class, 'withdraw'])
         ->name('consents.withdraw');
+
+    /*
+     |--------------------------------------------------------------------------
+     | The guest module (increment 1): FR-16 … FR-21, FR-23
+     |--------------------------------------------------------------------------
+     |
+     | The scenario of §3.5.1 read as a list of routes. A resident submits; the
+     | duty officer of that dormitory decides; the security post finds the
+     | guest, takes their consent, records the entry and later the exit; the
+     | warden exports the register.
+     |
+     | Three arrangements below are decisions rather than defaults.
+     |
+     | The decision is a **sub-resource of the request** and not a PATCH of its
+     | status. `POST …/approve` and `POST …/reject` name the act; a client that
+     | could PUT a status could put any status, and the transition table of
+     | §3.5.4 would be enforcing what the client already assumed.
+     |
+     | The checkpoint routes are **not** sub-resources of a building. The post
+     | works with a code and a person, not with a dormitory identifier it would
+     | have to be trusted to supply correctly; the building travels in the body
+     | of `verify` — where it is what the officer's capability is checked
+     | against — and is read off the request itself everywhere after that.
+     |
+     | `verify` is a **POST that changes nothing**. A surname and a visit code
+     | are personal data of somebody standing at the desk, and a GET would put
+     | them in every access log between the terminal and the application.
+     */
+
+    /*
+     * FR-16, FR-17. The queue, and the resident's own list, behind one route:
+     * with `building_id` it is the dormitory's queue and needs the capability
+     * that reads it, without it the caller's own requests and needs nothing.
+     */
+    Route::get('guest-requests', [GuestRequestController::class, 'index'])
+        ->name('guest-requests.index');
+
+    Route::post('guest-requests', [GuestRequestController::class, 'store'])
+        ->name('guest-requests.store');
+
+    Route::get('guest-requests/{guestRequest}', [GuestRequestController::class, 'show'])
+        ->name('guest-requests.show');
+
+    /*
+     * FR-17. The duty officer of this building, and nobody else — not the
+     * warden, not the manager, not the administrator (see `Permission`).
+     */
+    Route::post('guest-requests/{guestRequest}/approve', [GuestRequestController::class, 'approve'])
+        ->name('guest-requests.approve');
+
+    Route::post('guest-requests/{guestRequest}/reject', [GuestRequestController::class, 'reject'])
+        ->name('guest-requests.reject');
+
+    /*
+     * The author withdraws their own. Staff who want a visit stopped refuse
+     * it, which leaves a reason and an author on the row.
+     */
+    Route::post('guest-requests/{guestRequest}/cancellation', [GuestRequestController::class, 'cancel'])
+        ->name('guest-requests.cancel');
+
+    /*
+     * NFR-06. The document number in full, to somebody who may, one request at
+     * a time, and recorded as an event of its own.
+     */
+    Route::get('guest-requests/{guestRequest}/document-number', [GuestRequestController::class, 'documentNumber'])
+        ->name('guest-requests.document-number');
+
+    /*
+     * FR-18, FR-19 and the guest's consent between them (FR-35, §2.7.1). The
+     * order the desk uses them in is the order they are listed in, and the
+     * application refuses any other: the entry asks for the consent first.
+     */
+    Route::post('checkpoint/verify', [CheckpointController::class, 'verify'])
+        ->name('checkpoint.verify');
+
+    Route::post('checkpoint/guest-consent', [CheckpointController::class, 'consent'])
+        ->name('checkpoint.consent');
+
+    Route::post('checkpoint/check-in', [CheckpointController::class, 'checkIn'])
+        ->name('checkpoint.check-in');
+
+    Route::post('checkpoint/check-out', [CheckpointController::class, 'checkOut'])
+        ->name('checkpoint.check-out');
+
+    /*
+     * FR-21. The register of one dormitory over an arbitrary period, and the
+     * correcting entry — which writes to the log and never to the visit.
+     */
+    Route::get('buildings/{building}/visit-register', [VisitRegisterController::class, 'index'])
+        ->name('buildings.visit-register');
+
+    Route::post('guest-visits/{guestVisit}/correction', [VisitRegisterController::class, 'correct'])
+        ->name('guest-visits.correction');
 });

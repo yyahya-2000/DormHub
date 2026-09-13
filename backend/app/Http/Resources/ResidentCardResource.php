@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Models\GuestVisit;
 use App\Models\Residency;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -72,6 +73,35 @@ final class ResidentCardResource extends JsonResource
             'current_bed' => $current === null ? null : $this->placement($current),
             'residency_history' => ResidencyResource::collection(
                 $this->whenLoaded('residencies', fn () => $this->residencies)
+            ),
+            /*
+             * FR-20, third criterion. A key of its own rather than an entry in
+             * `open_obligations`: an obligation is something the register says
+             * this person still owes, and an overdue visit is something that
+             * happened — a breach of clause 2.2 recorded against them. Folding
+             * the two together would have made «owes nothing» and «has never
+             * been late» the same statement.
+             *
+             * The condition is `overdue_notified_at` and not the status, so a
+             * visit that has since been closed as `closed_late` still shows:
+             * the card records that the deadline was passed, not whether the
+             * guest is at this moment still inside.
+             */
+            'overdue_guest_visits' => $this->whenLoaded(
+                'overdueGuestVisits',
+                fn () => $this->overdueGuestVisits
+                    ->map(fn (GuestVisit $visit): array => [
+                        'guest_visit_id' => $visit->getKey(),
+                        'guest_request_id' => $visit->guest_request_id,
+                        'guest_full_name' => $visit->request?->guest_full_name,
+                        'due_at' => $visit->due_at?->toIso8601String(),
+                        'checked_in_at' => $visit->checked_in_at?->toIso8601String(),
+                        'checked_out_at' => $visit->checked_out_at?->toIso8601String(),
+                        'reported_overdue_at' => $visit->overdue_notified_at?->toIso8601String(),
+                        'status' => $visit->status->value,
+                    ])
+                    ->values(),
+                [],
             ),
             'open_obligations' => $inForce
                 ->map(fn (Residency $residency): array => [
