@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Enums\Permission;
 use App\Enums\RoleCode;
 use App\Models\Building;
 use App\Models\User;
@@ -12,10 +13,18 @@ use App\Models\User;
  * FR-07, the object half of it.
  *
  * Every method here receives the building and decides on it. None of them asks
- * «is this user a warden»; each asks «is this user the warden **of this
+ * «is this user a warden»; each asks «may this user do this **in this
  * building**», which is the distinction §3.3.3 draws and the reason §3.4.1
  * puts `building_id` on the grant. A method that answered the first question
  * would pass its own tests and still let the warden of block 1 read block 2.
+ *
+ * The capability rather than the role is what the methods name, and that is
+ * the second half of the same warning. Revision 2 of the role model added the
+ * building manager beneath the warden with the whole of the warden's operative
+ * work and none of his appointments; phrased as a list of roles, that addition
+ * would have meant editing every method below and hoping none was missed.
+ * `RoleCode::permissions()` carries it instead, and this class did not have to
+ * learn the new role's name.
  */
 final class BuildingPolicy
 {
@@ -26,14 +35,8 @@ final class BuildingPolicy
      */
     public function view(User $user, Building $building): bool
     {
-        if ($user->isAdministrator()) {
+        if ($user->hasPermissionInBuilding(Permission::ViewBuilding, $building)) {
             return true;
-        }
-
-        foreach ([RoleCode::Warden, RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $role) {
-            if ($user->hasRoleInBuilding($role, $building)) {
-                return true;
-            }
         }
 
         /*
@@ -43,6 +46,10 @@ final class BuildingPolicy
          * not later, and the card is one of them. A resident the register has
          * never heard of keeps the access their grant gives them: absence of a
          * residency row is not eviction, it is silence.
+         *
+         * This is the one access in the system that a capability cannot state,
+         * because it is not a property of the role at all — it is a question
+         * put to the residency register, and it is asked here.
          */
         if ($user->hasRoleInBuilding(RoleCode::Resident, $building)) {
             return ! $user->hasMovedOutOf($building);
@@ -67,6 +74,11 @@ final class BuildingPolicy
      * administrator and to nobody else. Three methods rather than one, because
      * the gate is asked by name and a single `manage` would blur which of the
      * three a route actually needs.
+     *
+     * These four stay stated as the role and not as a capability on purpose.
+     * The register of dormitories is not work done **inside** a building, so
+     * there is no building to scope the question to; the administrator is the
+     * answer, and the manager beneath the warden must never become one.
      */
     public function create(User $user): bool
     {
@@ -89,26 +101,25 @@ final class BuildingPolicy
     }
 
     /**
-     * FR-02: the register of rooms and places of this building. The warden
-     * keeps it, the duty officer reads it to know which room a guest is bound
-     * for, and the administrator sees every building. A resident does not: the
-     * occupancy of the whole dormitory is not theirs to read.
+     * FR-02: the register of rooms and places of this building. The warden and
+     * the manager keep it, the duty officer reads it to know which room a
+     * guest is bound for, and the administrator sees every building. A
+     * resident does not: the occupancy of the whole dormitory is not theirs to
+     * read.
      */
     public function viewRooms(User $user, Building $building): bool
     {
-        return $user->isAdministrator()
-            || $user->hasRoleInBuilding(RoleCode::Warden, $building)
-            || $user->hasRoleInBuilding(RoleCode::DutyOfficer, $building);
+        return $user->hasPermissionInBuilding(Permission::ViewRooms, $building);
     }
 
     /**
-     * Keeping the register — rooms and places — is the warden's own work
-     * (FR-02), inside the warden's own building.
+     * Keeping the register — rooms and places — is the operative work of the
+     * building (FR-02), inside that building. Revision 2 of the role model
+     * puts it with the manager and leaves it with the warden as well.
      */
     public function manageRooms(User $user, Building $building): bool
     {
-        return $user->isAdministrator()
-            || $user->hasRoleInBuilding(RoleCode::Warden, $building);
+        return $user->hasPermissionInBuilding(Permission::ManageRooms, $building);
     }
 
     /**
@@ -117,19 +128,39 @@ final class BuildingPolicy
      */
     public function manageResidencies(User $user, Building $building): bool
     {
-        return $this->manageRooms($user, $building);
+        return $user->hasPermissionInBuilding(Permission::ManageResidencies, $building);
     }
 
     /**
      * The people attached to the building. This is personal data, so the
-     * circle is narrower than for the card: the administrator, and the warden
-     * or duty officer of this building. A resident of the building sees the
-     * card and not the roll.
+     * circle is narrower than for the card: the administrator, and the warden,
+     * manager or duty officer of this building. A resident of the building
+     * sees the card and not the roll.
      */
     public function viewPeople(User $user, Building $building): bool
     {
-        return $user->isAdministrator()
-            || $user->hasRoleInBuilding(RoleCode::Warden, $building)
-            || $user->hasRoleInBuilding(RoleCode::DutyOfficer, $building);
+        return $user->hasPermissionInBuilding(Permission::ViewPeople, $building);
+    }
+
+    /**
+     * FR-42: creating an account for an incoming resident of this building.
+     */
+    public function issueResidentAccount(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::IssueResidentAccount, $building);
+    }
+
+    /**
+     * FR-41: granting or revoking one staff role in this building.
+     *
+     * The role being handed out is part of the question, not a detail checked
+     * afterwards. «May this account appoint here» and «may it appoint *this*»
+     * have different answers for the same warden — manager yes, warden no —
+     * and splitting them into two checks is how one of the two gets forgotten.
+     * `User::mayGrantInBuilding()` answers both at once.
+     */
+    public function appointStaff(User $user, Building $building, RoleCode $role): bool
+    {
+        return $user->mayGrantInBuilding($role, $building);
     }
 }
