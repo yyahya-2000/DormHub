@@ -198,8 +198,12 @@ paths:
         '429':
           description: >-
             The address sent more requests to this route than it admits per
-            minute. The same limiter as the sign-in route, for the same reason:
-            a one-time code is a secret, and guessing at it is an attempt.
+            minute. A limiter of its own, counted apart from the sign-in route:
+            both are keyed by network address and a dormitory is one address, so
+            a shared counter meant a handful of guesses at a code locked
+            everybody behind that address out of signing in. `reason` is
+            `rate_limited`, and the message names this route rather than the
+            sign-in one.
           headers:
             Retry-After:
               schema: { type: integer, minimum: 1 }
@@ -856,6 +860,13 @@ paths:
         be nominating the scope the caller's own authorisation is checked
         against.
 
+        `user_id` is judged too, and not only checked for existence: an account
+        the register of **another** dormitory answers for cannot be given a role
+        here, and the refusal is 422 on that field. An account no dormitory
+        answers for — a security officer hired from outside — is the ordinary
+        case and is appointed as before, and so is a resident of this same
+        dormitory taking a shift in it.
+
         Appointing twice is one appointment: the answer is 200 rather than 201,
         no second grant is written, and the log keeps one entry per grant.
       operationId: appointStaff
@@ -944,6 +955,11 @@ paths:
         scoped to the building in the path, so no staff role can be issued this
         way — there is no parameter through which one could be asked for.
 
+        The address is typed here and is not confirmed before the first message
+        goes to it. What confirms it is the code being spent: the account is
+        marked as having a proved address at the moment `POST /auth/password`
+        succeeds, and until then nobody has shown that anyone reads it.
+
         The credential does not travel in this response. The account is created
         with a secret that is generated, hashed and forgotten in the same step;
         what reaches the resident is a one-time code, sent to the address on the
@@ -985,6 +1001,71 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/residents/{resident}/credential:
+    post:
+      tags: [Residents]
+      summary: Send a resident a fresh one-time code
+      description: |
+        FR-42, the way back out of a lost code.
+
+        A code lives an hour. Before this route existed, an account whose code
+        expired unspent was finished: the password could not be set, no second
+        code could be issued, the account could not be removed, and `users.email`
+        is unique — so the address stayed held by a row nobody could use. One
+        road in, an hour wide, and no way back.
+
+        The same circle of callers as issuing the account, and for the same
+        reason: sending a second code is the same act as sending the first. The
+        code goes to the address on the account, never into this response, and
+        the person who asks for it never sees it.
+
+        Issuing a second code is also the revocation of the first. The token
+        store keeps one code per account, so the replacement is what stops the
+        one that went astray, and two live codes for one account never exist.
+
+        Two refusals are particular to this route:
+
+        - **404** — the account is not a resident of the dormitory in the path.
+          The caller may work here; there is no such resident here.
+        - **409** — the account already carries a password of its own. Sending it
+          a fresh code would be a password reset performed by a member of staff,
+          which is a far larger power than FR-42 grants: it would let a manager
+          take over any resident of his building. Recovery for an account in use
+          is a separate requirement and is not in this iteration.
+
+        The event reaches the audit log as `resident.credential_issued` with
+        `reissue: true`, so an administrator can see how many codes an account
+        was sent and by whom. The record is written after the delivery has been
+        accepted and never before.
+      operationId: reissueResidentCredential
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+        - $ref: '#/components/parameters/ResidentId'
+      responses:
+        '202':
+          description: >-
+            The delivery was accepted and the code is on its way to the address
+            on the account. Accepted rather than done: whether a mail server
+            takes it is not this application's fact to assert. No body.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such dormitory, or no such resident in this dormitory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: >-
+            The account already has a password of its own. A one-time code is
+            issued only to an account that has never set one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /notifications:
     get:
@@ -1503,6 +1584,7 @@ components:
         - staff.appointed
         - staff.revoked
         - resident.account_issued
+        - resident.credential_issued
         - auth.password_set
         - consent.granted
         - consent.withdrawn
