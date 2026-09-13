@@ -38,14 +38,82 @@ final class RoleModelTest extends TestCase
         $this->second = Building::factory()->create(['name' => 'Block 2']);
     }
 
-    public function test_five_roles_exist_administrator_duty_officer_warden_security_officer_and_resident(): void
+    public function test_six_roles_exist_administrator_warden_manager_duty_officer_security_officer_and_resident(): void
     {
-        $this->assertSame(5, Role::query()->count());
+        $this->assertSame(6, Role::query()->count());
 
         $this->assertEqualsCanonicalizing(
-            ['admin', 'duty_officer', 'warden', 'security', 'student'],
+            ['admin', 'warden', 'manager', 'duty_officer', 'security', 'student'],
             Role::query()->pluck('code')->map(fn (RoleCode $code): string => $code->value)->all(),
         );
+    }
+
+    /**
+     * FR-07's fourth criterion applied to the role revision 2 adds. The manager
+     * stands beneath the warden inside one dormitory, so a manager's grant that
+     * named no building would hand that account every dormitory there is —
+     * which is the shape the CHECK constraint exists to refuse.
+     */
+    public function test_the_database_refuses_a_manager_granted_over_the_system(): void
+    {
+        $this->requirePostgres();
+
+        $user = User::factory()->create();
+
+        $this->assertRefused(
+            'a building manager, granted over the system',
+            $user,
+            RoleCode::Manager,
+            null,
+        );
+
+        $this->insertGrant($user, RoleCode::Manager, $this->first->getKey());
+
+        $this->assertTrue($user->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->first));
+        $this->assertFalse($user->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->second));
+    }
+
+    /**
+     * Revision 2 in one sentence: the manager does the warden's operative work
+     * and none of his appointments. The first half is asserted here on the
+     * routes that exist; the second half has a file of its own
+     * (`StaffAppointmentTest`).
+     */
+    public function test_the_manager_of_a_building_reaches_what_the_warden_of_that_building_reaches(): void
+    {
+        $manager = $this->userWith(RoleCode::Manager, $this->first);
+
+        Sanctum::actingAs($manager);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}")->assertOk();
+        $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertOk();
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms")->assertOk();
+
+        // And nothing of the dormitory next door.
+        $this->getJson("/api/v1/buildings/{$this->second->id}")->assertStatus(403);
+        $this->getJson("/api/v1/buildings/{$this->second->id}/users")->assertStatus(403);
+        $this->getJson("/api/v1/buildings/{$this->second->id}/rooms")->assertStatus(403);
+    }
+
+    /**
+     * The register of dormitories stays the administrator's. A manager must not
+     * inherit it along with the warden's operative rights: FR-01's first
+     * criterion names one role and revision 2 did not widen it.
+     */
+    public function test_the_manager_does_not_reach_the_register_of_dormitories(): void
+    {
+        $manager = $this->userWith(RoleCode::Manager, $this->first);
+
+        Sanctum::actingAs($manager);
+
+        $this->postJson('/api/v1/buildings', [
+            'name' => 'Block C',
+            'address' => '2 Beryozovaya Street, Zarechny',
+            'floors_count' => 4,
+        ])->assertStatus(403);
+
+        $this->patchJson("/api/v1/buildings/{$this->first->id}", ['floors_count' => 3])->assertStatus(403);
+        $this->deleteJson("/api/v1/buildings/{$this->first->id}")->assertStatus(403);
     }
 
     public function test_calling_a_protected_endpoint_with_a_token_of_the_wrong_role_is_refused_with_403(): void
@@ -100,6 +168,8 @@ final class RoleModelTest extends TestCase
             [RoleCode::Administrator, null, 'second', 200, 200],
             [RoleCode::Warden, 'first', 'first', 200, 200],
             [RoleCode::Warden, 'first', 'second', 403, 403],
+            [RoleCode::Manager, 'first', 'first', 200, 200],
+            [RoleCode::Manager, 'first', 'second', 403, 403],
             [RoleCode::DutyOfficer, 'first', 'first', 200, 200],
             [RoleCode::DutyOfficer, 'first', 'second', 403, 403],
             [RoleCode::SecurityOfficer, 'first', 'first', 200, 403],
