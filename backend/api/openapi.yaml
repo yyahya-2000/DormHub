@@ -4,10 +4,10 @@ info:
   title: Dormitory support system — API v1
   version: 0.1.0
   summary: >-
-    Role model, authentication, audit log, the housing register, staff, and the
-    personal account
+    Role model, authentication, audit log, the housing register, staff, the
+    personal account, and the guest module
   description: |
-    The implemented part of the REST contract of §3.3.6, in four slices. The
+    The implemented part of the REST contract of §3.3.6, in five slices. The
     first is FR-07 (role model), FR-08 (authentication and sessions) and FR-33
     (audit log). The second is the housing register: FR-01 (dormitories), FR-02
     (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
@@ -17,13 +17,21 @@ info:
     decide which of them arrive) and FR-35 (consent to the processing of
     personal data).
 
-    The remaining routes of §3.3.6 — guest requests, the checkpoint,
-    announcements, lost-and-found and maintenance — belong to later increments and
-    are deliberately absent from this document rather than described as
-    unimplemented: the file is the input for client generation, and a generated
-    client should not carry methods that answer 404.
+    The fifth is the guest module of increment 1, which is what the work is
+    built around: FR-16 (the request), FR-17 (the duty officer's decision),
+    FR-18 (verification at the security post), FR-19 (entry and exit), FR-21
+    (the visitor register) and FR-23 (the foreign-guest flag). FR-20, the
+    control of the departure deadline, is in this increment too and has no
+    route at all: it is a quarter-hourly sweep that reads each dormitory's own
+    control time.
 
-    Five properties of the contract are worth reading before the paths.
+    The remaining routes of §3.3.6 — announcements, lost-and-found and
+    maintenance — belong to later increments and are deliberately absent from
+    this document rather than described as unimplemented: the file is the input
+    for client generation, and a generated client should not carry methods that
+    answer 404.
+
+    Eight properties of the contract are worth reading before the paths.
 
     Authorisation is scoped by building, not only by role. A grant of a role names
     the dormitory it holds in, and every building-addressed route decides on the
@@ -61,6 +69,29 @@ info:
     names exactly one document and one text revision, and it is the only way a
     consent record comes into being.
 
+    A guest's consent is taken at the security post and not at submission. The
+    request is filed by the resident while the personal data belong to the
+    guest, so `POST /checkpoint/guest-consent` is a route of its own and
+    `POST /checkpoint/check-in` answers 409 until it has been called. The record
+    names the guest request as its subject and carries no account, because a
+    guest has none.
+
+    The visiting regime is a property of each dormitory and never a constant.
+    `visiting_from`, `visiting_to`, `curfew_at` and `guest_lead_time_hours` sit
+    on the BUILDING row, and they are what the submission validator, the card at
+    the post and the overdue sweep all read. A university whose rules close the
+    dormitory at 22:00 changes a column, which is what NFR-09 asks for. The
+    defaults reproduce clause 2.2 of the HSE rules of internal order — a guest
+    between 08:00 and 23:00 — and are this deployment's values rather than the
+    sector's.
+
+    The system records facts about people's movement and does not restrict it.
+    A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
+    a barrier: the ground for refusing a person entry to a dormitory is the
+    university's local act and the action of the security service. An officer
+    may admit a guest against the interval, with a stated reason, and both the
+    entry and the exception are recorded.
+
 servers:
   - url: http://localhost:8080/api/v1
     description: Local development — the port docker-compose publishes the web container on
@@ -92,6 +123,21 @@ tags:
     description: >-
       FR-35. Consent to the processing of personal data, on routes of its own,
       as art. 9 part 1 of Federal Law No. 152-FZ requires.
+  - name: Guest requests
+    description: >-
+      FR-16, FR-17 and FR-23. The resident invites; the duty officer of that
+      dormitory decides. Nobody else does — not the warden, not the manager,
+      not the administrator.
+  - name: Checkpoint
+    description: >-
+      FR-18 and FR-19. The security post: find the guest, take their consent,
+      record the entry, record the exit. Verification and entry are two
+      operations on purpose (§3.5.1).
+  - name: Visitor register
+    description: >-
+      FR-21. The journal clause 2.1.2 of the HSE rules of internal order makes
+      the security service keep by hand, with the pen removed. Append-only; a
+      correction is a correcting entry.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -1436,6 +1482,722 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /guest-requests:
+    get:
+      tags: [Guest requests]
+      summary: The duty officer's queue, or the caller's own requests
+      description: |
+        Two lists behind one route, and the scope decides which.
+
+        With `building_id`, this is the queue of that dormitory and the caller
+        needs the capability that reads it — the duty officer, the warden, the
+        manager or the administrator. Without it, this is «my own requests» and
+        needs nothing beyond a session: the filter is the identifier of the
+        token, and there is no parameter through which one resident could ask
+        about another's guests.
+      operationId: listGuestRequests
+      parameters:
+        - name: building_id
+          in: query
+          required: false
+          description: The dormitory whose queue is being read. Omit for the caller's own requests.
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/GuestRequestStatus'
+        - name: visit_date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The requests, newest visit first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Guest requests]
+      summary: Submit a guest request
+      description: |
+        FR-16. The resident of the dormitory named, and only a resident of it:
+        the right to invite a guest follows from living there and not from an
+        account being scoped there, so a member of staff with no residency is
+        refused and so is a resident whose departure date has passed (FR-05).
+
+        **Three rules, and all three read the BUILDING row.** The interval must
+        lie inside `visiting_from`–`visiting_to`; it must begin no sooner than
+        `guest_lead_time_hours` from now; the visit date must not be in the
+        past. A dormitory whose rules close at 22:00 changes a column and this
+        route changes with it, which is what NFR-09 asks for — the window is
+        never a constant in code.
+
+        `is_foreign_document` is **derived** from `guest_doc_type` and is not
+        accepted from the client (FR-23): a client able to set it could clear
+        it, and the warning would then be attached at the client's discretion.
+
+        The document number is stored encrypted (NFR-06). It never comes back
+        in a response; `guest_doc_number_masked` carries its last four
+        characters, and the number in full has a route of its own that records
+        the reading.
+      operationId: submitGuestRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestRequestInput'
+      responses:
+        '201':
+          description: >-
+            The request is filed in `pending_review` and is in the audit log as
+            `guest_request.submitted`. No access code exists yet: it is issued
+            only on approval.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /guest-requests/{guestRequest}:
+    get:
+      tags: [Guest requests]
+      summary: One guest request
+      description: >-
+        The resident who submitted it, and the staff of the dormitory whose
+        capability covers the queue.
+      operationId: showGuestRequest
+      parameters:
+        - $ref: '#/components/parameters/GuestRequestId'
+      responses:
+        '200':
+          description: The request, with its visit if one has been recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /guest-requests/{guestRequest}/approve:
+    post:
+      tags: [Guest requests]
+      summary: Approve a guest request
+      description: |
+        FR-17. **The duty officer of this dormitory**, and nobody else: not the
+        warden, not the manager, not the administrator. The capability sits on
+        one role (`Permission::DecideGuestRequests`), which is the agreement of
+        13.09.2026 stated once rather than repeated in four policies.
+
+        The consequence is deliberate: a dormitory with no duty officer
+        appointed cannot approve a guest request, and the remedy is an
+        appointment under FR-41.
+
+        On success the access code is drawn and stored, `decided_by` and
+        `decided_at` are written, the audit record is written in the same
+        transaction, and the applicant is notified after the commit
+        (`request_decision`, an optional category the resident may switch off).
+
+        **`responsible_officer_mark` is FR-23's second criterion.** It is
+        required — 422 — when the guest carries a foreign document *and* the
+        interval runs past midnight. Both halves matter: a foreign document on
+        a visit that ends the same evening creates no place of stay under art.
+        2 cl. 4 of Federal Law No. 109-FZ, and demanding the mark for it would
+        overstate the norm. The mark records that the officer responsible for
+        migration registration has been told; the system submits no arrival
+        notification of its own (FR-W2).
+      operationId: approveGuestRequest
+      parameters:
+        - $ref: '#/components/parameters/GuestRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestApprovalInput'
+      responses:
+        '200':
+          description: Approved, with the access code now on the request.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            The request is no longer pending — usually because a second officer
+            decided it first. The body names the state it is in and the state
+            that was asked for (§3.5.4).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          description: >-
+            The daily quota is spent, or FR-23's mark is missing. The two are
+            told apart by the fields the body carries.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/QuotaError'
+                  - $ref: '#/components/schemas/OfficerMarkRequiredError'
+                  - $ref: '#/components/schemas/ValidationError'
+
+  /guest-requests/{guestRequest}/reject:
+    post:
+      tags: [Guest requests]
+      summary: Refuse a guest request
+      description: |
+        FR-17, second criterion: «rejection without a reason is impossible». The
+        reason is required by this route and is a required argument of the
+        service behind it, so there is no path by which a refusal is recorded
+        without one.
+
+        The applicant is told the reason.
+      operationId: rejectGuestRequest
+      parameters:
+        - $ref: '#/components/parameters/GuestRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestRejectionInput'
+      responses:
+        '200':
+          description: Refused, with the reason on the request.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request is no longer pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /guest-requests/{guestRequest}/cancellation:
+    post:
+      tags: [Guest requests]
+      summary: Withdraw one's own guest request
+      description: >-
+        The author, and nobody else. A member of staff who wants a visit
+        stopped refuses it, which leaves a reason and an author on the row; a
+        cancellation by staff would close the request with a record saying the
+        resident changed their mind.
+      operationId: cancelGuestRequest
+      parameters:
+        - $ref: '#/components/parameters/GuestRequestId'
+      responses:
+        '200':
+          description: Withdrawn.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request has already run its course.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+
+  /guest-requests/{guestRequest}/document-number:
+    get:
+      tags: [Guest requests]
+      summary: The guest's document number in full
+      description: |
+        NFR-06 and §3.9.6. The column is stored encrypted and shown masked
+        everywhere else; this route is the only way to the number itself, and
+        every call writes `guest_request.document_viewed` to the audit log.
+
+        The circle is narrower than the request's own readers and does not
+        include the security post: at the desk the document is in the officer's
+        hand, and the last four characters are what a comparison needs. The
+        warden of that dormitory and the administrator may ask.
+
+        A route rather than a field on the request, deliberately: a field would
+        be sent on every list and every refresh, and the log would fill with
+        readings nobody performed.
+      operationId: showGuestDocumentNumber
+      parameters:
+        - $ref: '#/components/parameters/GuestRequestId'
+      responses:
+        '200':
+          description: The number, once, recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [guest_request_id, guest_doc_type, guest_doc_number]
+                    properties:
+                      guest_request_id: { type: integer, format: int64 }
+                      guest_doc_type:
+                        $ref: '#/components/schemas/GuestDocumentType'
+                      guest_doc_number: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /checkpoint/verify:
+    post:
+      tags: [Checkpoint]
+      summary: Find a guest at the security post
+      description: |
+        FR-18. **This route changes nothing.** §3.5.1 splits verification from
+        the entry deliberately: `verify` reads and renders the card for
+        comparison with the document in the officer's hand, `check-in` changes
+        state. The split lets the officer refuse entry without leaving a false
+        record of an entry that never happened.
+
+        **A POST all the same.** A surname and a visit code are personal data
+        of somebody standing at the desk; a GET would put them in the query
+        string, and a query string is written to every access log between the
+        terminal and the application, cached by the browser, and left in the
+        address bar of a screen that faces the lobby. `meta.read_only` says in
+        the body what this paragraph says here.
+
+        Search is by **code or surname**, never by document number: the column
+        is encrypted and cannot be indexed, the QR carries the code, and FR-18
+        asks for no more. A surname search is scoped to the current day — the
+        post is looking for somebody in front of it, not through the archive.
+
+        The card carries FR-18's five fields — guest, inviting resident, room,
+        departure deadline, status — and the verdict on admission beside them,
+        so the screen cannot offer a button the server would refuse.
+      operationId: verifyGuestAtCheckpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckpointSearchInput'
+      responses:
+        '200':
+          description: One card per match.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CheckpointCard'
+                  meta:
+                    type: object
+                    properties:
+                      matches: { type: integer }
+                      read_only:
+                        type: boolean
+                        description: Always true. The route records a lookup and changes nothing else.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: >-
+            Nothing in this dormitory answers to that code or surname. A
+            distinct answer from an empty list, because a terminal must not
+            show «no such code» and «none today» the same way.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /checkpoint/guest-consent:
+    post:
+      tags: [Checkpoint]
+      summary: Record the guest's consent, at the desk
+      description: |
+        FR-35, first criterion, guest half, and §2.7.1's whole argument.
+
+        The request was filed by the resident while the personal data belong to
+        the guest, so consent under art. 9 part 1 of Federal Law No. 152-FZ
+        cannot be given «on the guest's behalf» at submission. It is taken from
+        the guest, in person, at the post, **before** the entry is recorded —
+        and `POST /checkpoint/check-in` answers 409 until it is.
+
+        A route of its own, because art. 9 part 1 has consent «executed
+        separately from other documents»: there is no consent field on the
+        check-in body, exactly as there is none on the sign-in form.
+
+        The record names the guest request as its subject and carries no
+        account — a guest has none. `revision` is the text the guest was shown
+        and is checked against the repository.
+      operationId: recordGuestConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestConsentInput'
+      responses:
+        '201':
+          description: The consent is recorded, and the entry may now be written.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConsentRecord'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /checkpoint/check-in:
+    post:
+      tags: [Checkpoint]
+      summary: Record a guest's entry
+      description: |
+        FR-19. The entry is written, the request moves to `in_progress`, and
+        the departure deadline is **frozen** on the visit — the earlier of the
+        end of the approved interval and the building's control time. Freezing
+        it is what keeps the register's verdict on last week from changing when
+        somebody edits a column today.
+
+        **The system restricts nobody's movement.** FR-20 says so and §2.4.2
+        explains why: the ground for refusing a person entry to a dormitory is
+        the university's local act and the action of the security service, not
+        a program. What this route refuses is a *record* — it will not assert
+        that an entry was within the rules when the interval says it was not.
+
+        `override_reason` is §2.4.2's «admit on the responsible officer's
+        decision». It is required when the refusal is one that may be set aside
+        — an entry outside the permitted interval, or on the wrong day — and is
+        ignored otherwise. An override is recorded twice: on the visit, and as
+        `checkpoint.admitted_on_decision` in the audit log, so that «show me
+        every entry admitted against the interval» is one query.
+
+        A refusal writes `checkpoint.entry_refused` to the log. §3.9.6 names it
+        among the events the log must hold: a guest turned away leaves no visit
+        row, so without it the evening would hold no record of them at all.
+      operationId: checkInGuest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInInput'
+      responses:
+        '201':
+          description: The entry is recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestVisit'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: >-
+            No consent from the guest is on record. Take it at
+            `POST /checkpoint/guest-consent` and call again; the body names the
+            document and the revision to put on the screen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentRequiredError'
+        '422':
+          description: >-
+            The rules admit no entry as things stand. `reason_code` says which
+            refusal it is and `override_available` whether the officer's
+            decision may set it aside.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryNotPermittedError'
+
+  /checkpoint/check-out:
+    post:
+      tags: [Checkpoint]
+      summary: Record a guest's exit
+      description: |
+        FR-19, and FR-21's immutability behind it.
+
+        The time is the server's and is never taken from the body: an exit time
+        a client could name is an exit time a client could choose, and the
+        register stands as evidence of what happened rather than of what was
+        typed.
+
+        The visit closes as `closed` or `closed_late`, judged against the
+        deadline frozen at the entry. The exit is written **once**: the service
+        refuses a second one with 409, the database refuses it with a
+        write-once trigger, and a mistake is put right by a correcting entry
+        (`POST /guest-visits/{guestVisit}/correction`) and never by an
+        overwrite.
+      operationId: checkOutGuest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckOutInput'
+      responses:
+        '200':
+          description: The exit is recorded and the request is completed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GuestVisit'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The exit on this visit is already recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitAlreadyClosedError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/visit-register:
+    get:
+      tags: [Visitor register]
+      summary: The visitor register over a period
+      description: |
+        FR-21 and §3.9.6. The journal clause 2.1.2 of the HSE rules of internal
+        order makes the security service keep by hand — guest, time of arrival,
+        time of departure, premises, whom they are visiting, details of the
+        document — plus the operator who recorded each entry, which a paper
+        page carried by existing and an electronic one has to say in words.
+
+        Constraint C-04 makes this export the substitute for the access-control
+        integration this iteration does not build. **The format is a
+        presentational template and carries no claim to satisfy any particular
+        reporting obligation** (§3.9.6).
+
+        Available to the administrator and to the warden of the building
+        concerned, and to nobody else. The export is itself an audited action.
+
+        **The document number is exported masked**, which is a departure from
+        the paper journal and is deliberate: an export is a file that leaves
+        the system and is copied. The type and the last four characters
+        identify the entry against the original document, and the number in
+        full is available one request at a time on an audited route.
+
+        Corrections travel with the rows they correct: an export that showed
+        the entries and hid the corrections would present a record the register
+        itself does not stand behind.
+
+        The period is taken against the **entry**: a guest admitted at 23:50 on
+        the 30th and recorded leaving at 00:20 belongs to the 30th, which is
+        the day the officer would have written them down on.
+      operationId: exportVisitRegister
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+        - name: from
+          in: query
+          required: false
+          description: First day of the period, inclusive. Defaults to the first of the current month.
+          schema: { type: string, format: date }
+        - name: until
+          in: query
+          required: false
+          description: Last day of the period, inclusive. Defaults to today.
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          required: false
+          description: >-
+            `json` for the register as data, `csv` for the file. §3.9.6 also
+            asks for PDF; this iteration produces the two above.
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: One page of the register.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VisitRegisterEntry'
+                  meta:
+                    type: object
+                    properties:
+                      building_id: { type: integer, format: int64 }
+                      from: { type: string, format: date }
+                      until: { type: string, format: date }
+                      page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      columns:
+                        type: object
+                        additionalProperties: { type: string }
+                        description: The seven columns, in the order clause 2.1.2 lists them.
+            text/csv:
+              schema:
+                type: string
+                description: >-
+                  The same rows with a header line. Written through `fputcsv`,
+                  so a guest's name containing a comma does not break the file.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /guest-visits/{guestVisit}/correction:
+    post:
+      tags: [Visitor register]
+      summary: Record a correcting entry against a visit
+      description: |
+        FR-21, second criterion: «entries are immutable; a correction is made
+        as a correcting entry».
+
+        This route writes **nothing** to the visit. It writes a row to the
+        audit log naming it, and the register export carries the two side by
+        side — which is what a numbered paper journal gives and an editable row
+        does not.
+
+        The correction is free text and has to say something. There is no
+        structured «change this field to that value», and that is the point: a
+        correction that could be applied would be an edit with extra steps.
+
+        Recording the exit and correcting the record are different rights. The
+        post records the exit; the correction asks for the register capability,
+        so an officer who mistyped a time reports it and the correcting entry
+        carries the name of whoever wrote it.
+      operationId: correctGuestVisit
+      parameters:
+        - $ref: '#/components/parameters/GuestVisitId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correction]
+              properties:
+                correction:
+                  type: string
+                  minLength: 3
+                  maxLength: 2000
+      responses:
+        '201':
+          description: The correcting entry is recorded; the visit is unchanged.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      guest_visit_id: { type: integer, format: int64 }
+                      correction: { type: string }
+                      note: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
 components:
 
   securitySchemes:
@@ -1488,6 +2250,17 @@ components:
       description: The document whose consent is being withdrawn.
       schema:
         $ref: '#/components/schemas/ConsentDocument'
+    GuestRequestId:
+      name: guestRequest
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    GuestVisitId:
+      name: guestVisit
+      in: path
+      required: true
+      description: The recorded visit a correcting entry is written against.
+      schema: { type: integer, format: int64, minimum: 1 }
     StaffRole:
       name: role
       in: path
@@ -1588,6 +2361,22 @@ components:
         - auth.password_set
         - consent.granted
         - consent.withdrawn
+        - guest_request.submitted
+        - guest_request.approved
+        - guest_request.rejected
+        - guest_request.cancelled
+        - guest_request.expired
+        - guest_request.decision_refused
+        - guest_request.document_viewed
+        - checkpoint.guest_verified
+        - checkpoint.entry_recorded
+        - checkpoint.entry_refused
+        - checkpoint.admitted_on_decision
+        - checkpoint.exit_recorded
+        - guest_visit.overdue
+        - guest_visit.corrected
+        - visit_register.viewed
+        - visit_register.exported
 
     AuditResult:
       type: string
@@ -2287,6 +3076,17 @@ components:
       required: [id, document, title, revision, accepted_at, revoked_at, in_force]
       properties:
         id: { type: integer, format: int64 }
+        user_id:
+          type: [integer, 'null']
+          format: int64
+          description: >-
+            The account whose consent this is. Null for a guest's, which names
+            the request instead: exactly one of the two is ever set, and the
+            database refuses any other shape.
+        guest_request_id:
+          type: [integer, 'null']
+          format: int64
+          description: The guest request this consent was taken against, at the post.
         document:
           $ref: '#/components/schemas/ConsentDocument'
         title: { type: string }
@@ -2336,6 +3136,431 @@ components:
         revision:
           type: string
           description: The revision in force, so the client knows which text to put on the screen.
+
+    GuestRequestStatus:
+      type: string
+      description: |
+        The states of §3.5.4. `pending_review` is the only one that appears in
+        the duty officer's queue; `in_progress` and `overdue` mean a guest is
+        recorded inside the building; the last four are final.
+
+        `draft` is absent: no route writes one, because the form lives in the
+        browser until it is sent.
+      enum:
+        - pending_review
+        - approved
+        - in_progress
+        - overdue
+        - rejected
+        - cancelled
+        - expired
+        - completed
+
+    GuestVisitStatus:
+      type: string
+      description: >-
+        `closed_late` is a fact about the evening and not about anybody's
+        decision: the guest left, after the control time.
+      enum: [in_building, closed, overdue, closed_late]
+
+    GuestDocumentType:
+      type: string
+      description: >-
+        `foreign_passport` and `residence_permit` mark the guest as a foreign
+        national and raise FR-23's warning. Both, because a residence permit is
+        issued to a foreign national as well and the warning is about the
+        procedure rather than about the booklet.
+      enum:
+        - internal_passport
+        - foreign_passport
+        - residence_permit
+        - student_card
+        - driving_licence
+
+    GuestRequestInput:
+      type: object
+      required: [building_id, guest_full_name, guest_doc_type, guest_doc_number, visit_date, planned_from, planned_to]
+      properties:
+        building_id: { type: integer, format: int64, minimum: 1 }
+        guest_full_name: { type: string, minLength: 2, maxLength: 255 }
+        guest_doc_type:
+          $ref: '#/components/schemas/GuestDocumentType'
+        guest_doc_number:
+          type: string
+          minLength: 4
+          maxLength: 64
+          description: >-
+            Stored encrypted and never returned. Deliberately shapeless: §2.7.1's
+            minimisation means the type and the number and no scan of the page,
+            and the formats of five kinds of document across as many countries
+            are not something a dormitory's validator should claim to know.
+        visit_date: { type: string, format: date }
+        planned_from: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', example: '14:00' }
+        planned_to: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', example: '18:00' }
+        purpose: { type: string, maxLength: 255, nullable: true }
+
+    GuestApprovalInput:
+      type: object
+      properties:
+        comment: { type: string, maxLength: 1000, nullable: true }
+        responsible_officer_mark:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: >-
+            FR-23. Required when the guest carries a foreign document and the
+            interval runs past midnight; ignored otherwise.
+
+    GuestRejectionInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          description: FR-17, second criterion. A refusal without one is impossible.
+
+    GuestRequest:
+      type: object
+      required: [id, building_id, student_id, guest_full_name, status]
+      properties:
+        id: { type: integer, format: int64 }
+        building_id: { type: integer, format: int64 }
+        building_name: { type: string }
+        student_id: { type: integer, format: int64 }
+        student_name: { type: string }
+        guest_full_name: { type: string }
+        guest_doc_type:
+          $ref: '#/components/schemas/GuestDocumentType'
+        guest_doc_type_label: { type: string }
+        guest_doc_number_masked:
+          type: string
+          description: >-
+            The last four characters, everything before them hidden (NFR-06).
+            The number itself is on an audited route of its own.
+          example: '•••••••3456'
+        is_foreign_document:
+          type: boolean
+          description: Derived from the document type, never accepted from the client.
+        foreign_guest_warning:
+          type: string
+          nullable: true
+          description: >-
+            FR-23, first criterion. Attached by the server when the document is
+            a foreign one, null otherwise. The text is configuration, because
+            the procedure is the university's and §2.7.4 leaves open which of
+            two deadlines under art. 20 of Federal Law No. 109-FZ applies.
+        purpose: { type: string, nullable: true }
+        visit_date: { type: string, format: date }
+        planned_from: { type: string, example: '14:00' }
+        planned_to: { type: string, example: '23:00' }
+        spans_more_than_one_day:
+          type: boolean
+          description: >-
+            True when the interval runs past midnight, which is only possible
+            where the dormitory's own regime admits it. FR-23's second
+            criterion turns on this.
+        due_at:
+          type: string
+          format: date-time
+          description: >-
+            The departure deadline: the earlier of the end of the interval and
+            the building's control time.
+        status:
+          $ref: '#/components/schemas/GuestRequestStatus'
+        status_label: { type: string }
+        access_code:
+          type: string
+          nullable: true
+          description: >-
+            Null until approval. Issued only on the duty officer's decision, so
+            that before it there is nothing to present at the post (§3.5.1).
+            Eight characters from an alphabet with the confusable ones removed,
+            because it is read aloud and typed in at a desk.
+          example: 'K7QMR4TZ'
+        decided_by:
+          type: integer
+          format: int64
+          nullable: true
+          description: >-
+            Null on a request the scheduler closed. FR-17's fourth criterion
+            treats an undecided request as rejected, and nobody decided it — so
+            the row does not claim an officer did.
+        decided_at: { type: string, format: date-time, nullable: true }
+        decision_comment: { type: string, nullable: true }
+        responsible_officer_mark: { type: string, nullable: true }
+        responsible_officer_mark_at: { type: string, format: date-time, nullable: true }
+        visit:
+          allOf:
+            - $ref: '#/components/schemas/GuestVisit'
+          nullable: true
+        created_at: { type: string, format: date-time }
+
+    GuestVisit:
+      type: object
+      required: [id, guest_request_id, checked_in_at, status]
+      properties:
+        id: { type: integer, format: int64 }
+        guest_request_id: { type: integer, format: int64 }
+        checked_in_at: { type: string, format: date-time }
+        checked_in_by: { type: integer, format: int64 }
+        checked_out_at: { type: string, format: date-time, nullable: true }
+        checked_out_by: { type: integer, format: int64, nullable: true }
+        due_at:
+          type: string
+          format: date-time
+          description: >-
+            Frozen at the entry. Carried beside `checked_out_at` so that
+            `closed_late` is legible without recomputing the deadline from a
+            setting that may since have changed.
+        status:
+          $ref: '#/components/schemas/GuestVisitStatus'
+        status_label: { type: string }
+        overdue_notified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Written once, by the quarter-hourly sweep, and refused a second
+            time by the database. It is what keeps a repeat run from sending a
+            second notification.
+        admitted_on_decision: { type: boolean }
+        admission_note: { type: string, nullable: true }
+
+    CheckpointSearchInput:
+      type: object
+      required: [building_id]
+      properties:
+        building_id: { type: integer, format: int64, minimum: 1 }
+        code:
+          type: string
+          maxLength: 32
+          nullable: true
+          description: >-
+            The visit code, as printed or as carried by the QR. Case and
+            punctuation are normalised: a code read back over a telephone is
+            the same code.
+        surname:
+          type: string
+          minLength: 2
+          maxLength: 255
+          nullable: true
+          description: >-
+            The fallback when the guest has lost the code. Scoped to the
+            current day.
+
+    CheckpointCard:
+      type: object
+      description: >-
+        FR-18's five fields — guest, inviting resident, room, departure
+        deadline, status — with the verdict on admission beside them.
+      properties:
+        guest_request_id: { type: integer, format: int64 }
+        access_code: { type: string, nullable: true }
+        guest:
+          type: object
+          properties:
+            full_name: { type: string }
+            document_type:
+              $ref: '#/components/schemas/GuestDocumentType'
+            document_type_label: { type: string }
+            document_number_masked: { type: string }
+            is_foreign_document: { type: boolean }
+        inviting_resident:
+          type: object
+          properties:
+            id: { type: integer, format: int64, nullable: true }
+            full_name: { type: string, nullable: true }
+        room:
+          type: string
+          nullable: true
+          description: >-
+            Null when the housing register holds no bed for the host — an
+            account issued before a place was assigned. Shown as absent rather
+            than guessed at.
+        due_at: { type: string, format: date-time }
+        permitted_interval: { type: string, example: '14:00–23:00' }
+        status:
+          $ref: '#/components/schemas/GuestRequestStatus'
+        status_label: { type: string }
+        visit:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer, format: int64 }
+            checked_in_at: { type: string, format: date-time }
+            checked_out_at: { type: string, format: date-time, nullable: true }
+            status:
+              $ref: '#/components/schemas/GuestVisitStatus'
+        consent_on_record:
+          type: boolean
+          description: >-
+            Whether the guest has consented at this post. False means the entry
+            cannot yet be written (§2.7.1).
+        admission:
+          type: object
+          properties:
+            allowed: { type: boolean }
+            reason_code:
+              type: string
+              nullable: true
+              enum: [outside_permitted_interval, request_not_approved, guest_already_inside, wrong_visit_date]
+            reason: { type: string, nullable: true }
+            override_available:
+              type: boolean
+              description: >-
+                Whether the officer on duty may set the refusal aside. True for
+                an entry outside the interval or on the wrong day; false for a
+                request that was never approved.
+            override_requires_reason: { type: boolean }
+        checked_at: { type: string, format: date-time }
+
+    GuestConsentInput:
+      type: object
+      required: [guest_request_id, revision]
+      properties:
+        guest_request_id: { type: integer, format: int64, minimum: 1 }
+        revision:
+          type: string
+          maxLength: 32
+          description: The revision of the text the guest was actually shown.
+
+    CheckInInput:
+      type: object
+      required: [guest_request_id]
+      properties:
+        guest_request_id: { type: integer, format: int64, minimum: 1 }
+        override_reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          nullable: true
+          description: >-
+            §2.4.2's «admit on the responsible officer's decision». Required
+            when the refusal is one that may be set aside.
+
+    CheckOutInput:
+      type: object
+      required: [guest_visit_id]
+      properties:
+        guest_visit_id: { type: integer, format: int64, minimum: 1 }
+
+    VisitRegisterEntry:
+      type: object
+      description: One row of the journal of clause 2.1.2, plus the operator.
+      properties:
+        guest_visit_id: { type: integer, format: int64 }
+        guest_full_name: { type: string }
+        guest_document:
+          type: string
+          description: The type and the masked number, as one column.
+          example: 'Internal passport •••••••3456'
+        guest_doc_type:
+          $ref: '#/components/schemas/GuestDocumentType'
+        is_foreign_document: { type: boolean }
+        inviting_resident: { type: string }
+        inviting_resident_id: { type: integer, format: int64, nullable: true }
+        room:
+          type: string
+          description: >-
+            The room the host held **on the day of the visit**, not today: a
+            resident who has since moved did not receive their guest in the
+            room they live in now.
+        checked_in_at: { type: string, format: date-time }
+        checked_out_at: { type: string, format: date-time, nullable: true }
+        due_at: { type: string, format: date-time }
+        status:
+          $ref: '#/components/schemas/GuestVisitStatus'
+        operator:
+          type: string
+          description: >-
+            The officer who recorded the entry, and the one who recorded the
+            exit when it was a different shift.
+        recorded_by: { type: string, nullable: true }
+        closed_by: { type: string, nullable: true }
+        admitted_on_decision: { type: boolean }
+        admission_note: { type: string, nullable: true }
+        corrections:
+          type: array
+          description: >-
+            FR-21's correcting entries, shown beside the row they correct. The
+            row itself is never rewritten.
+          items:
+            type: object
+            properties:
+              recorded_at: { type: string, format: date-time }
+              by: { type: integer, format: int64, nullable: true }
+              correction: { type: string }
+
+    IllegalTransitionError:
+      type: object
+      description: §3.5.4. The move asked for is not one the state machine has.
+      required: [message]
+      properties:
+        message: { type: string }
+        status:
+          $ref: '#/components/schemas/GuestRequestStatus'
+        attempted_status:
+          $ref: '#/components/schemas/GuestRequestStatus'
+
+    QuotaError:
+      type: object
+      description: §3.3.4. The daily ceiling for the resident or for the dormitory.
+      required: [message]
+      properties:
+        message: { type: string }
+        quota_scope: { type: string, enum: [resident, building] }
+        quota_limit: { type: integer }
+        approved_today: { type: integer }
+        visit_date: { type: string, format: date }
+
+    OfficerMarkRequiredError:
+      type: object
+      description: FR-23, second criterion.
+      required: [message]
+      properties:
+        message: { type: string }
+        guest_request_id: { type: integer, format: int64 }
+        guest_doc_type:
+          $ref: '#/components/schemas/GuestDocumentType'
+        required_field: { type: string, enum: [responsible_officer_mark] }
+
+    EntryNotPermittedError:
+      type: object
+      description: >-
+        FR-18 and FR-19. The record is refused, not the person: the system does
+        not restrict the physical movement of people.
+      required: [message]
+      properties:
+        message: { type: string }
+        reason_code:
+          type: string
+          enum: [outside_permitted_interval, request_not_approved, guest_already_inside, wrong_visit_date]
+        override_available: { type: boolean }
+        override_requires_reason: { type: boolean }
+
+    ConsentRequiredError:
+      type: object
+      description: >-
+        FR-35 at the point it bites. 409 and not 403: the caller's role covers
+        the object perfectly well, and what stands in the way is the state of
+        the world.
+      required: [message]
+      properties:
+        message: { type: string }
+        document:
+          $ref: '#/components/schemas/ConsentDocument'
+        revision: { type: string }
+
+    VisitAlreadyClosedError:
+      type: object
+      description: FR-21. The register is append-only; a mistake is a correcting entry.
+      required: [message]
+      properties:
+        message: { type: string }
+        guest_visit_id: { type: integer, format: int64 }
+        checked_out_at: { type: string, format: date-time }
 
     Error:
       type: object
