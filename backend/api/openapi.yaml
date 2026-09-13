@@ -3,16 +3,21 @@ openapi: 3.1.0
 info:
   title: Dormitory support system — API v1
   version: 0.1.0
-  summary: Role model, authentication and audit log
+  summary: Role model, authentication, audit log and the housing register
   description: |
-    The implemented part of the REST contract of §3.3.6. This iteration covers one
-    vertical slice — FR-07 (role model), FR-08 (authentication and sessions) and
-    FR-33 (audit log) — and nothing else. The remaining routes of §3.3.6 belong to
-    later increments and are deliberately absent from this document rather than
-    described as unimplemented: the file is the input for client generation, and a
-    generated client should not carry methods that answer 404.
+    The implemented part of the REST contract of §3.3.6, in two slices. The first
+    is FR-07 (role model), FR-08 (authentication and sessions) and FR-33 (audit
+    log). The second is the housing register: FR-01 (dormitories), FR-02 (rooms
+    and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the resident
+    card).
 
-    Two properties of the contract are worth reading before the paths.
+    The remaining routes of §3.3.6 — guest requests, the checkpoint,
+    announcements, lost-and-found and maintenance — belong to later increments and
+    are deliberately absent from this document rather than described as
+    unimplemented: the file is the input for client generation, and a generated
+    client should not carry methods that answer 404.
+
+    Four properties of the contract are worth reading before the paths.
 
     Authorisation is scoped by building, not only by role. A grant of a role names
     the dormitory it holds in, and every building-addressed route decides on the
@@ -24,6 +29,17 @@ info:
     429 means the login is inside its block window after the configured number of
     failed attempts, and the reply carries the seconds remaining.
 
+    The bed, not the room, is the unit of residency. A room declares a `capacity`
+    and holds that many places; a residency names a place. This is what lets
+    «three beds in the room, two taken» be said at all, and it is why the refusal
+    to exceed a capacity can name the free remainder.
+
+    A residency is historical and is never deleted. Moving out writes
+    `moved_out_at` and a ground; the record stays, the place is freed at once, and
+    the person's access to building-bound routes ends on the stated date. Two
+    residents holding one place over overlapping periods is refused by a partial
+    unique index in the database, and the refusal carries the conflicting record.
+
 servers:
   - url: http://localhost:8000/api/v1
     description: Local development
@@ -34,7 +50,15 @@ tags:
   - name: Authentication
     description: FR-08. Sign-in, sign-out and the identity of the current session.
   - name: Buildings
-    description: FR-07. The routes the role-and-building scope is demonstrated on.
+    description: >-
+      FR-01 and FR-07. The register of dormitories, and the routes the
+      role-and-building scope is demonstrated on.
+  - name: Rooms
+    description: FR-02. The register of rooms and places, kept per building.
+  - name: Residencies
+    description: FR-03 and FR-05. Moving in, and moving out.
+  - name: Residents
+    description: FR-06. The resident card.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -121,6 +145,433 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /buildings:
+    get:
+      tags: [Buildings]
+      summary: The register of dormitories, scoped to the caller
+      description: |
+        The administrator sees every dormitory; every other role sees the ones its
+        grants name. This is the «empty scoped result» half of FR-07's criterion:
+        the route is not refused, the answer is narrowed.
+      operationId: listBuildings
+      responses:
+        '200':
+          description: The dormitories this account may see.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Building'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Buildings]
+      summary: Register a dormitory
+      description: |
+        FR-01, first criterion: the administrator and nobody else. A warden's
+        token gets 403 here, including a warden of the dormitory the request
+        concerns — the refusal is about the role, not about the scope.
+      operationId: createBuilding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildingInput'
+      responses:
+        '201':
+          description: The dormitory was registered. The change is in the audit log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Building'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/archive:
+    post:
+      tags: [Buildings]
+      summary: Archive a dormitory
+      description: |
+        FR-01, first criterion. The row survives and `is_active` becomes false, so
+        that the residency history of a closed dormitory stays readable. The
+        administrator alone.
+      operationId: archiveBuilding
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '200':
+          description: The dormitory is archived.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Building'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /buildings/{building}/rooms:
+    get:
+      tags: [Rooms]
+      summary: The register of rooms and places of one dormitory
+      description: |
+        FR-02. Each entry carries the capacity, the places registered, the places
+        occupied and the free remainder, so that a client never has to subtract
+        and arrive at a figure the server did not refuse on.
+
+        The administrator, and the warden or duty officer **of this building**. A
+        resident does not read the occupancy of the whole dormitory.
+      operationId: listBuildingRooms
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '200':
+          description: The rooms, by floor and then by number.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Rooms]
+      summary: Register a room
+      description: |
+        FR-02. The warden of this building, or the administrator. A room number is
+        unique inside its building and free across buildings.
+      operationId: createRoom
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomInput'
+      responses:
+        '201':
+          description: The room was registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /rooms/{room}:
+    get:
+      tags: [Rooms]
+      summary: One room with its places
+      operationId: showRoom
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: The room card, places included.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Rooms]
+      summary: Edit a room
+      description: |
+        FR-02. Lowering `capacity` below the places already registered is the
+        capacity rule approached from the other side and is refused with the same
+        422, carrying the same figures.
+      operationId: updateRoom
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomInput'
+      responses:
+        '200':
+          description: The room as it now stands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            Either the payload failed validation, or the capacity rule of FR-02 was
+            broken. The second case carries `capacity`, `beds` and `free_places`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/CapacityExceeded'
+
+  /rooms/{room}/beds:
+    post:
+      tags: [Rooms]
+      summary: Register a place in a room
+      description: |
+        FR-02, second criterion. An attempt to take the room past its capacity is
+        rejected **and the free remainder is shown**: the 422 carries `capacity`,
+        `beds` and `free_places`, and `free_places` is the number the register
+        refused on rather than one the client computed.
+
+        A place label is unique inside its room, which the database enforces and
+        the form reports.
+      operationId: createBed
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  maxLength: 16
+                  description: The place identifier inside the room.
+                  examples: ['1', '2a']
+      responses:
+        '201':
+          description: The place was registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            Either the payload failed validation — a duplicate label, for one — or
+            the room is full, in which case the body names the free remainder.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/CapacityExceeded'
+
+  /residencies:
+    post:
+      tags: [Residencies]
+      summary: Place a resident in a bed
+      description: |
+        FR-03. The scope is read off the bed: a residency names no building, and
+        the warden of the building the bed stands in is the one allowed to write
+        the row.
+
+        Two residents cannot hold one place over overlapping periods. The refusal
+        comes from the partial unique index `residencies_active_bed_uniq` in the
+        database, not from a check in the application, and the 409 it produces
+        carries the conflicting record under `conflict`. A resident already
+        holding another place is refused the same way, from the index on the
+        resident.
+      operationId: createResidency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResidencyInput'
+      responses:
+        '201':
+          description: The residency was recorded and the place is now occupied.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Residency'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            The place is held by an open residency, or the person already holds
+            another place. The record standing in the way is in `conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResidencyConflict'
+        '422':
+          description: |
+            Either the payload failed validation, or the place cannot receive
+            anybody — a blocked bed, or a room under repair or withdrawn.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/Error'
+
+  /residencies/{residency}/termination:
+    post:
+      tags: [Residencies]
+      summary: End a residency
+      description: |
+        FR-05. The row is **not** deleted: the ground and the date are written,
+        the place is freed at once, and the history stays readable on the card of
+        FR-06.
+
+        `moved_out_at` may lie in the future. The place is free from the moment
+        the termination is recorded, while the person's access to building-bound
+        routes runs until the stated date and is gone on it — «no later than the
+        stated date». `is_open` and `is_current` on the returned record are the
+        two halves of that and can differ.
+
+        The ground is required. A termination with an empty reason is refused with
+        422.
+      operationId: terminateResidency
+      parameters:
+        - $ref: '#/components/parameters/ResidencyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ground]
+              properties:
+                ground:
+                  type: string
+                  minLength: 3
+                  maxLength: 255
+                  description: Why the residency ends. Recorded verbatim.
+                  examples: ['Graduation, art. 105 cl. 2 of the Housing Code']
+                moved_out_at:
+                  type: string
+                  format: date
+                  description: >-
+                    The day the residency ends. Defaults to today; may be set
+                    forward, never before the move-in date.
+      responses:
+        '200':
+          description: The residency as it now stands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Residency'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /residents/{resident}:
+    get:
+      tags: [Residents]
+      summary: The resident card
+      description: |
+        FR-06. Visible to the warden **of that dormitory** and to the
+        administrator; a resident sees only their own. The warden of building 1
+        requesting a card of building 2 gets 403, at the API and not merely in the
+        interface.
+
+        The card carries the name, the study status, the citizenship, the contact,
+        the current place, the whole residency history and the open obligations.
+        Reading it is recorded in the audit log, because it carries personal data.
+      operationId: showResidentCard
+      parameters:
+        - $ref: '#/components/parameters/ResidentId'
+      responses:
+        '200':
+          description: The card.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ResidentCard'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /buildings/{building}:
     get:
       tags: [Buildings]
@@ -145,9 +596,77 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
+          description: |
+            No role covering this building — or, for a resident, a residency the
+            register shows as ended: FR-05 closes the building-bound routes on the
+            stated date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Buildings]
+      summary: Edit a dormitory
+      description: 'FR-01, first criterion: the administrator alone.'
+      operationId: updateBuilding
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildingInput'
+      responses:
+        '200':
+          description: The dormitory as it now stands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Building'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [Buildings]
+      summary: Delete a dormitory
+      description: |
+        FR-01, second criterion. A dormitory that has rooms attached cannot be
+        deleted, and the refusal states why: 409 with the number of rooms standing
+        in the way and the two ways out — move or delete the rooms, or archive the
+        dormitory instead.
+
+        The block is `ON DELETE RESTRICT` on `rooms.building_id`. It is the
+        database that refuses, so it holds against code that forgot to ask.
+      operationId: deleteBuilding
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '204':
+          description: The dormitory held no rooms and is deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Rooms are attached. The body states the reason and the count.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletionBlocked'
 
   /buildings/{building}/users:
     get:
@@ -241,6 +760,22 @@ components:
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
+    RoomId:
+      name: room
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    ResidencyId:
+      name: residency
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    ResidentId:
+      name: resident
+      in: path
+      required: true
+      description: The account the card belongs to.
+      schema: { type: integer, format: int64, minimum: 1 }
 
   responses:
     Unauthenticated:
@@ -296,6 +831,20 @@ components:
         - building.viewed
         - building.users_viewed
         - audit_log.viewed
+        - building.created
+        - building.updated
+        - building.archived
+        - building.deleted
+        - building.deletion_blocked
+        - building.rooms_viewed
+        - room.created
+        - room.updated
+        - bed.created
+        - bed.creation_refused
+        - residency.assigned
+        - residency.assignment_refused
+        - residency.terminated
+        - resident.card_viewed
 
     AuditResult:
       type: string
@@ -393,6 +942,293 @@ components:
           type: string
           examples: ['23:00:00']
         is_active: { type: boolean }
+
+    RoomType:
+      type: string
+      description: |
+        The three layouts FR-01 names. The layout belongs to the room and not to
+        the dormitory as a whole, because one building routinely mixes them.
+      enum: [corridor, block, apartment]
+
+    RoomStatus:
+      type: string
+      description: |
+        A room that is not `in_service` holds no new residency, however many of
+        its places are free.
+      enum: [in_service, under_repair, withdrawn]
+
+    BedStatus:
+      type: string
+      description: |
+        `free` and `occupied` are a projection of the residency register, which is
+        the authority. `blocked` is the one value the register knows nothing
+        about: an administrative decision that the place takes nobody, and the
+        reason the field is stored rather than computed.
+      enum: [free, occupied, blocked]
+
+    ResidencyStatus:
+      type: string
+      enum: [active, ended]
+
+    StudyStatus:
+      type: string
+      enum: [enrolled, academic_leave, graduated, expelled]
+
+    BuildingInput:
+      type: object
+      description: |
+        Fields of a dormitory. All of them are required on creation; on an edit
+        send only what changes.
+      properties:
+        name: { type: string, maxLength: 255 }
+        address: { type: string, maxLength: 255 }
+        floors_count: { type: integer, minimum: 1, maximum: 100 }
+        visiting_from:
+          type: string
+          description: Start of the visiting window (NFR-09), as HH:MM:SS.
+          examples: ['08:00:00']
+        visiting_to:
+          type: string
+          examples: ['23:00:00']
+        curfew_at:
+          type: string
+          examples: ['23:00:00']
+        is_active: { type: boolean }
+
+    RoomInput:
+      type: object
+      description: |
+        Fields of a room. `number`, `floor` and `capacity` are required on
+        creation; on an edit send only what changes.
+      properties:
+        number:
+          type: string
+          maxLength: 32
+          description: Unique inside its building, free across buildings.
+          examples: ['305']
+        floor: { type: integer, minimum: 0, maximum: 100 }
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 32
+          description: How many places the room may hold. The ceiling FR-02 checks against.
+        type:
+          $ref: '#/components/schemas/RoomType'
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+
+    Bed:
+      type: object
+      description: |
+        One place. It carries no name: who holds it is a residency, and that is
+        personal data travelling under its own policy.
+      required: [id, room_id, label, status]
+      properties:
+        id: { type: integer, format: int64 }
+        room_id: { type: integer, format: int64 }
+        label: { type: string, maxLength: 16 }
+        status:
+          $ref: '#/components/schemas/BedStatus'
+        status_label: { type: string }
+
+    Room:
+      type: object
+      required: [id, building_id, number, floor, capacity, beds_count, free_places]
+      properties:
+        id: { type: integer, format: int64 }
+        building_id: { type: integer, format: int64 }
+        number: { type: string }
+        floor: { type: integer }
+        capacity:
+          type: integer
+          description: How many places the room may hold.
+        type:
+          $ref: '#/components/schemas/RoomType'
+        type_label: { type: string }
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+        status_label: { type: string }
+        beds_count:
+          type: integer
+          description: Places registered. Never greater than `capacity`.
+        occupied_beds_count:
+          type: integer
+          description: Places currently held.
+        free_places:
+          type: integer
+          minimum: 0
+          description: >-
+            `capacity` minus the places registered. This is the figure the
+            capacity rejection names, sent so that a client never computes its own.
+        beds:
+          type: array
+          description: Present when the places were loaded for this response.
+          items:
+            $ref: '#/components/schemas/Bed'
+
+    ResidencyInput:
+      type: object
+      required: [user_id, bed_id, contract_number, moved_in_at]
+      properties:
+        user_id: { type: integer, format: int64 }
+        bed_id:
+          type: integer
+          format: int64
+          description: >-
+            The place. It also fixes the scope: the warden of the building this
+            bed stands in is the one allowed to write the row.
+        contract_number: { type: string, maxLength: 64 }
+        moved_in_at: { type: string, format: date }
+        ground:
+          type: [string, 'null']
+          maxLength: 255
+          description: The ground for the accommodation, recorded verbatim.
+
+    Residency:
+      type: object
+      description: |
+        One residency, past or present. `is_open` says the place is still held;
+        `is_current` says the person may still use the dormitory. A termination
+        dated in the future makes the two differ, which is FR-05's third
+        criterion.
+      required: [id, user_id, bed_id, contract_number, moved_in_at, status, is_open, is_current]
+      properties:
+        id: { type: integer, format: int64 }
+        user_id: { type: integer, format: int64 }
+        resident_name:
+          type: [string, 'null']
+          description: Present when the account was loaded for this response.
+        bed_id: { type: integer, format: int64 }
+        bed_label: { type: [string, 'null'] }
+        room_id: { type: [integer, 'null'], format: int64 }
+        room_number: { type: [string, 'null'] }
+        floor: { type: [integer, 'null'] }
+        building_id: { type: [integer, 'null'], format: int64 }
+        building_name: { type: [string, 'null'] }
+        contract_number: { type: string }
+        moved_in_at: { type: string, format: date }
+        moved_in_ground: { type: [string, 'null'] }
+        moved_out_at: { type: [string, 'null'], format: date }
+        moved_out_ground: { type: [string, 'null'] }
+        status:
+          $ref: '#/components/schemas/ResidencyStatus'
+        is_open: { type: boolean }
+        is_current: { type: boolean }
+
+    Placement:
+      type: object
+      description: Where a residency puts a person — building, room, place.
+      properties:
+        building_id: { type: [integer, 'null'], format: int64 }
+        building_name: { type: [string, 'null'] }
+        room_id: { type: [integer, 'null'], format: int64 }
+        room_number: { type: [string, 'null'] }
+        floor: { type: [integer, 'null'] }
+        bed_id: { type: [integer, 'null'], format: int64 }
+        bed_label: { type: [string, 'null'] }
+        moved_in_at: { type: [string, 'null'], format: date }
+
+    ResidentCard:
+      type: object
+      description: |
+        FR-06. `study_status` and `citizenship` are nullable by design: a warden
+        account is not a student and has neither, and the card renders what is
+        known rather than a default that looks like a fact.
+      required: [id, full_name, contact, residency_history, open_obligations]
+      properties:
+        id: { type: integer, format: int64 }
+        full_name: { type: string }
+        study_status:
+          oneOf:
+            - $ref: '#/components/schemas/StudyStatus'
+            - type: 'null'
+        study_status_label: { type: [string, 'null'] }
+        citizenship: { type: [string, 'null'] }
+        contact:
+          type: object
+          properties:
+            email: { type: string, format: email }
+            phone: { type: [string, 'null'] }
+        account_status:
+          $ref: '#/components/schemas/UserStatus'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+        current_bed:
+          description: The place held right now, or null.
+          oneOf:
+            - $ref: '#/components/schemas/Placement'
+            - type: 'null'
+        residency_history:
+          type: array
+          description: Every residency, newest first. Nothing is removed on move-out.
+          items:
+            $ref: '#/components/schemas/Residency'
+        open_obligations:
+          type: array
+          description: |
+            What the resident still owes the dormitory. The MVP register knows one
+            kind: an accommodation contract that has not been terminated.
+            Obligations arising from the inventory handover belong to entities
+            outside this iteration and are not represented here.
+          items:
+            type: object
+            required: [kind, residency_id, contract_number]
+            properties:
+              kind:
+                type: string
+                enum: [accommodation_contract]
+              residency_id: { type: integer, format: int64 }
+              contract_number: { type: string }
+              since: { type: [string, 'null'], format: date }
+              placement:
+                $ref: '#/components/schemas/Placement'
+
+    CapacityExceeded:
+      type: object
+      description: |
+        FR-02, second criterion. `free_places` is the remainder the register
+        refused on; zero means the room is full.
+      required: [message, capacity, beds, free_places]
+      properties:
+        message: { type: string }
+        room_id: { type: integer, format: int64 }
+        room_number: { type: string }
+        capacity: { type: integer }
+        beds: { type: integer }
+        free_places: { type: integer, minimum: 0 }
+
+    ResidencyConflict:
+      type: object
+      description: |
+        FR-03, second criterion: the record standing in the way, so that the
+        warden reads which residency must end before this one can begin.
+      required: [message]
+      properties:
+        message: { type: string }
+        bed_id: { type: integer, format: int64 }
+        user_id: { type: integer, format: int64 }
+        conflict:
+          oneOf:
+            - $ref: '#/components/schemas/Residency'
+            - type: 'null'
+
+    DeletionBlocked:
+      type: object
+      description: |
+        FR-01, second criterion: the deletion is blocked and the reason is stated.
+      required: [message, entity, entity_id, blocked_by]
+      properties:
+        message: { type: string }
+        entity: { type: string, examples: [building] }
+        entity_id: { type: integer, format: int64 }
+        blocked_by:
+          type: object
+          description: What is attached, by kind and count.
+          additionalProperties: { type: integer }
+          examples:
+            - { rooms: 12 }
 
     AuditEntry:
       type: object
