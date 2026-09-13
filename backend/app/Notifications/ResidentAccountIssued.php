@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
+use App\Contracts\CategorisedNotification;
+use App\Enums\NotificationCategory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -34,8 +36,19 @@ use Illuminate\Notifications\Notification;
  * The token itself is not stored on this object beyond the send: it is a
  * one-time value held in `password_reset_tokens` as a hash, and this message
  * is the only place it exists in plain text.
+ *
+ * **Its place in FR-34 (added with that requirement).** The message is
+ * categorised like every other, so that there is one dispatch and not two, and
+ * its category is mandatory: an account whose credential can be switched off
+ * is an account nobody can use. It does **not** extend
+ * `App\Notifications\EventNotification`, and the difference is the single line
+ * `via()` below. Every other notification of FR-34 is written into the
+ * framework's `notifications` table as well as sent, because the personal
+ * account shows it; this one carries a one-time secret, and a secret written
+ * into a table is a secret that outlives its use and can be read by anything
+ * that can read the table. It goes by mail and leaves no copy.
  */
-final class ResidentAccountIssued extends Notification implements ShouldQueue
+final class ResidentAccountIssued extends Notification implements CategorisedNotification, ShouldQueue
 {
     use Queueable;
 
@@ -44,6 +57,11 @@ final class ResidentAccountIssued extends Notification implements ShouldQueue
         public readonly string $buildingName,
         public readonly int $expiresInMinutes,
     ) {}
+
+    public function category(): NotificationCategory
+    {
+        return NotificationCategory::AccountIssued;
+    }
 
     /**
      * @return list<string>
