@@ -53,9 +53,21 @@ export function rememberLocale(locale: SupportedLocale): void {
   } catch {
     // A locale that cannot be stored is still applied for this visit.
   }
-  document.documentElement.lang = locale
 }
 
-document.documentElement.lang = i18n.language
+/**
+ * The two things outside the React tree that the language owns: the `lang` of
+ * the document, which tells the reader's assistive software which language it
+ * is reading, and the title of the tab. The title is a string of the interface
+ * like any other, so it lives in the locale files and not in `index.html` —
+ * the markup there is only what the tab shows before the bundle runs.
+ */
+function applyLocaleToDocument(language: string): void {
+  document.documentElement.lang = language.slice(0, 2)
+  document.title = i18n.t('app.documentTitle')
+}
+
+i18n.on('languageChanged', applyLocaleToDocument)
+applyLocaleToDocument(i18n.language)
 
 export default i18n

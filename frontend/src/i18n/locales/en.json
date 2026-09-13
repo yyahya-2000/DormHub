@@ -2,6 +2,7 @@
   "app": {
     "name": "Dormitory",
     "fullName": "Dormitory support system",
+    "documentTitle": "Dormitory — residence support system",
     "section": {
       "building": "Building",
       "audit": "Audit log"
@@ -40,8 +41,10 @@
     "lastAttemptUsed": "That was the last attempt: sign-in for this email is closed.",
     "lockedTitle": "Sign-in blocked",
     "lockedBody": "Five failed attempts close sign-in for this email. You can try again in {{remaining}}.",
-    "lockedBodyUnknown": "Five failed attempts close sign-in for this email. Try again later.",
     "lockedOver": "The block has expired, try signing in again.",
+    "throttledTitle": "Too many requests",
+    "throttledBody": "Too many requests have come from this device in a row and the server stopped taking them. You can try again in {{remaining}}.",
+    "throttledBodySoon": "Too many requests have come from this device in a row and the server stopped taking them. Try again shortly.",
     "validationTitle": "The form is incomplete",
     "validation": {
       "email": "Enter an email in the form name@example.com.",
