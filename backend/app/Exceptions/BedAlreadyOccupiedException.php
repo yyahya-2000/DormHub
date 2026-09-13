@@ -12,10 +12,16 @@ use RuntimeException;
  * «on such an attempt the system displays the conflicting record».
  *
  * The exception carries that record. It is raised only after the database has
- * refused the insert on `residencies_active_bed_uniq` — the service does not
+ * refused the insert on `residencies_bed_no_overlap` — the service does not
  * look before it leaps, because a check preceding an insert can be overtaken
- * between the two statements and a unique index cannot. The conflicting row is
- * then read to be shown, which is a read whose only purpose is the message.
+ * between the two statements and an exclusion constraint cannot. The
+ * conflicting row is then read to be shown, which is a read whose only purpose
+ * is the message.
+ *
+ * The message names the end of the conflicting period when there is one. That
+ * is the sentence a warden acts on: «held until the 31st of December» tells
+ * them when the place comes free, where «already held» tells them only to try
+ * something else.
  */
 final class BedAlreadyOccupiedException extends RuntimeException
 {
@@ -25,11 +31,14 @@ final class BedAlreadyOccupiedException extends RuntimeException
     ) {
         parent::__construct(
             $conflicting === null
-                ? 'This bed is already held by an open residency.'
+                ? 'This bed is held over a period that overlaps the one requested.'
                 : sprintf(
-                    'This bed is held by an open residency since %s under contract %s.',
-                    $conflicting->moved_in_at?->toDateString() ?? 'an unrecorded date',
+                    'This bed is held under contract %s from %s %s, which overlaps the period requested.',
                     $conflicting->contract_number,
+                    $conflicting->moved_in_at?->toDateString() ?? 'an unrecorded date',
+                    $conflicting->moved_out_at === null
+                        ? 'with no end recorded'
+                        : 'until '.$conflicting->moved_out_at->toDateString(),
                 )
         );
     }

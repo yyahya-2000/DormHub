@@ -9,7 +9,7 @@ use RuntimeException;
 
 /**
  * The other half of §3.4.4's sentence: «a user likewise occupies one bed at a
- * time». Enforced by `residencies_active_user_uniq` and surfaced here with the
+ * time». Enforced by `residencies_user_no_overlap` and surfaced here with the
  * residency that stands in the way, so that the warden is told which bed the
  * person is to be moved out of rather than merely that something went wrong.
  */
@@ -21,11 +21,14 @@ final class ResidentAlreadyAccommodatedException extends RuntimeException
     ) {
         parent::__construct(
             $conflicting === null
-                ? 'This resident already holds an open residency.'
+                ? 'This resident already holds a bed over a period that overlaps the one requested.'
                 : sprintf(
-                    'This resident already holds bed %d since %s; terminate that residency first.',
+                    'This resident holds bed %d from %s %s; terminate that residency first.',
                     $conflicting->bed_id,
                     $conflicting->moved_in_at?->toDateString() ?? 'an unrecorded date',
+                    $conflicting->moved_out_at === null
+                        ? 'with no end recorded'
+                        : 'until '.$conflicting->moved_out_at->toDateString(),
                 )
         );
     }

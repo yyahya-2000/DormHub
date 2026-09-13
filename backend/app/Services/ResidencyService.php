@@ -23,21 +23,27 @@ use Illuminate\Support\Facades\DB;
  *
  * **Where the rule lives.** FR-03 forbids two residents holding one bed over
  * overlapping periods, and this class does not enforce that. The database
- * does, through `residencies_active_bed_uniq` (§3.4.1, decision 3). What the
- * method does is insert, let the index refuse, and turn the refusal into the
- * answer FR-03 asks for — the conflicting record, shown to the warden.
+ * does, through the exclusion constraints `residencies_bed_no_overlap` and
+ * `residencies_user_no_overlap` (§3.4.1, decision 3, as restated over the
+ * period). What the method does is insert, let the constraint refuse, and turn
+ * the refusal into the answer FR-03 asks for — the conflicting record, shown
+ * to the warden.
  *
  * The reason for that order is worth stating, because reading first and
  * inserting second looks tidier. Between the read and the insert another
  * request can commit, and the tidier version then writes a second occupant
  * into a bed it has just verified as empty. No amount of care inside the
- * application closes that window; a unique index closes it in the one place
+ * application closes that window; a constraint closes it in the one place
  * where both requests meet.
  *
  * **Eviction keeps the row.** §3.4.1 makes residency historical: nothing is
- * deleted, `moved_out_at` and its ground are written, the bed's status goes
- * back to free in the same transaction, and the person's whole occupancy
- * history stays readable on the card of FR-06.
+ * deleted, `moved_out_at` and its ground are written, and the person's whole
+ * occupancy history stays readable on the card of FR-06. What eviction does
+ * *not* do is free the bed before the stated date. A termination recorded on
+ * the 13th of September for the 31st of December leaves the bed occupied,
+ * because somebody is sleeping in it until the 31st of December; the
+ * projection onto `BED.status` and onto `RESIDENCY.status` is moved on the day
+ * the termination takes effect, by `housing:settle-residencies`.
  */
 final readonly class ResidencyService
 {
@@ -110,18 +116,28 @@ final readonly class ResidencyService
                 return $residency;
             });
         } catch (QueryException $exception) {
-            throw $this->interpretUniqueViolation($exception, $actor, $resident, $bed, $ipAddress);
+            throw $this->interpretConstraintViolation($exception, $actor, $resident, $bed, $movedInAt, $ipAddress);
         }
     }
 
     /**
      * FR-05: end a residency.
      *
-     * The date may lie in the future. The bed is freed at once — «the bed
-     * becomes free automatically after eviction» — while the person's access
-     * to building-bound functions runs until the stated date and not past it,
-     * which is the third criterion. The two facts are read from the same
-     * column by two different questions (see `Residency`).
+     * The date may lie in the future, and everything awkward about this method
+     * follows from that. «The bed becomes free automatically after eviction»
+     * is the second criterion, and the word that decides when is *eviction*,
+     * not *the paperwork*: the bed falls free when the person leaves, which is
+     * the stated date. A notice given today for the 31st of December leaves
+     * the record `active`, the bed `occupied` and the person resident, and all
+     * three turn over on the 31st — by `housing:settle-residencies` if the
+     * application is idle, or by this very method if the date has already
+     * arrived when it is called.
+     *
+     * Writing them over at once, as this method used to, is what let a second
+     * resident be moved into an occupied bed and what made a living person's
+     * record read `ended`. The exclusion constraint of FR-03 would now refuse
+     * the double booking regardless; the projections are corrected here so
+     * that what the register *says* and what it *enforces* are the same thing.
      */
     public function terminate(
         User $actor,
@@ -130,19 +146,53 @@ final readonly class ResidencyService
         CarbonInterface $movedOutAt,
         ?string $ipAddress = null,
     ): Residency {
+        try {
+            return $this->write($actor, $residency, $ground, $movedOutAt, $ipAddress);
+        } catch (QueryException $exception) {
+            if (! str_contains(strtolower($exception->getMessage()), 'residencies_bed_no_overlap')) {
+                throw $exception;
+            }
+
+            /*
+             * Moving a departure date **forward** over a period the place has
+             * since been given to somebody else. The row shrinks in every
+             * other case and a shrinking range conflicts with nothing, so this
+             * is the one shape of termination the constraint can refuse — and
+             * it is a real one: a resident asks to stay another month, and the
+             * month is already promised.
+             */
+            $successor = Residency::query()
+                ->where('bed_id', $residency->bed_id)
+                ->whereKeyNot($residency->getKey())
+                ->overlapping($residency->moved_in_at ?? now(), $movedOutAt)
+                ->orderBy('moved_in_at')
+                ->with(['user', 'bed.room'])
+                ->first();
+
+            throw new BedAlreadyOccupiedException((int) $residency->bed_id, $successor);
+        }
+    }
+
+    /**
+     * @throws QueryException when the new period overlaps another residency.
+     */
+    private function write(
+        User $actor,
+        Residency $residency,
+        string $ground,
+        CarbonInterface $movedOutAt,
+        ?string $ipAddress,
+    ): Residency {
         return DB::transaction(function () use ($actor, $residency, $ground, $movedOutAt, $ipAddress): Residency {
             $residency->moved_out_at = $movedOutAt->toDateString();
             $residency->moved_out_ground = $ground;
-            $residency->status = ResidencyStatus::Ended;
+            $residency->status = $residency->isCurrentOn(now())
+                ? ResidencyStatus::Active
+                : ResidencyStatus::Ended;
             $residency->save();
 
-            $bed = $residency->bed()->first();
-
-            // A blocked bed stays blocked: eviction frees a bed that was
-            // occupied, and says nothing about one withdrawn from use.
-            if ($bed !== null && $bed->status === BedStatus::Occupied) {
-                $bed->status = BedStatus::Free;
-                $bed->save();
+            if (! $residency->isCurrentOn(now())) {
+                $this->releaseBed($residency);
             }
 
             $this->audit->record(
@@ -154,6 +204,7 @@ final readonly class ResidencyService
                     'bed_id' => $residency->bed_id,
                     'ground' => $ground,
                     'moved_out_at' => $movedOutAt->toDateString(),
+                    'takes_effect' => $residency->isCurrentOn(now()) ? 'on the stated date' : 'immediately',
                 ],
                 ipAddress: $ipAddress,
             );
@@ -163,27 +214,100 @@ final readonly class ResidencyService
     }
 
     /**
+     * Brings the two projections of a residency into line with the calendar:
+     * a record whose stated date has arrived becomes `ended`, and its bed
+     * becomes free.
+     *
+     * This is the same work `terminate()` does when the date is today, and it
+     * is separate because somebody has to do it on the day a future-dated
+     * termination comes due, when no request is being served. The command
+     * `housing:settle-residencies` calls it nightly.
+     *
+     * @return bool whether anything was changed.
+     */
+    public function settle(Residency $residency): bool
+    {
+        if ($residency->moved_out_at === null || $residency->isCurrentOn(now())) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($residency): bool {
+            $changed = false;
+
+            if ($residency->status !== ResidencyStatus::Ended) {
+                $residency->status = ResidencyStatus::Ended;
+                $residency->save();
+                $changed = true;
+            }
+
+            return $this->releaseBed($residency) || $changed;
+        });
+    }
+
+    /**
+     * The projection of the vacated place onto `BED.status`.
+     *
+     * A blocked bed stays blocked: eviction frees a bed that was occupied, and
+     * says nothing about one withdrawn from use. A bed still held by another
+     * current residency stays occupied too — a room transfer recorded as two
+     * rows on one bed cannot be, but a mistaken history repaired by hand can,
+     * and the status must describe the bed rather than the last row read.
+     */
+    private function releaseBed(Residency $residency): bool
+    {
+        $bed = $residency->bed()->first();
+
+        if ($bed === null || $bed->status !== BedStatus::Occupied) {
+            return false;
+        }
+
+        $stillHeld = Residency::query()
+            ->where('bed_id', $bed->getKey())
+            ->whereKeyNot($residency->getKey())
+            ->currentOn(now())
+            ->exists();
+
+        if ($stillHeld) {
+            return false;
+        }
+
+        $bed->status = BedStatus::Free;
+        $bed->save();
+
+        return true;
+    }
+
+    /**
      * Turns the database's refusal into the answer the criterion asks for.
      *
-     * Which index was violated decides which of the two rules was broken, so
-     * the name of the index is read rather than guessed from the payload. If
-     * the violation is neither of them, the original exception travels on
-     * untouched: swallowing an unexplained database error would hide a defect
-     * behind a domain message.
+     * Which constraint was violated decides which of the two rules was broken,
+     * so the name of the constraint is read rather than guessed from the
+     * payload. If the violation is neither of them, the original exception
+     * travels on untouched: swallowing an unexplained database error would
+     * hide a defect behind a domain message.
+     *
+     * The conflicting record is then looked up **by overlap with the period
+     * being asked for**, not by «is it open». The two used to be the same
+     * query, which is why a refusal could once come back with no conflicting
+     * record attached at all: the row in the way had a termination date in the
+     * future, so it was not open, so the lookup found nothing and the warden
+     * was told only that something had gone wrong.
      */
-    private function interpretUniqueViolation(
+    private function interpretConstraintViolation(
         QueryException $exception,
         User $actor,
         User $resident,
         Bed $bed,
+        CarbonInterface $movedInAt,
         ?string $ipAddress,
     ): QueryException|BedAlreadyOccupiedException|ResidentAlreadyAccommodatedException {
         $message = strtolower($exception->getMessage());
 
-        if (str_contains($message, 'residencies_active_bed_uniq')) {
+        if (str_contains($message, 'residencies_bed_no_overlap')) {
             $conflicting = Residency::query()
                 ->where('bed_id', $bed->getKey())
-                ->open()
+                ->overlapping($movedInAt)
+                ->orderBy('moved_in_at')
                 ->with(['user', 'bed.room'])
                 ->first();
 
@@ -193,10 +317,11 @@ final readonly class ResidencyService
             return $refusal;
         }
 
-        if (str_contains($message, 'residencies_active_user_uniq')) {
+        if (str_contains($message, 'residencies_user_no_overlap')) {
             $conflicting = Residency::query()
                 ->where('user_id', $resident->getKey())
-                ->open()
+                ->overlapping($movedInAt)
+                ->orderBy('moved_in_at')
                 ->with(['user', 'bed.room'])
                 ->first();
 
