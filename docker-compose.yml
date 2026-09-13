@@ -30,13 +30,20 @@ x-app-env: &app-env
   DB_HOST: postgres
   DB_PORT: "5432"
   DB_DATABASE: ${POSTGRES_DB:-dormitory}
-  DB_USERNAME: ${POSTGRES_USER:-dormitory}
-  DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
 
-  # The role the running service is meant to connect as. UPDATE and DELETE on
-  # audit_logs are revoked from it by migration (§4.4.4), which is why the
-  # migration must connect as the owning role above and not as this one.
+  # The default connection, used to serve requests and to run the worker and
+  # the scheduler. UPDATE and DELETE on audit_logs are revoked from this role
+  # by migration (§4.4.4), so the append-only guarantee survives a mistake in
+  # application code rather than resting on a check in a model.
+  DB_USERNAME: ${APP_DB_ROLE:-app_rw}
+  DB_PASSWORD: ${APP_DB_PASSWORD:-app-secret}
   DB_APPLICATION_ROLE: ${APP_DB_ROLE:-app_rw}
+
+  # The owning role, reached through the `pgsql_owner` connection. Used by
+  # `migrate` and `db:seed`, and by nothing else — a role cannot revoke rights
+  # from itself, so schema work has to come from somewhere other than app_rw.
+  DB_OWNER_USERNAME: ${POSTGRES_USER:-dormitory}
+  DB_OWNER_PASSWORD: ${POSTGRES_PASSWORD:-secret}
 
   REDIS_HOST: redis
   REDIS_PORT: "6379"
@@ -115,6 +122,7 @@ services:
       # Read by docker/postgres/initdb/10-application-role.sh.
       APP_DB_ROLE: ${APP_DB_ROLE:-app_rw}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-app-secret}
+      TEST_DB_NAME: ${TEST_DB_NAME:-dormitory_test}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
