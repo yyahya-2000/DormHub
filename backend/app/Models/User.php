@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -244,6 +245,49 @@ class User extends Authenticatable
     public function openResidency(): HasOne
     {
         return $this->hasOne(Residency::class)->whereNull('moved_out_at');
+    }
+
+    /**
+     * FR-16. The guest requests this person has filed, newest first.
+     *
+     * @return HasMany<GuestRequest, $this>
+     */
+    public function guestRequests(): HasMany
+    {
+        return $this->hasMany(GuestRequest::class, 'student_id')
+            ->orderByDesc('visit_date')
+            ->orderByDesc('id');
+    }
+
+    /**
+     * FR-20, third criterion: «the fact is visible on the inviting resident's
+     * card».
+     *
+     * The visits of this person's guests that the sweep has reported overdue.
+     * The relation travels USER → GUEST_REQUEST → GUEST_VISIT, which is why it
+     * is a `HasManyThrough`: the resident invites, the request yields the
+     * visit, and the answerability clause 3.4 of the Model Rules puts on the
+     * inviting resident follows the same path.
+     *
+     * `overdue_notified_at` rather than the status is the condition, and the
+     * difference matters: a visit that has since been closed is `closed_late`
+     * and no longer `overdue`, and the fact that it *was* overdue is exactly
+     * what the card has to keep showing. A status test would have cleared the
+     * card the moment the guest finally left.
+     *
+     * @return HasManyThrough<GuestVisit, GuestRequest, $this>
+     */
+    public function overdueGuestVisits(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            GuestVisit::class,
+            GuestRequest::class,
+            'student_id',
+            'guest_request_id',
+            'id',
+            'id',
+        )->whereNotNull('guest_visits.overdue_notified_at')
+            ->orderByDesc('guest_visits.due_at');
     }
 
     /**
