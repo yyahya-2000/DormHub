@@ -260,10 +260,10 @@ function AddPlaceForm({ room, onDone }: { room: Room; onDone: () => void }) {
 }
 
 /**
- * FR-03. The candidates are the residents the roll of this building returned;
- * the register has no route for creating an account in this iteration, so a
- * person who is not on the roll cannot be placed from here, and the form says so
- * rather than offering a field that would only ever be refused.
+ * FR-03. The candidates are the residents the roll of this building returned.
+ * A person who is not on the roll has no account yet, and since FR-42 the
+ * register has a route that makes one: the form says so and links to it rather
+ * than leaving the reader at an empty list with nothing to do about it.
  */
 function AssignForm({
   room,
@@ -323,6 +323,12 @@ function AssignForm({
       {occupancy.residents.length === 0 ? (
         <p className="m-0 text-steel">{t('residency.noCandidates')}</p>
       ) : null}
+
+      <p className="m-0 text-steel">
+        <Link className="text-prussian underline" to={`/buildings/${room.building_id}/accounts`}>
+          {t('residency.issueAccount')}
+        </Link>
+      </p>
 
       <FormField id={`${id}-user`} label={t('fields.user_id')} note={t('residency.candidateNote')}>
         <select
