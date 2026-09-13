@@ -12,6 +12,8 @@ use App\Enums\StudyStatus;
 use App\Models\Bed;
 use App\Models\Building;
 use App\Models\Residency;
+use App\Models\Role;
+use App\Models\RoleUser;
 use App\Models\Room;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -221,6 +223,56 @@ final class ResidentCardTest extends TestCase
         // narrowing is of the card, not of their work.
         Sanctum::actingAs($this->userWith(RoleCode::DutyOfficer, $this->first, 'duty-roll@example.test'));
         $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertOk();
+    }
+
+    /**
+     * FR-06's own statement of the first finding of 14.09.2026: what attaches a
+     * card to a dormitory.
+     *
+     * Residence does — the residency register, or the resident grant that stands
+     * in the window between an account being issued and a bed being assigned. A
+     * staff grant does not. It used to, and that made FR-41 a way round FR-07:
+     * the warden of block 1 wrote a security grant into block 1 for a resident of
+     * block 2 and read the card he had just attached to himself.
+     */
+    public function test_a_staff_grant_attaches_no_card_to_a_building(): void
+    {
+        // A resident of block 2 who is also a security officer of block 1 — the
+        // shape the escalation produced, and a shape the world can produce
+        // honestly too.
+        $residentOfSecond = $this->resident($this->second, 'resident-2@example.test');
+        $this->accommodate($residentOfSecond, $this->second, '101', '1');
+
+        $security = Role::query()->where('code', RoleCode::SecurityOfficer->value)->sole();
+
+        RoleUser::query()->create([
+            'user_id' => $residentOfSecond->getKey(),
+            'role_id' => $security->getKey(),
+            'building_id' => $this->first->getKey(),
+            'granted_at' => now(),
+        ]);
+
+        Sanctum::actingAs($this->userWith(RoleCode::Warden, $this->first, 'warden-1@example.test'));
+
+        $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
+    }
+
+    /**
+     * And the other side of the same rule: an account issued under FR-42 has a
+     * resident grant and no bed yet, and the manager who issued it reads the
+     * card at once. Narrowing the attachment to residence must not close that.
+     */
+    public function test_a_resident_grant_attaches_the_card_before_a_bed_is_assigned(): void
+    {
+        $incoming = User::factory()
+            ->withRole(RoleCode::Resident, $this->first)
+            ->create(['email' => 'no-bed-yet@example.test']);
+
+        Sanctum::actingAs($this->userWith(RoleCode::Manager, $this->first, 'manager-1@example.test'));
+
+        $this->getJson("/api/v1/residents/{$incoming->id}")
+            ->assertOk()
+            ->assertJsonPath('data.current_bed', null);
     }
 
     public function test_reading_a_card_is_written_to_the_audit_log(): void

@@ -356,6 +356,183 @@ final class StaffAppointmentTest extends TestCase
     }
 
     /**
+     * The first finding of the acceptance of 14.09.2026, reproduced in the
+     * words it was reported in.
+     *
+     * The warden of block 1, with no other grant, read the full card of any
+     * resident of block 2 in two permitted calls:
+     *
+     *     GET  /residents/9                                        → 403
+     *     POST /buildings/1/staff {"user_id":9,"role":"security"}   → 201
+     *     GET  /residents/9                                        → 200
+     *     DELETE /buildings/1/staff/9/security                      → 204
+     *
+     * Two decisions, each right on its own, met in the middle:
+     * `AppointStaffRequest` took any identifier in the system, and the card was
+     * attached to a building by *any* role grant. The appointment manufactured
+     * the attachment the reader was then judged against. Identifiers are
+     * sequential, so this was the register of every dormitory, one integer at a
+     * time.
+     *
+     * Both halves are closed, so the sequence now stops at the second line.
+     */
+    public function test_a_resident_of_another_dormitory_cannot_be_appointed_here(): void
+    {
+        $residentOfSecond = User::factory()
+            ->withRole(RoleCode::Resident, $this->second)
+            ->create(['email' => 'resident-of-second@example.test']);
+
+        Sanctum::actingAs($this->wardenOfFirst);
+
+        $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
+            'user_id' => $residentOfSecond->id,
+            'role' => RoleCode::SecurityOfficer->value,
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('user_id');
+
+        $this->assertSame(
+            1,
+            RoleUser::query()->where('user_id', $residentOfSecond->id)->count(),
+            'A grant was written into block 1 for a resident of block 2.',
+        );
+
+        $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
+    }
+
+    /**
+     * The second lock, tested on its own. The grant is written straight into
+     * the table, past the route and past the rule that now refuses it, and the
+     * card stays shut: a staff grant says where somebody works and never whose
+     * register answers for their personal data.
+     *
+     * The two locks are independent on purpose. Either one of them alone stops
+     * the escalation, and this test is what says so.
+     */
+    public function test_a_staff_grant_does_not_open_the_card_of_the_account_that_holds_it(): void
+    {
+        $residentOfSecond = User::factory()
+            ->withRole(RoleCode::Resident, $this->second)
+            ->create(['email' => 'resident-of-second@example.test']);
+
+        $security = Role::query()->where('code', RoleCode::SecurityOfficer->value)->sole();
+
+        RoleUser::query()->create([
+            'user_id' => $residentOfSecond->getKey(),
+            'role_id' => $security->getKey(),
+            'building_id' => $this->first->getKey(),
+            'granted_by' => $this->wardenOfFirst->getKey(),
+            'granted_at' => now(),
+        ]);
+
+        Sanctum::actingAs($this->wardenOfFirst);
+
+        $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
+    }
+
+    /**
+     * What the rule deliberately does not refuse. A warden hiring a security
+     * officer from outside is the ordinary case, and a route unable to do it
+     * would be a route with no purpose.
+     */
+    public function test_an_account_no_dormitory_answers_for_is_appointed_as_before(): void
+    {
+        $outsider = User::factory()->create(['email' => 'hired-from-outside@example.test']);
+
+        Sanctum::actingAs($this->wardenOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
+            'user_id' => $outsider->id,
+            'role' => RoleCode::SecurityOfficer->value,
+        ])->assertStatus(201);
+
+        // And his own card is nobody's business but his and the
+        // administrator's: a staff grant attaches him to no register.
+        $this->getJson("/api/v1/residents/{$outsider->id}")->assertStatus(403);
+    }
+
+    /**
+     * The other case the rule leaves alone: a resident of **this** dormitory
+     * taking the duty officer's shift. The person is already inside the scope,
+     * so the appointment hands the warden nothing he did not have.
+     */
+    public function test_a_resident_of_this_dormitory_may_be_given_a_staff_role_here(): void
+    {
+        $residentOfFirst = User::factory()
+            ->withRole(RoleCode::Resident, $this->first)
+            ->create(['email' => 'resident-of-first@example.test']);
+
+        Sanctum::actingAs($this->wardenOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
+            'user_id' => $residentOfFirst->id,
+            'role' => RoleCode::DutyOfficer->value,
+        ])->assertStatus(201);
+
+        $this->assertTrue($residentOfFirst->fresh()->hasRoleInBuilding(RoleCode::DutyOfficer, $this->first));
+    }
+
+    /**
+     * The fifth finding of the acceptance: the administrator could appoint a
+     * warden and nothing else, and since revocation is asked of the same list,
+     * a manager's grant in block 1 was revocable by exactly one account in the
+     * system — the warden of block 1. Dismiss him and the grants beneath him
+     * stood with nobody able to take them back.
+     */
+    public function test_the_administrator_appoints_and_dismisses_the_whole_staff_of_any_building(): void
+    {
+        $administrator = User::factory()
+            ->withRole(RoleCode::Administrator, null)
+            ->create(['email' => 'admin@example.test']);
+
+        Sanctum::actingAs($administrator);
+
+        $roles = [RoleCode::Manager, RoleCode::DutyOfficer, RoleCode::SecurityOfficer];
+
+        foreach ($roles as $index => $role) {
+            $subject = User::factory()->create(['email' => sprintf('staff-of-second-%d@example.test', $index)]);
+
+            $this->postJson("/api/v1/buildings/{$this->second->id}/staff", [
+                'user_id' => $subject->id,
+                'role' => $role->value,
+            ])->assertStatus(201);
+
+            $this->deleteJson("/api/v1/buildings/{$this->second->id}/staff/{$subject->id}/{$role->value}")
+                ->assertStatus(204);
+
+            $this->assertFalse($subject->fresh()->hasRoleInBuilding($role, $this->second));
+        }
+    }
+
+    /**
+     * A dormitory whose warden has gone does not keep its staff for ever. The
+     * grant beneath him is taken back by the administrator, in a building the
+     * administrator holds no scoped grant in at all.
+     */
+    public function test_a_grant_outlives_the_warden_who_wrote_it_and_the_administrator_takes_it_back(): void
+    {
+        $manager = User::factory()
+            ->withRole(RoleCode::Manager, $this->first)
+            ->create(['email' => 'orphaned-manager@example.test']);
+
+        $administrator = User::factory()
+            ->withRole(RoleCode::Administrator, null)
+            ->create(['email' => 'admin@example.test']);
+
+        // The warden is gone.
+        $this->wardenOfFirst->roleGrants()->delete();
+
+        Sanctum::actingAs($administrator);
+
+        $this->deleteJson("/api/v1/buildings/{$this->first->id}/staff/{$manager->id}/manager")
+            ->assertStatus(204);
+
+        $this->assertFalse($manager->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->first));
+    }
+
+    /**
      * The grant the route writes names the building from the path, and the
      * payload has no say in it — the mistake `StoreResidencyRequest` avoids by
      * reading the scope off the bed.

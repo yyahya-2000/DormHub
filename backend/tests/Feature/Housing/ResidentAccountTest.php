@@ -7,16 +7,26 @@ namespace Tests\Feature\Housing;
 use App\Enums\AuditAction;
 use App\Enums\RoleCode;
 use App\Enums\StudyStatus;
+use App\Jobs\DeliverResidentCredential;
 use App\Models\AuditLog;
 use App\Models\Building;
 use App\Models\User;
 use App\Notifications\ResidentAccountIssued;
+use App\Services\ResidentAccountIssuer;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
+use Mockery\MockInterface;
+use RuntimeException;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * FR-42, «Issuing a resident account». One test per acceptance criterion.
@@ -175,9 +185,12 @@ final class ResidentAccountTest extends TestCase
                 // the account.
                 $this->assertSame(['mail'], $channels);
 
-                // Queued, not sent: the sign-in of a warden must not wait on a
-                // mail server.
-                $this->assertInstanceOf(ShouldQueue::class, $notification);
+                // Queued, but not this object: what the queue carries is
+                // `DeliverResidentCredential`, and this message is built inside
+                // the worker so that the code is never serialised. Making the
+                // notification queueable again would undo that in one word, so
+                // the test states it.
+                $this->assertNotInstanceOf(ShouldQueue::class, $notification);
 
                 $this->assertNotSame('', $notification->token);
 
@@ -387,10 +400,76 @@ final class ResidentAccountTest extends TestCase
         $this->assertSame($resident->id, $entry->subject_id);
         $this->assertSame($this->first->id, $entry->payload['building_id']);
         $this->assertSame('student', $entry->payload['role']);
-
-        // The record says where the credential went and never what it was.
-        $this->assertSame('email', $entry->payload['delivered_to']);
         $this->assertNoSecretIn($entry->payload);
+
+        // The account and the credential are two events, because they commit
+        // at two moments: the account inside a transaction, the credential
+        // after the queue accepted it. The second entry says where the
+        // credential went and never what it was.
+        $delivery = AuditLog::query()
+            ->where('action', AuditAction::ResidentCredentialIssued->value)
+            ->sole();
+
+        $this->assertSame($this->managerOfFirst->id, $delivery->user_id);
+        $this->assertSame($resident->id, $delivery->subject_id);
+        $this->assertSame('email', $delivery->payload['delivered_to']);
+        $this->assertFalse($delivery->payload['reissue']);
+        $this->assertNoSecretIn($delivery->payload);
+    }
+
+    /**
+     * The tenth finding of the acceptance of 14.09.2026: the log used to claim
+     * a delivery from inside the transaction that created the account, while
+     * the delivery itself happened after the commit. A queue that refused the
+     * job left an audit entry asserting something that never took place — the
+     * one thing an audit log may not do.
+     *
+     * The queue is made to refuse, and what is asserted is the shape of the
+     * damage: the account is there, the account's own entry is there, and
+     * nothing claims a credential.
+     */
+    public function test_a_queue_that_refuses_the_job_writes_no_record_of_a_delivery(): void
+    {
+        Notification::fake();
+
+        Bus::swap(Mockery::mock(
+            Dispatcher::class,
+            function (MockInterface $bus): void {
+                $bus->shouldReceive('dispatch')->andThrow(new RuntimeException('the queue is down'));
+            },
+        ));
+
+        // The account is committed before the dispatch is attempted, and that
+        // order is deliberate: a worker reaching an uncommitted row would find
+        // no such user. So the refusal travels out of the service, and the row
+        // stays.
+        $refusal = null;
+
+        try {
+            app(ResidentAccountIssuer::class)->issue(
+                actor: $this->managerOfFirst,
+                building: $this->first,
+                attributes: ['full_name' => 'Zoya Nechaeva', 'email' => 'queue-down@example.test'],
+            );
+        } catch (Throwable $thrown) {
+            $refusal = $thrown;
+        }
+
+        $this->assertInstanceOf(RuntimeException::class, $refusal);
+        $this->assertSame('the queue is down', $refusal->getMessage());
+
+        $this->assertTrue(User::query()->where('email', 'queue-down@example.test')->exists());
+
+        $this->assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::ResidentAccountIssued->value)->count(),
+        );
+
+        $this->assertSame(
+            0,
+            AuditLog::query()->where('action', AuditAction::ResidentCredentialIssued->value)->count(),
+            'The log records a delivery the queue refused.',
+        );
     }
 
     public function test_an_address_already_in_use_is_a_malformed_request(): void
@@ -407,6 +486,300 @@ final class ResidentAccountTest extends TestCase
             ->assertJsonValidationErrors('email');
 
         Notification::assertNothingSent();
+    }
+
+    /**
+     * The second finding of the acceptance of 14.09.2026, stated as a test.
+     *
+     * The notification was `ShouldQueue` and carried the code as a public
+     * property, so the queue wrote the code in plain text into its own store —
+     * `redis-cli monitor` read it off the wire — and into `failed_jobs`
+     * whenever a delivery failed, where it stayed for good.
+     *
+     * What is queued now is a job carrying two model identifiers, and the code
+     * is minted inside the worker. The assertion is made on the bytes the queue
+     * would actually hold, and the second half of it is the stronger one: at the
+     * moment the job is queued no code exists at all, so there is nothing for
+     * the payload to leak.
+     */
+    public function test_the_queued_job_carries_no_code_because_no_code_exists_yet(): void
+    {
+        Queue::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Lidiya Zhuravleva',
+            'email' => 'nothing-on-the-wire@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'nothing-on-the-wire@example.test')->sole();
+
+        Queue::assertPushed(
+            DeliverResidentCredential::class,
+            function (DeliverResidentCredential $job) use ($resident): bool {
+                $this->assertTrue($job->resident->is($resident));
+
+                // The bytes the queue store would hold. `SerializesModels`
+                // reduces both models to a class name and a key.
+                $payload = serialize($job);
+
+                $this->assertStringNotContainsString('token', strtolower($payload));
+                $this->assertDoesNotMatchRegularExpression(
+                    '/[0-9a-f]{32,}/i',
+                    $payload,
+                    'Something that looks like a secret is in the queue payload.',
+                );
+
+                return true;
+            },
+        );
+
+        // Nothing was minted when the job was queued: the code comes into
+        // being in the worker, and a job that dies in `failed_jobs` leaves no
+        // credential behind it.
+        $this->assertSame(0, DB::table('password_reset_tokens')->count());
+    }
+
+    /**
+     * The third finding: a code that expired unspent used to end the account.
+     * The password could not be set, no second code could be issued, the
+     * account could not be removed, and `users.email` is unique — so the
+     * address was held for ever by a row nobody could use.
+     */
+    public function test_the_office_sends_a_second_code_after_the_first_has_expired(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Ilya Tregubov',
+            'email' => 'expired@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'expired@example.test')->sole();
+        $first = $this->tokenSentTo($resident);
+
+        $this->travel((int) config('auth.passwords.users.expire') + 1)->minutes();
+
+        $this->postJson('/api/v1/auth/password', [
+            'email' => 'expired@example.test',
+            'token' => $first,
+            'password' => 'too-late-for-this-one',
+            'password_confirmation' => 'too-late-for-this-one',
+        ])->assertStatus(422);
+
+        // The office sends another one. 202: the delivery was accepted, and
+        // whether a mail server takes it is not this application's fact.
+        Notification::fake();
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(202);
+
+        $second = $this->tokenSentTo($resident);
+        $this->assertNotSame($first, $second);
+
+        $this->postJson('/api/v1/auth/password', [
+            'email' => 'expired@example.test',
+            'token' => $second,
+            'password' => 'a-password-of-my-own',
+            'password_confirmation' => 'a-password-of-my-own',
+        ])->assertStatus(204);
+
+        $this->travelBack();
+
+        $this->assertFalse($resident->fresh()->password_change_required);
+    }
+
+    /**
+     * What happens to the old code: it stops. The token store keeps one token
+     * per account, so a second code is also the revocation of the first, and
+     * an office that sends a replacement does not leave two live secrets in
+     * the world.
+     */
+    public function test_a_second_code_stops_the_first(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Marfa Shilova',
+            'email' => 'replaced@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'replaced@example.test')->sole();
+        $first = $this->tokenSentTo($resident);
+
+        Notification::fake();
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(202);
+
+        $this->postJson('/api/v1/auth/password', [
+            'email' => 'replaced@example.test',
+            'token' => $first,
+            'password' => 'the-old-code-should-not-work',
+            'password_confirmation' => 'the-old-code-should-not-work',
+        ])->assertStatus(422);
+
+        $this->assertTrue($resident->fresh()->password_change_required);
+    }
+
+    /**
+     * The limit of the re-issue, and the reason it has one. A member of staff
+     * who could send a fresh code to an account already in use would hold a
+     * password reset over every resident of their building, which is a far
+     * larger power than FR-42 grants. 409: the role covers the object, and
+     * what stands in the way is the state of the account.
+     */
+    public function test_no_second_code_for_an_account_that_already_has_a_password(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Fedor Panfilov',
+            'email' => 'settled@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'settled@example.test')->sole();
+
+        $this->postJson('/api/v1/auth/password', [
+            'email' => 'settled@example.test',
+            'token' => $this->tokenSentTo($resident),
+            'password' => 'a-password-of-my-own',
+            'password_confirmation' => 'a-password-of-my-own',
+        ])->assertStatus(204);
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(409);
+    }
+
+    public function test_no_second_code_for_a_resident_of_another_dormitory(): void
+    {
+        Notification::fake();
+
+        $managerOfSecond = User::factory()
+            ->withRole(RoleCode::Manager, $this->second)
+            ->create(['email' => 'manager-of-second@example.test']);
+
+        Sanctum::actingAs($managerOfSecond);
+
+        $this->postJson("/api/v1/buildings/{$this->second->id}/residents", [
+            'full_name' => 'Agata Kurbatova',
+            'email' => 'over-there@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'over-there@example.test')->sole();
+
+        // The manager of block 1 works in block 1, and in block 1 there is no
+        // such resident. 404 and not 403: the scope is right, the subject is
+        // not in it.
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(404);
+
+        // And the same call against the dormitory the resident does belong to
+        // is refused earlier still, by the gate on the building.
+        $this->postJson("/api/v1/buildings/{$this->second->id}/residents/{$resident->id}/credential")
+            ->assertStatus(403);
+    }
+
+    public function test_a_resident_asks_for_no_codes_at_all(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Gennadiy Zheltov',
+            'email' => 'self-service@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'self-service@example.test')->sole();
+
+        Sanctum::actingAs($resident);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(403);
+    }
+
+    public function test_the_second_code_is_written_to_the_audit_log_as_a_re_issue(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Klara Yakimova',
+            'email' => 'twice-issued@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'twice-issued@example.test')->sole();
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents/{$resident->id}/credential")
+            ->assertStatus(202);
+
+        $entries = AuditLog::query()
+            ->where('action', AuditAction::ResidentCredentialIssued->value)
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $entries);
+        $this->assertFalse($entries[0]->payload['reissue']);
+        $this->assertTrue($entries[1]->payload['reissue']);
+        $this->assertSame($this->managerOfFirst->id, $entries[1]->user_id);
+        $this->assertSame($resident->id, $entries[1]->subject_id);
+        $this->assertNoSecretIn($entries[1]->payload);
+    }
+
+    /**
+     * The fourth finding, answered as far as the MVP honestly can.
+     *
+     * Confirming an address before the first message cannot be done here: the
+     * message that would carry the confirmation link is the same message that
+     * carries the credential, because the account has no other way in. What the
+     * system can state is the weaker fact — a code sent to this address was
+     * received and spent — and it states it at the moment that happens.
+     */
+    public function test_the_address_counts_as_confirmed_once_a_code_sent_to_it_is_spent(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->managerOfFirst);
+
+        $this->postJson("/api/v1/buildings/{$this->first->id}/residents", [
+            'full_name' => 'Nadezhda Zhuravleva',
+            'email' => 'unproven@example.test',
+        ])->assertStatus(201);
+
+        $resident = User::query()->where('email', 'unproven@example.test')->sole();
+
+        // Typed by the manager, checked for shape, proved by nobody.
+        $this->assertNull($resident->email_confirmed_at);
+
+        $this->postJson('/api/v1/auth/password', [
+            'email' => 'unproven@example.test',
+            'token' => $this->tokenSentTo($resident),
+            'password' => 'a-password-of-my-own',
+            'password_confirmation' => 'a-password-of-my-own',
+        ])->assertStatus(204);
+
+        $this->assertNotNull($resident->fresh()->email_confirmed_at);
+
+        $entry = AuditLog::query()
+            ->where('action', AuditAction::PasswordSet->value)
+            ->sole();
+
+        $this->assertTrue($entry->payload['email_confirmed']);
     }
 
     /**
