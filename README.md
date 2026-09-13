@@ -18,8 +18,12 @@ single-page application built by Vite. The repository holds the two applications
 cp backend/.env.example backend/.env
 docker compose up -d
 docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate
+docker compose exec app php artisan migrate --database=pgsql_owner
+docker compose exec app php artisan db:seed --database=pgsql_owner
 ```
+
+`--database=pgsql_owner` is not optional. Schema work runs as the owning role; everything else runs
+as the application role. The next section says why.
 
 PHP dependencies are not committed, so the application container installs them on its first start;
 the worker and the scheduler wait for that to finish. Nothing else has to be prepared by hand.
@@ -39,21 +43,32 @@ Compose starts seven services:
 Every port and credential has a default, so `docker compose up -d` needs no further configuration.
 To change one, put the variable in a `.env` file next to `docker-compose.yml`: `APP_PORT`,
 `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `APP_DB_ROLE`,
-`APP_DB_PASSWORD`, `REDIS_PORT`, `MINIO_PORT`, `MINIO_CONSOLE_PORT`, `MINIO_ROOT_USER`,
-`MINIO_ROOT_PASSWORD`, `MINIO_BUCKET`.
+`APP_DB_PASSWORD`, `TEST_DB_NAME`, `REDIS_PORT`, `MINIO_PORT`, `MINIO_CONSOLE_PORT`,
+`MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BUCKET`.
 
-### Two database roles
+### Two database roles, two connections
 
-PostgreSQL is provisioned with two roles rather than one, by
-`docker/postgres/initdb/10-application-role.sh`:
+The audit log is append-only (FR-33, NFR-14). The guarantee is enforced by the database, not by a
+check in a model: a migration revokes UPDATE and DELETE on `audit_logs` from the role the service
+connects as. A role cannot revoke those rights from itself, and the owner of a table cannot be locked
+out of it — so the service has to run as a role that owns nothing.
 
-- `dormitory` owns the database and runs the migrations;
-- `app_rw` is the role the running service is meant to connect as, with no superuser rights.
+`docker/postgres/initdb/10-application-role.sh` provisions two roles, and `config/database.php`
+defines one connection for each:
 
-The audit log is append-only (FR-33, NFR-14), and the migration that enforces it revokes UPDATE and
-DELETE on `audit_logs` from `app_rw`. A role cannot revoke those rights from itself, so the two roles
-have to be distinct or the migration skips itself and reports why on stderr. `DB_APPLICATION_ROLE`
-names the second role and must stay different from `DB_USERNAME`.
+| Connection | Role | Used by |
+|---|---|---|
+| `pgsql` (default) | `app_rw`, no superuser rights, owns nothing | requests, queue worker, scheduler |
+| `pgsql_owner` | `dormitory`, owns the database | `migrate`, `db:seed`, and nothing else |
+
+Under `pgsql` a direct `UPDATE` or `DELETE` on `audit_logs` — query builder, raw SQL, Eloquent, it
+makes no difference — comes back as `SQLSTATE[42501] permission denied for table audit_logs`, while
+`INSERT` and `SELECT` work normally. Every other table keeps full DML: the init script sets
+`ALTER DEFAULT PRIVILEGES`, so tables created by later migrations are covered without each migration
+having to remember to grant.
+
+`DB_APPLICATION_ROLE` tells the revocation migration which role to target and must match
+`DB_USERNAME`, which must differ from `DB_OWNER_USERNAME`.
 
 ### Object storage
 
@@ -69,10 +84,28 @@ docker compose exec minio mc mb --ignore-existing local/dormitory
 The API answers on http://localhost:8080. Artisan runs inside the application container:
 
 ```sh
-docker compose exec app php artisan migrate:fresh --seed
-docker compose exec app php artisan test
+docker compose exec app php artisan migrate:fresh --seed --database=pgsql_owner
 docker compose logs -f queue
 ```
+
+### Tests
+
+The suite runs against its own database, `dormitory_test`, created by the same init script, so a test
+run never touches development data. It needs the owning connection, because `RefreshDatabase` creates
+and drops tables:
+
+```sh
+docker compose exec \
+  -e DB_CONNECTION=pgsql_owner -e DB_DATABASE=dormitory_test \
+  -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync \
+  -e MAIL_MAILER=array -e FILESYSTEM_DISK=local \
+  app php artisan test
+```
+
+The overrides after the two database ones are not cosmetic. `phpunit.xml` asks for array cache,
+array sessions and a synchronous queue, but its `<env>` entries do not overwrite a variable the
+container already defines, so without them the login throttle keeps its counters in Redis and leaks
+state from one test into the next.
 
 The container image is pinned to PHP 8.3 and `composer.json` pins the Composer platform to the same
 version, so the lock file resolves to packages that run there even when the host has a newer PHP.
