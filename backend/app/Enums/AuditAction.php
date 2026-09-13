@@ -19,6 +19,11 @@ enum AuditAction: string
     case LoginBlocked = 'auth.login_blocked';
     case LogoutSucceeded = 'auth.logout_succeeded';
 
+    // §3.9.6 counts a refusal among the events. It is raised nowhere in a
+    // service, because a refused request never reaches one: the record is
+    // written from the exception handler, for every 403 alike.
+    case AccessDenied = 'access.denied';
+
     case BuildingViewed = 'building.viewed';
     case BuildingUsersViewed = 'building.users_viewed';
     case AuditLogViewed = 'audit_log.viewed';
