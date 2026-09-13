@@ -29,6 +29,14 @@ final class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'status' => $this->status->value,
+            /*
+             * FR-42. An account created for an incoming resident is waiting
+             * for its first password, and the client has to know which screen
+             * to draw. The flag says that much and no more: the secret itself
+             * never appears in this resource, and there is no field here it
+             * could appear in.
+             */
+            'password_change_required' => (bool) $this->password_change_required,
             'roles' => RoleGrantResource::collection($this->whenLoaded('roleGrants')),
         ];
     }
