@@ -11,6 +11,7 @@ import type { User } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
 import { showsBuildingRoll } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
+import { BuildingTabs } from '@/components/building-tabs'
 import { FieldRow, Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { RoleTag, StatusTag } from '@/components/tags'
@@ -48,15 +49,17 @@ export function BuildingPage() {
   const people = roll.data?.status === 200 ? roll.data.data.data : null
 
   return (
-    <div className="grid gap-8">
-      <div>
+    <div className="grid grid-cols-1 gap-8">
+      <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('building.heading')}</h1>
         {card !== null ? (
-          <p className="mt-1 text-lg text-steel">
+          <p className="mt-1 break-words text-lg text-steel">
             {card.name} · {card.address}
           </p>
         ) : null}
       </div>
+
+      <BuildingTabs buildingId={buildingId} />
 
       {building.isError ? <RequestRefusal error={building.error} /> : null}
 
