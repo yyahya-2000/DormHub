@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\V1\AnnouncementController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BedController;
@@ -42,10 +43,15 @@ use Illuminate\Support\Facades\Route;
 | the departure deadline (FR-20, which has no route — it is a scheduled sweep)
 | and the visitor register (FR-21).
 |
-| The remaining routes of §3.3.6 — announcements, lost-and-found and
-| maintenance — belong to later increments and are deliberately absent rather
-| than stubbed: the OpenAPI document beside this file is the input for client
-| generation, and a generated client should not carry methods that answer 404.
+| The sixth is the announcement module of increment 2: publication (FR-09), the
+| feed (FR-11) and the acknowledgement of reading (FR-12). FR-10, pinning an
+| important announcement, is Could priority and outside the MVP — there is no
+| route for it and no column behind one.
+|
+| The remaining routes of §3.3.6 — lost-and-found and maintenance — belong to
+| later increments and are deliberately absent rather than stubbed: the OpenAPI
+| document beside this file is the input for client generation, and a generated
+| client should not carry methods that answer 404.
 |
 */
 
@@ -208,6 +214,63 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('consents/{document}/withdrawal', [ConsentController::class, 'withdraw'])
         ->name('consents.withdraw');
+
+    /*
+     |--------------------------------------------------------------------------
+     | Announcements (increment 2): FR-09, FR-11, FR-12
+     |--------------------------------------------------------------------------
+     |
+     | Four routes, and three arrangements in them are decisions rather than
+     | defaults.
+     |
+     | **The feed carries no building parameter.** The audience is computed from
+     | the grants of the token, so there is no way to phrase a request for
+     | another dormitory's feed — the boundary is the absence of a parameter and
+     | not a policy somebody has to remember to call. A route
+     | `GET /buildings/{building}/announcements` would have been the symmetrical
+     | thing to write and would have put the horizontal boundary back in the
+     | hands of a check.
+     |
+     | **The archive is a flag on the feed and not a route of its own.** FR-09's
+     | «moves to the archive» is the other side of the `expires_at` comparison
+     | the feed already makes; a second route would be a second query with the
+     | same chance of disagreeing with the first.
+     |
+     | **The readers report is a sub-resource of the announcement.** It returns
+     | a named list of residents who have not complied with an instruction, and
+     | §4.6.1 calls it the natural place for a horizontal leak. It carries a
+     | policy of its own, the list is narrowed to the caller's own dormitory,
+     | and both halves are tested.
+     */
+
+    /*
+     * FR-11. The caller's own feed: addressed to their dormitory or to every
+     * dormitory, published, not yet expired, newest first, unread marked.
+     */
+    Route::get('announcements', [AnnouncementController::class, 'index'])
+        ->name('announcements.index');
+
+    /*
+     * FR-09. The warden or the manager of their own dormitory; the
+     * administrator, who alone may leave `building_id` out and address all of
+     * them.
+     */
+    Route::post('announcements', [AnnouncementController::class, 'store'])
+        ->name('announcements.store');
+
+    /*
+     * FR-12. Idempotent: a repeat returns the acknowledgement already on
+     * record rather than writing a second one.
+     */
+    Route::post('announcements/{announcement}/ack', [AnnouncementController::class, 'acknowledge'])
+        ->name('announcements.ack');
+
+    /*
+     * FR-12, second criterion. The acknowledged share and the two named lists,
+     * within the caller's own building.
+     */
+    Route::get('announcements/{announcement}/readers', [AnnouncementController::class, 'readers'])
+        ->name('announcements.readers');
 
     /*
      |--------------------------------------------------------------------------
