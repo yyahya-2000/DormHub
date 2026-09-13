@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\RoleCode;
+use App\Enums\StudyStatus;
 use App\Enums\UserStatus;
+use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
@@ -25,7 +28,16 @@ use Laravel\Sanctum\HasApiTokens;
  * question a policy asks is always the second form — «does this user hold this
  * role **in this building**» (§3.4.1, decision 1).
  */
-#[Fillable(['external_id', 'full_name', 'email', 'phone', 'password_hash', 'status'])]
+#[Fillable([
+    'external_id',
+    'full_name',
+    'email',
+    'phone',
+    'study_status',
+    'citizenship',
+    'password_hash',
+    'status',
+])]
 #[Hidden(['password_hash', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -49,6 +61,7 @@ class User extends Authenticatable
         return [
             'password_hash' => 'hashed',
             'status' => UserStatus::class,
+            'study_status' => StudyStatus::class,
         ];
     }
 
@@ -68,6 +81,66 @@ class User extends Authenticatable
     public function roleGrants(): HasMany
     {
         return $this->hasMany(RoleUser::class);
+    }
+
+    /**
+     * The whole occupancy history, newest first. Nothing is ever removed from
+     * it (§3.4.1, decision 3), which is what lets FR-06's card show where a
+     * person lived and not only where they live.
+     *
+     * @return HasMany<Residency, $this>
+     */
+    public function residencies(): HasMany
+    {
+        return $this->hasMany(Residency::class)->orderByDesc('moved_in_at')->orderByDesc('id');
+    }
+
+    /**
+     * The residency still holding a bed, if there is one. `residencies_active_user_uniq`
+     * is why the singular is safe.
+     *
+     * @return HasOne<Residency, $this>
+     */
+    public function openResidency(): HasOne
+    {
+        return $this->hasOne(Residency::class)->whereNull('moved_out_at');
+    }
+
+    /**
+     * Whether the person is resident in this building on the given day.
+     *
+     * A termination dated in the future leaves this true until that day
+     * arrives, which is the whole content of FR-05's third criterion: access
+     * to building-bound functions ends **no later than** the stated date.
+     */
+    public function residesIn(Building|int $building, ?CarbonInterface $on = null): bool
+    {
+        return Residency::query()
+            ->where('user_id', $this->getKey())
+            ->inBuilding($building)
+            ->currentOn($on ?? now())
+            ->exists();
+    }
+
+    /**
+     * Whether the housing register says this person has left the building.
+     *
+     * The question is narrower than the negation of the one above, and the
+     * difference matters. A person with no residency row at all has not been
+     * evicted: the register simply has nothing to say about them, and their
+     * role grant stands on its own. Only a person the register knows — one
+     * with a residency history in this building — and who holds none of it
+     * today has left, and it is only then that the building-bound functions
+     * close (FR-05).
+     */
+    public function hasMovedOutOf(Building|int $building, ?CarbonInterface $on = null): bool
+    {
+        $known = Residency::query()
+            ->where('user_id', $this->getKey())
+            ->inBuilding($building)
+            ->exists();
+
+        return $known && ! $this->residesIn($building, $on);
     }
 
     /**
