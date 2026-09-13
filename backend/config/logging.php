@@ -65,6 +65,20 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * Where the `log` mail transport writes, and nothing else. A rendered
+         * message holds whatever the message holds — for FR-42 that is a
+         * one-time code — so it is kept out of the application log rather than
+         * mixed into it, and rotated out after a few days instead of never.
+         */
+        'mail' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/mail.log'),
+            'level' => 'debug',
+            'max_files' => env('LOG_MAIL_DAYS', 3),
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

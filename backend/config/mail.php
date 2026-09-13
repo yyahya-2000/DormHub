@@ -70,9 +70,25 @@ return [
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
         ],
 
+        /*
+         * The development transport, which writes the whole rendered message
+         * into a log instead of sending it. It is named explicitly here for
+         * one reason: the message of FR-42 carries a one-time code, and while
+         * this transport wrote into the default channel the code stood in
+         * plain text in `storage/logs/laravel.log` — the file everybody opens
+         * to debug something else, kept for as long as the deployment lives.
+         * It goes to a channel of its own now (see config/logging.php), so a
+         * mail transcript is a mail transcript and not a line in the
+         * application log.
+         *
+         * This does not make the transport safe to run outside development. A
+         * transport that writes credentials to disk is a development
+         * transport, and a deployment that issues real accounts sets
+         * MAIL_MAILER to a real one.
+         */
         'log' => [
             'transport' => 'log',
-            'channel' => env('MAIL_LOG_CHANNEL'),
+            'channel' => env('MAIL_LOG_CHANNEL', 'mail'),
         ],
 
         'array' => [
