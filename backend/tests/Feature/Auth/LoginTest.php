@@ -139,6 +139,123 @@ final class LoginTest extends TestCase
         ])->assertOk();
     }
 
+    /**
+     * The criterion blocks the login, and says nothing about the address the
+     * attempts came from. Counting the two together made the block fall away
+     * on the first request from somewhere else.
+     */
+    public function test_the_block_holds_when_the_same_login_arrives_from_another_address(): void
+    {
+        $user = $this->resident();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.7']);
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $this->postJson('/api/v1/auth/login', [
+                'email' => $user->email,
+                'password' => 'wrong-'.$attempt,
+            ])->assertStatus(401);
+        }
+
+        // A different address, and this time the password is the right one.
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9']);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => $user->email,
+            'password' => self::PASSWORD,
+        ])
+            ->assertStatus(429)
+            ->assertJsonPath('reason', 'login_locked');
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    /**
+     * A dictionary of logins from one address fills no account counter — every
+     * login starts its own. The address counter is the one that fills.
+     */
+    public function test_an_address_is_blocked_after_enough_failures_across_different_logins(): void
+    {
+        config()->set('dormitory.auth.max_attempts_per_address', 4);
+
+        $bystander = $this->resident();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.7']);
+
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $this->postJson('/api/v1/auth/login', [
+                'email' => "nobody-{$attempt}@example.test",
+                'password' => 'guess',
+            ])->assertStatus(401);
+        }
+
+        // No single account reached its own limit of five, and the address is
+        // nevertheless closed — for an untouched account with a correct
+        // password as well.
+        $blocked = $this->postJson('/api/v1/auth/login', [
+            'email' => $bystander->email,
+            'password' => self::PASSWORD,
+        ]);
+
+        $blocked->assertStatus(429)
+            ->assertHeader('Retry-After')
+            ->assertJsonPath('reason', 'address_locked');
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::LoginLocked->value,
+            'result' => 'denied',
+        ]);
+
+        // The ceiling is on the address alone: the same account from elsewhere
+        // signs in.
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9']);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => $bystander->email,
+            'password' => self::PASSWORD,
+        ])->assertOk();
+    }
+
+    /**
+     * The route limit is a different event from the block of FR-08, and until
+     * now it answered with the framework's own body — a shape the contract
+     * does not describe, carrying a stack trace whenever APP_DEBUG is on.
+     */
+    public function test_the_request_limit_of_the_route_answers_in_the_shape_the_contract_describes(): void
+    {
+        config()->set('dormitory.auth.login_requests_per_minute', 3);
+        config()->set('dormitory.auth.max_attempts_per_address', 100);
+
+        $user = $this->resident();
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $this->postJson('/api/v1/auth/login', [
+                'email' => "nobody-{$attempt}@example.test",
+                'password' => 'guess',
+            ])->assertStatus(401);
+        }
+
+        // The fourth request carries a correct password and no account of it
+        // has failed once. It is refused by the route, not by the counter.
+        $limited = $this->postJson('/api/v1/auth/login', [
+            'email' => $user->email,
+            'password' => self::PASSWORD,
+        ]);
+
+        $limited->assertStatus(429)
+            ->assertHeader('Retry-After')
+            ->assertJsonPath('reason', 'rate_limited')
+            ->assertJsonStructure(['message', 'retry_after', 'reason']);
+
+        $this->assertIsInt($limited->json('retry_after'));
+        $this->assertGreaterThan(0, (int) $limited->json('retry_after'));
+
+        // Nothing of the framework's default body survives.
+        $this->assertNull($limited->json('exception'));
+        $this->assertNull($limited->json('file'));
+    }
+
     public function test_the_number_of_attempts_and_the_length_of_the_block_come_from_configuration(): void
     {
         config()->set('dormitory.auth.max_attempts', 2);

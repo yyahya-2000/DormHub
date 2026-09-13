@@ -9,7 +9,9 @@ use App\Models\Building;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -154,6 +156,101 @@ final class RoleModelTest extends TestCase
         $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertOk();
         $this->getJson("/api/v1/buildings/{$this->second->id}")->assertOk();
         $this->getJson("/api/v1/buildings/{$this->second->id}/users")->assertStatus(403);
+    }
+
+    /**
+     * §3.4.1, decision 1 in the schema rather than in the seeder. The
+     * acceptance run inserted a warden's grant with no building and the
+     * database took it, which handed that account every dormitory.
+     */
+    public function test_the_database_refuses_a_grant_whose_scope_does_not_match_its_role(): void
+    {
+        $this->requirePostgres();
+
+        $user = User::factory()->create();
+
+        $this->assertRefused(
+            'a role other than the administrator, granted over the system',
+            $user,
+            RoleCode::Warden,
+            null,
+        );
+
+        $this->assertRefused(
+            'the administrator, granted inside one building',
+            $user,
+            RoleCode::Administrator,
+            $this->first->getKey(),
+        );
+    }
+
+    public function test_the_database_still_accepts_the_two_shapes_the_design_allows(): void
+    {
+        $this->requirePostgres();
+
+        $warden = User::factory()->create();
+        $administrator = User::factory()->create();
+
+        $this->insertGrant($warden, RoleCode::Warden, $this->first->getKey());
+        $this->insertGrant($administrator, RoleCode::Administrator, null);
+
+        $this->assertTrue($warden->fresh()->hasRoleInBuilding(RoleCode::Warden, $this->first));
+        $this->assertTrue($administrator->fresh()->isAdministrator());
+    }
+
+    /**
+     * The copy of the code that the constraint judges is filled by the
+     * database, so a writer that has never heard of the column — every writer
+     * in this application — still produces a row the constraint can read.
+     */
+    public function test_the_grant_carries_the_code_of_its_role_without_being_told(): void
+    {
+        $this->requirePostgres();
+
+        $warden = $this->userWith(RoleCode::Warden, $this->first);
+
+        $this->assertSame(
+            RoleCode::Warden->value,
+            DB::table('role_user')->where('user_id', $warden->id)->value('role_code'),
+        );
+    }
+
+    private function requirePostgres(): void
+    {
+        if ($this->app['db']->connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('The constraint is stated in PostgreSQL and exists only there.');
+        }
+    }
+
+    /**
+     * The insert is expected to fail, and a failed statement inside PostgreSQL
+     * aborts the surrounding transaction — the very transaction RefreshDatabase
+     * rolls the test back with. A savepoint keeps the rest of the test alive.
+     */
+    private function assertRefused(string $shape, User $user, RoleCode $role, ?int $buildingId): void
+    {
+        $connection = $this->app['db']->connection();
+        $connection->statement('SAVEPOINT refused_grant');
+
+        try {
+            $this->insertGrant($user, $role, $buildingId);
+
+            $this->fail(sprintf('The database accepted %s.', $shape));
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('role_user_scope_matches_role', $exception->getMessage());
+        } finally {
+            $connection->statement('ROLLBACK TO SAVEPOINT refused_grant');
+        }
+    }
+
+    private function insertGrant(User $user, RoleCode $role, ?int $buildingId): void
+    {
+        DB::table('role_user')->insert([
+            'user_id' => $user->getKey(),
+            'role_id' => Role::query()->where('code', $role->value)->sole()->getKey(),
+            'building_id' => $buildingId,
+            'granted_at' => now(),
+        ]);
     }
 
     private function userWith(RoleCode $role, ?Building $building, ?string $email = null): User
