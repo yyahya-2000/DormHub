@@ -42,7 +42,15 @@ enum Permission: string
     /** The roll of people attached to the dormitory (FR-07). */
     case ViewPeople = 'people.view';
 
-    /** The resident card, which carries personal data (FR-06). */
+    /**
+     * The resident card, which carries personal data (FR-06).
+     *
+     * The narrowest capability in the map, and deliberately so: citizenship,
+     * telephone and study status belong to the register work, and the register
+     * work belongs to the warden and the manager. Reading a card is audited
+     * (§3.9.6), which only means the widening of this line would be visible
+     * afterwards — not that it would be harmless.
+     */
     case ViewResidentCard = 'resident_card.view';
 
     /** Creating an account for an incoming resident (FR-42). */

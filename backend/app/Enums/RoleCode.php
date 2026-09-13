@@ -95,11 +95,22 @@ enum RoleCode: string
                 Permission::ViewResidentCard,
                 Permission::IssueResidentAccount,
             ],
+            /*
+             * The duty officer approves guest requests, and for that they need
+             * to know which room a guest is bound for and who is attached to
+             * the building — the register and the roll. They do not need the
+             * resident card. FR-06's criterion names «the warden of that
+             * building and the administrator», the contract for
+             * `GET /residents/{id}` says the same, and the card carries
+             * citizenship, telephone and study status. The line is drawn here,
+             * in the one place that decides what a role may do, rather than in
+             * `UserPolicy`, which asks for the capability and is not told
+             * which roles carry it.
+             */
             self::DutyOfficer => [
                 Permission::ViewBuilding,
                 Permission::ViewRooms,
                 Permission::ViewPeople,
-                Permission::ViewResidentCard,
             ],
             self::SecurityOfficer => [
                 Permission::ViewBuilding,

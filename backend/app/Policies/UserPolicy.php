@@ -16,8 +16,10 @@ use App\Services\ResidentDirectory;
  * and to the administrator, and a resident sees only their own. Revision 2 of
  * the role model adds the manager of that building to the first group, on the
  * same footing and by the same argument: the card is the register work FR-42
- * hands him. The middle phrase is the whole difficulty. A method that asked
- * «is this user a warden»
+ * hands him. Nobody beyond that circle — acceptance found the duty officer
+ * inside it, which the criterion does not allow and which the contract for
+ * this route does not describe. The middle phrase is the whole difficulty. A
+ * method that asked «is this user a warden»
  * would pass a test written around one building and let the warden of block 1
  * read the card of a resident of block 2 — the exact violation §3.3.3 warns
  * about and §4.7.2 devotes a test to.
@@ -53,14 +55,15 @@ final readonly class UserPolicy
 
     /**
      * The warden and the manager of the building keep the register and
-     * therefore read the card. The duty officer decides guest requests naming
-     * the resident and their room, so the card is within their work as well;
-     * the security officer's is the entrance, not the register, and stops at
-     * the building card of FR-07.
+     * therefore read the card. Nobody else attached to the building does: the
+     * duty officer's work is the guest request, the security officer's is the
+     * entrance, and neither needs a resident's citizenship or telephone.
      *
      * Which of them that is, is not written here. The method asks for the
      * capability and `RoleCode::permissions()` answers, so the arrival of the
-     * building manager cost this class nothing.
+     * building manager cost this class nothing — and so did the withdrawal of
+     * the duty officer's access, which was made by striking one line from that
+     * map and touching no policy at all.
      */
     private function staffOf(User $user, int $buildingId): bool
     {
