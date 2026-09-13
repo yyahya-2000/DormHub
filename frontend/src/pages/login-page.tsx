@@ -3,11 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { useLogin } from '@/api/generated/dormitory'
-import type {
-  InvalidCredentials,
-  LoginLocked,
-  ValidationError,
-} from '@/api/generated/model'
+import type { InvalidCredentials, ValidationError } from '@/api/generated/model'
 import { ApiError } from '@/api/http-client'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -25,14 +21,38 @@ import { useFormatters } from '@/lib/format'
  * seconds left. Collapsing the second one into a general failure would be the
  * worst possible message: the person would keep typing a password that is in
  * fact correct, for fifteen minutes, with nothing on screen to explain it.
+ *
+ * 429 itself arrives from two places, and they are not the same event. The
+ * block of an account after five failed attempts answers with `retry_after` in
+ * the body. The rate limiter of the route — ten requests a minute, counted per
+ * address — answers without it, and it counts requests that never failed. On
+ * the shared computer of the security post one shift sits behind one address,
+ * so the second case reaches people who have not mistyped anything; telling
+ * them their sign-in is closed after five failures would be a statement about
+ * an event that did not happen.
  */
 
 type Refusal =
   | { kind: 'invalid'; attemptsLeft: number }
   | { kind: 'locked'; until: number }
+  | { kind: 'throttled'; until: number | null }
   | { kind: 'validation'; fields: string[] }
   | { kind: 'network' }
   | { kind: 'unexpected'; status: number }
+
+/**
+ * The seconds the body of an account block carries, or null when the answer
+ * carries no such field — the rate limiter of the route, and any 429 the
+ * server sends before its shape matches the contract. Read defensively: the
+ * body may be a string, a null, or an object of another shape entirely.
+ */
+function lockedSeconds(body: unknown): number | null {
+  if (typeof body !== 'object' || body === null) {
+    return null
+  }
+  const value = (body as { retry_after?: unknown }).retry_after
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
 
 function refusalFrom(error: unknown): Refusal {
   if (!(error instanceof ApiError)) {
@@ -43,9 +63,17 @@ function refusalFrom(error: unknown): Refusal {
     return { kind: 'invalid', attemptsLeft: body?.attempts_left ?? 0 }
   }
   if (error.status === 429) {
-    const body = error.body as LoginLocked | null
-    const seconds = body?.retry_after ?? error.retryAfterHeader ?? 0
-    return { kind: 'locked', until: Date.now() + seconds * 1000 }
+    const seconds = lockedSeconds(error.body)
+    if (seconds !== null) {
+      return { kind: 'locked', until: Date.now() + seconds * 1000 }
+    }
+    // The limiter of the route sends `Retry-After`, but nothing guarantees it.
+    // Without it the wait is simply not stated rather than guessed at.
+    const header = error.retryAfterHeader
+    return {
+      kind: 'throttled',
+      until: header === null ? null : Date.now() + header * 1000,
+    }
   }
   if (error.status === 422) {
     const body = error.body as ValidationError | null
@@ -82,24 +110,35 @@ export function LoginPage() {
     },
   })
 
-  // The block is a wait, so it is shown as one: the remaining time ticks down
-  // in front of the person instead of being stated once and going stale.
+  // Both refusals that carry a wait are shown as a wait: the remaining time
+  // ticks down in front of the person instead of being stated once and going
+  // stale. A throttled answer without `Retry-After` has no clock to run.
+  const waitUntil =
+    refusal?.kind === 'locked'
+      ? refusal.until
+      : refusal?.kind === 'throttled'
+        ? refusal.until
+        : null
+
   useEffect(() => {
-    if (refusal?.kind !== 'locked') {
+    if (waitUntil === null) {
       return
     }
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [refusal])
+  }, [waitUntil])
 
   const secondsLeft =
-    refusal?.kind === 'locked' ? Math.max(0, Math.ceil((refusal.until - now) / 1000)) : 0
+    waitUntil === null ? 0 : Math.max(0, Math.ceil((waitUntil - now) / 1000))
 
   if (session.status === 'authenticated') {
     const from = (location.state as { from?: string } | null)?.from
     return <Navigate to={from ?? '/'} replace />
   }
 
+  // Only the block of an account closes the form. Under the limiter of the
+  // route the credential is still the right one and the next minute will take
+  // it, so the button stays where the hand is.
   const isLocked = refusal?.kind === 'locked' && secondsLeft > 0
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -163,6 +202,19 @@ export function LoginPage() {
                             remaining: formatters.duration(secondsLeft),
                           })
                         : t('login.lockedOver')}
+                    </p>
+                  </>
+                ) : null}
+
+                {refusal.kind === 'throttled' ? (
+                  <>
+                    <p className="font-semibold">{t('login.throttledTitle')}</p>
+                    <p className="mt-1">
+                      {secondsLeft > 0
+                        ? t('login.throttledBody', {
+                            remaining: formatters.duration(secondsLeft),
+                          })
+                        : t('login.throttledBodySoon')}
                     </p>
                   </>
                 ) : null}
