@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\ReissueResidentCredentialRequest;
 use App\Http\Requests\Api\V1\SetPasswordRequest;
 use App\Http\Requests\Api\V1\StoreResidentAccountRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Building;
+use App\Models\User;
 use App\Services\PasswordSetup;
 use App\Services\ResidentAccountIssuer;
 use Illuminate\Http\JsonResponse;
@@ -41,6 +43,30 @@ final class ResidentAccountController extends Controller
         return UserResource::make($resident)
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * FR-42, the way back. A code lives an hour; an account whose code expired
+     * unspent used to be unreachable for good, because the address it holds is
+     * unique and nothing could release it. This route sends a second code, and
+     * the answer is 202 rather than 204: what happened is that the delivery was
+     * accepted, and whether a mail server takes it is not this application's
+     * fact to assert.
+     */
+    public function reissueCredential(
+        ReissueResidentCredentialRequest $request,
+        Building $building,
+        User $resident,
+        ResidentAccountIssuer $accounts,
+    ): Response {
+        $accounts->reissue(
+            actor: $request->user(),
+            resident: $resident,
+            building: $building,
+            ipAddress: $request->ip(),
+        );
+
+        return response()->noContent(202);
     }
 
     public function setPassword(SetPasswordRequest $request, PasswordSetup $passwords): Response

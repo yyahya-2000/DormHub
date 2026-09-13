@@ -57,7 +57,7 @@ class AppServiceProvider extends ServiceProvider
             pageSize: (int) config('dormitory.audit.page_size'),
         ));
 
-        $this->registerLoginRateLimiter();
+        $this->registerRouteRateLimiters();
     }
 
     public function boot(): void
@@ -68,39 +68,70 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * The per-address request limit the sign-in route carries.
+     * The two per-address request limits the unauthenticated routes carry.
      *
-     * The framework's own refusal for this limiter is a bare «Too Many
+     * The framework's own refusal for a named limiter is a bare «Too Many
      * Attempts.», and with APP_DEBUG on it arrives with a stack trace attached
      * — a body that matches nothing in api/openapi.yaml, although the contract
-     * is what the client is generated from. The limiter is therefore given a
+     * is what the client is generated from. Each limiter is therefore given a
      * response of its own, shaped like every other 429 of this API: a message,
      * the seconds to wait, and the reason that tells it apart from the block
      * that follows failed attempts.
      *
-     * The definition is attached to the rate limiter as it is resolved rather
+     * **Why there are two (acceptance of 14.09.2026).** `POST /auth/password`
+     * used to share the sign-in limiter, on the argument that guessing a
+     * one-time code is the same kind of attempt as guessing a password. The
+     * argument holds; sharing a *counter* does not follow from it. Both routes
+     * are keyed by network address, and a dormitory is one address: six
+     * attempts at a code closed the sign-in route for everybody behind the same
+     * NAT, which is a denial of service anybody can trigger from a phone.
+     * Separate counters keep the defence and drop the collateral — an attack on
+     * one road no longer bars the other.
+     *
+     * The definitions are attached to the rate limiter as it is resolved rather
      * than declared once during boot. The limiter holds the cache store it was
      * built with, so anything that has to change the store — the test suite
      * pinning the array driver, for one — drops the instance and asks for a
      * new one; a definition registered on the old instance would be gone with
      * it, and the route would answer 500 instead of 429.
      */
-    private function registerLoginRateLimiter(): void
+    private function registerRouteRateLimiters(): void
     {
-        $this->app->afterResolving(
-            RateLimiter::class,
-            fn (RateLimiter $limiter) => $limiter->for('login', $this->loginLimit(...)),
-        );
+        $this->app->afterResolving(RateLimiter::class, function (RateLimiter $limiter): void {
+            $limiter->for('login', $this->loginLimit(...));
+            $limiter->for('password-setup', $this->passwordSetupLimit(...));
+        });
     }
 
     private function loginLimit(Request $request): Limit
     {
-        return Limit::perMinute(
-            (int) config('dormitory.auth.login_requests_per_minute')
-        )
+        return $this->perAddress(
+            $request,
+            (int) config('dormitory.auth.login_requests_per_minute'),
+            'Too many sign-in requests from this address. Try again shortly.',
+        );
+    }
+
+    /**
+     * The same shape, a counter of its own, and a message that names the route
+     * it actually refused — the shared limiter used to answer an attempt to set
+     * a password with a sentence about signing in.
+     */
+    private function passwordSetupLimit(Request $request): Limit
+    {
+        return $this->perAddress(
+            $request,
+            (int) config('dormitory.auth.password_requests_per_minute'),
+            'Too many attempts to set a password from this address. Try again shortly.',
+        );
+    }
+
+    private function perAddress(Request $request, int $perMinute, string $message): Limit
+    {
+        return Limit::perMinute($perMinute)
             ->by($request->ip() ?? 'unknown')
             ->response(fn (Request $request, array $headers) => response()->json([
-                'message' => 'Too many sign-in requests from this address. Try again shortly.',
+                'message' => $message,
                 'retry_after' => (int) ($headers['Retry-After'] ?? 60),
                 'reason' => ThrottleReason::RateLimited->value,
             ], 429, $headers));

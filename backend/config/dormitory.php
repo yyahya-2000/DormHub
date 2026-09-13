@@ -42,6 +42,13 @@ return [
         // different event: see App\Enums\ThrottleReason.
         'login_requests_per_minute' => (int) env('AUTH_LOGIN_REQUESTS_PER_MINUTE', 10),
 
+        // The same for `POST /auth/password`, counted separately. Sharing the
+        // ceiling above meant a handful of guesses at a one-time code shut the
+        // sign-in route for every device behind the same address, and a
+        // dormitory is one address. The two roads are defended apart so that
+        // an attack on one cannot close the other.
+        'password_requests_per_minute' => (int) env('AUTH_PASSWORD_REQUESTS_PER_MINUTE', 10),
+
         // Lifetime of an issued API token, in minutes. NULL means the token
         // does not expire on its own and is revoked by signing out.
         'token_ttl_minutes' => env('AUTH_TOKEN_TTL_MINUTES') !== null

@@ -53,12 +53,15 @@ Route::post('auth/login', [AuthController::class, 'login'])
 
 /*
  * FR-42, the resident's end of it. Unauthenticated by necessity — the account
- * has no password yet — and behind the same per-address limiter as the sign-in
- * route, because a one-time code is a secret and guessing at it is the same
- * kind of attempt.
+ * has no password yet — and behind a per-address limiter of its own, because a
+ * one-time code is a secret and guessing at it is the same kind of attempt.
+ *
+ * A limiter of its own and not the sign-in one. Both are keyed by address, and
+ * a dormitory is one address: while they shared a counter, a few guesses at a
+ * code locked everybody behind that address out of signing in.
  */
 Route::post('auth/password', [ResidentAccountController::class, 'setPassword'])
-    ->middleware('throttle:login')
+    ->middleware('throttle:password-setup')
     ->name('auth.password.set');
 
 Route::middleware('auth:sanctum')->group(function (): void {
@@ -109,6 +112,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
      */
     Route::post('buildings/{building}/residents', [ResidentAccountController::class, 'store'])
         ->name('buildings.residents.store');
+
+    /*
+     * FR-42, the way back out of a lost code. The same circle of accounts as
+     * the route above, because sending a second code is the same act as
+     * sending the first; the code goes to the address on the account, and the
+     * person who asks for it never sees it.
+     */
+    Route::post('buildings/{building}/residents/{resident}/credential', [ResidentAccountController::class, 'reissueCredential'])
+        ->name('buildings.residents.credential');
 
     /*
      * FR-02. The register of rooms and places, kept per building.
