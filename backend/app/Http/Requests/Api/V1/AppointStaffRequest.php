@@ -7,6 +7,8 @@ namespace App\Http\Requests\Api\V1;
 use App\Enums\RoleCode;
 use App\Models\Building;
 use App\Models\User;
+use App\Rules\NotAResidentOfAnotherDormitory;
+use App\Services\ResidentDirectory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,6 +24,14 @@ use Illuminate\Validation\Rule;
  * value validated and then trusted: a warden may appoint a manager and may not
  * appoint another warden, and both answers come out of the same call to the
  * gate.
+ *
+ * **And so is the subject (acceptance of 14.09.2026).** `exists:users,id` was
+ * the whole of the check on `user_id`, which made every account in the system
+ * appointable by every warden — and, while the card followed staff grants, made
+ * every card readable to every warden in two calls. The identifier is now put
+ * to `NotAResidentOfAnotherDormitory` as well, which refuses the one case the
+ * route has no operational reading for: a person another dormitory's register
+ * answers for.
  */
 final class AppointStaffRequest extends FormRequest
 {
@@ -50,8 +60,20 @@ final class AppointStaffRequest extends FormRequest
      */
     public function rules(): array
     {
+        $building = $this->route('building');
+
         return [
-            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'user_id' => [
+                'required',
+                'integer',
+                'exists:users,id',
+                // The subject is part of the question too, and not only the
+                // scope. See the rule: an account the register of another
+                // dormitory answers for is not appointable here.
+                ...($building instanceof Building
+                    ? [new NotAResidentOfAnotherDormitory($building, $this->container->make(ResidentDirectory::class))]
+                    : []),
+            ],
             'role' => ['required', Rule::enum(RoleCode::class)],
         ];
     }
