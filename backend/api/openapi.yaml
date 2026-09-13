@@ -225,6 +225,11 @@ paths:
         The administrator sees every dormitory; every other role sees the ones its
         grants name. This is the «empty scoped result» half of FR-07's criterion:
         the route is not refused, the answer is narrowed.
+
+        A resident the register shows as moved out is narrowed out too, even
+        though eviction revokes no role grant. The listing and
+        `GET /buildings/{building}` answer the same question, so no row here
+        leads to a 403 there.
       operationId: listBuildings
       responses:
         '200':
@@ -257,7 +262,10 @@ paths:
               $ref: '#/components/schemas/BuildingInput'
       responses:
         '201':
-          description: The dormitory was registered. The change is in the audit log.
+          description: >-
+            The dormitory was registered. The change is in the audit log. The
+            answer carries the regime settings that were defaulted, so it matches
+            a subsequent read of the same dormitory field for field.
           content:
             application/json:
               schema:
@@ -308,8 +316,10 @@ paths:
       summary: The register of rooms and places of one dormitory
       description: |
         FR-02. Each entry carries the capacity, the places registered, the places
-        occupied and the free remainder, so that a client never has to subtract
-        and arrive at a figure the server did not refuse on.
+        occupied, how many further places may be registered (`free_places`) and
+        how many registered places are free for somebody to move into
+        (`vacant_beds`), so that a client never has to subtract and arrive at a
+        figure the server did not refuse on.
 
         The administrator, and the warden, manager or duty officer **of this
         building**. A resident does not read the occupancy of the whole dormitory.
@@ -504,11 +514,18 @@ paths:
         to write the row.
 
         Two residents cannot hold one place over overlapping periods. The refusal
-        comes from the partial unique index `residencies_active_bed_uniq` in the
+        comes from the exclusion constraint `residencies_bed_no_overlap` in the
         database, not from a check in the application, and the 409 it produces
         carries the conflicting record under `conflict`. A resident already
-        holding another place is refused the same way, from the index on the
-        resident.
+        holding another place is refused the same way, by
+        `residencies_user_no_overlap`.
+
+        The rule is about **periods**, not about open records. A `moved_in_at`
+        backdated underneath a residency that is already running is refused, and
+        so is a place whose termination has been recorded for a date still to
+        come. The bounds are closed below and open above, so a move-in on the
+        very day the last occupant leaves is admitted: a bed changes hands
+        without a night of nobody in it.
       operationId: createResidency
       requestBody:
         required: true
@@ -533,8 +550,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           description: |
-            The place is held by an open residency, or the person already holds
-            another place. The record standing in the way is in `conflict`.
+            The place is held over a period that overlaps the one asked for, or
+            the person already holds another place over such a period. The record
+            standing in the way is in `conflict` — it may well be one whose
+            termination date lies in the future.
           content:
             application/json:
               schema:
@@ -556,14 +575,20 @@ paths:
       summary: End a residency
       description: |
         FR-05. The row is **not** deleted: the ground and the date are written,
-        the place is freed at once, and the history stays readable on the card of
-        FR-06.
+        and the history stays readable on the card of FR-06.
 
-        `moved_out_at` may lie in the future. The place is free from the moment
-        the termination is recorded, while the person's access to building-bound
-        routes runs until the stated date and is gone on it — «no later than the
-        stated date». `is_open` and `is_current` on the returned record are the
-        two halves of that and can differ.
+        `moved_out_at` may lie in the future, and then nothing else changes yet.
+        The record stays `active`, the place stays `occupied`, and the person's
+        access to building-bound routes runs until the stated date and is gone on
+        it — «no later than the stated date». `is_open` becomes false because a
+        departure date is now written down; `is_current` stays true because the
+        person is still living there. The two are the halves of that distinction
+        and they are meant to differ.
+
+        On the stated date the record becomes `ended` and the place becomes
+        `free`, done by the nightly `housing:settle-residencies` when no request
+        happens to be doing it. A termination dated today does all of it at
+        once.
 
         The ground is required. A termination with an empty reason is refused with
         422.
@@ -616,13 +641,18 @@ paths:
       summary: The resident card
       description: |
         FR-06. Visible to the warden and the manager **of that dormitory** and to
-        the administrator; a resident sees only their own. The warden of building 1
-        requesting a card of building 2 gets 403, at the API and not merely in the
-        interface.
+        the administrator; a resident sees only their own. Nobody else: the duty
+        officer's work is the guest request and the security officer's is the
+        entrance, and neither needs a citizenship or a telephone number. The
+        warden of building 1 requesting a card of building 2 gets 403, at the API
+        and not merely in the interface.
 
         The card carries the name, the study status, the citizenship, the contact,
         the current place, the whole residency history and the open obligations.
-        Reading it is recorded in the audit log, because it carries personal data.
+        `current_bed` and `open_obligations` are read as «resident today», not as
+        «no departure date written»: somebody leaving at the end of December has
+        a current place until the end of December. Reading the card is recorded in
+        the audit log, because it carries personal data.
       operationId: showResidentCard
       parameters:
         - $ref: '#/components/parameters/ResidentId'
@@ -714,13 +744,21 @@ paths:
       tags: [Buildings]
       summary: Delete a dormitory
       description: |
-        FR-01, second criterion. A dormitory that has rooms attached cannot be
-        deleted, and the refusal states why: 409 with the number of rooms standing
-        in the way and the two ways out — move or delete the rooms, or archive the
-        dormitory instead.
+        FR-01, second criterion. A dormitory that still has anything attached
+        cannot be deleted, and the refusal states **which** thing: 409 whose
+        `blocked_by` carries both counts and whose message names the one that
+        actually refused.
 
-        The block is `ON DELETE RESTRICT` on `rooms.building_id`. It is the
-        database that refuses, so it holds against code that forgot to ask.
+        Two foreign keys point at a dormitory and either can block the delete:
+        `rooms.building_id` and `role_user.building_id`, both `ON DELETE
+        RESTRICT`. It is the database that refuses, so the rule holds against
+        code that forgot to ask.
+
+        The way out depends on which it was. A staff grant is revoked through
+        `DELETE /buildings/{building}/staff/{user}/{role}`. Rooms are not:
+        this API has no route that deletes or moves one, so the message points at
+        archiving instead, which keeps the rooms and their residency history
+        readable.
       operationId: deleteBuilding
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -734,7 +772,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Rooms are attached. The body states the reason and the count.
+          description: >-
+            Rooms or staff grants are attached. The body states which, and both
+            counts.
           content:
             application/json:
               schema:
@@ -1092,6 +1132,7 @@ components:
         - building.rooms_viewed
         - room.created
         - room.updated
+        - room.update_refused
         - bed.created
         - bed.creation_refused
         - residency.assigned
@@ -1228,10 +1269,19 @@ components:
         the authority. `blocked` is the one value the register knows nothing
         about: an administrative decision that the place takes nobody, and the
         reason the field is stored rather than computed.
+
+        A place whose occupant leaves at midnight reads `occupied` until the
+        nightly settlement runs. It never reads `free` while somebody holds it,
+        and a residency written against a place that is in fact held is refused
+        by the exclusion constraint whatever this field says.
       enum: [free, occupied, blocked]
 
     ResidencyStatus:
       type: string
+      description: |
+        A projection of the period, and of nothing else. A residency is `active`
+        while the person is resident and `ended` once the stated departure date
+        has arrived — never before it, however long ago the notice was written.
       enum: [active, ended]
 
     StudyStatus:
@@ -1244,7 +1294,13 @@ components:
         Fields of a dormitory. All of them are required on creation; on an edit
         send only what changes.
       properties:
-        name: { type: string, maxLength: 255 }
+        name:
+          type: string
+          maxLength: 255
+          description: >-
+            Unique across the register. A collision comes back as a 422 on this
+            field, from the form rule or, in a race between two requests, from
+            the unique index behind it.
         address: { type: string, maxLength: 255 }
         floors_count: { type: integer, minimum: 1, maximum: 100 }
         visiting_from:
@@ -1297,7 +1353,7 @@ components:
 
     Room:
       type: object
-      required: [id, building_id, number, floor, capacity, beds_count, free_places]
+      required: [id, building_id, number, floor, capacity, beds_count, free_places, vacant_beds]
       properties:
         id: { type: integer, format: int64 }
         building_id: { type: integer, format: int64 }
@@ -1322,8 +1378,18 @@ components:
           type: integer
           minimum: 0
           description: >-
-            `capacity` minus the places registered. This is the figure the
-            capacity rejection names, sent so that a client never computes its own.
+            How many further places may still be **registered**: `capacity` minus
+            the places registered. This is the figure the capacity rejection
+            names, sent so that a client never computes its own. It is not the
+            number of places somebody could move into — see `vacant_beds`.
+        vacant_beds:
+          type: integer
+          minimum: 0
+          description: >-
+            How many registered places are free for somebody to move into today.
+            A blocked place counts for neither this nor `occupied_beds_count`.
+            A room of four places with one occupant reports `free_places: 0` and
+            `vacant_beds: 3`, and the two answer different questions.
         beds:
           type: array
           description: Present when the places were loaded for this response.
@@ -1351,10 +1417,11 @@ components:
     Residency:
       type: object
       description: |
-        One residency, past or present. `is_open` says the place is still held;
-        `is_current` says the person may still use the dormitory. A termination
-        dated in the future makes the two differ, which is FR-05's third
-        criterion.
+        One residency, past or present. `is_open` says no departure date has been
+        written down; `is_current` says the person is resident today. A
+        termination dated in the future makes the two differ — `is_open: false`
+        with `is_current: true` — which is FR-05's third criterion. `is_current`
+        is the one to filter a list of residents on; `status` follows it.
       required: [id, user_id, bed_id, contract_number, moved_in_at, status, is_open, is_current]
       properties:
         id: { type: integer, format: int64 }
@@ -1549,10 +1616,14 @@ components:
         entity_id: { type: integer, format: int64 }
         blocked_by:
           type: object
-          description: What is attached, by kind and count.
+          description: >-
+            What is attached, by kind and count. Every known kind is present,
+            including the ones that are nought, so that the numbers and the
+            message cannot contradict each other.
           additionalProperties: { type: integer }
           examples:
-            - { rooms: 12 }
+            - { rooms: 12, role_grants: 0 }
+            - { rooms: 0, role_grants: 3 }
 
     AuditEntry:
       type: object
