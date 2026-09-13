@@ -25,13 +25,24 @@ export function AppShell() {
   const buildings = buildingsOf(user)
   const primaryBuilding = buildings[0]
 
-  const tabs: { to: string; label: string }[] = []
+  /*
+   * The sections, built from the grants of the account. A tab is drawn when the
+   * account has some chance of being answered — the register of dormitories is
+   * drawn for everyone because the server narrows the list rather than refusing
+   * it, and the audit log for the administrator alone because the server
+   * refuses everyone else. None of this is a permission: every route below
+   * stays reachable by hand and is decided by the API (§3.3.2).
+   */
+  const tabs: { to: string; label: string; end?: boolean }[] = [
+    { to: '/', label: t('app.section.register'), end: true },
+  ]
   if (primaryBuilding !== undefined) {
     tabs.push({
       to: `/buildings/${primaryBuilding}`,
       label: t('app.section.building'),
     })
   }
+  tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
   if (showsAuditLink(user)) {
     tabs.push({ to: '/audit-logs', label: t('app.section.audit') })
   }
@@ -68,6 +79,7 @@ export function AppShell() {
               <li key={tab.to}>
                 <NavLink
                   to={tab.to}
+                  end={tab.end ?? false}
                   className={({ isActive }) =>
                     cn(
                       'inline-block border-b-4 px-3 py-3 font-medium transition-colors',
