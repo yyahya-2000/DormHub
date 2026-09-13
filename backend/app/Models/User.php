@@ -99,8 +99,8 @@ class User extends Authenticatable
     }
 
     /**
-     * The residency still holding a bed, if there is one. `residencies_active_user_uniq`
-     * is why the singular is safe.
+     * The residency with no recorded end, if there is one.
+     * `residencies_user_no_overlap` is why the singular is safe.
      *
      * @return HasOne<Residency, $this>
      */

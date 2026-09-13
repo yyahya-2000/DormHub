@@ -17,8 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * BED of the ER model (§3.4.3): the unit of residency (§3.4.1, decision 2).
  *
  * `activeResidency` is a `HasOne` over a table that holds many rows per bed,
- * and the singular is earned rather than assumed: `residencies_active_bed_uniq`
- * makes at most one of them open at any moment.
+ * and the singular is earned rather than assumed: `residencies_bed_no_overlap`
+ * makes at most one of them hold the bed on any given day.
  */
 #[Fillable(['room_id', 'label', 'status'])]
 class Bed extends Model
@@ -64,8 +64,9 @@ class Bed extends Model
     }
 
     /**
-     * The open residency, if there is one. At most one can exist, and the
-     * partial unique index rather than this relation is what guarantees it.
+     * The residency with no recorded end, if there is one. At most one can
+     * exist, and the exclusion constraint rather than this relation is what
+     * guarantees it.
      *
      * @return HasOne<Residency, $this>
      */

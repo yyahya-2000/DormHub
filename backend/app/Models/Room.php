@@ -84,14 +84,36 @@ class Room extends Model
     }
 
     /**
-     * The free remainder the rejection of FR-02 has to name. Never negative:
-     * the register refuses to create the bed that would make it so, and a
-     * capacity lowered below the beds already registered reads as zero rather
-     * than as a negative number nobody can act on.
+     * How many further places may still be **registered** in this room:
+     * capacity minus the beds that exist. This is the remainder FR-02's
+     * rejection has to name, and it is deliberately not «places somebody could
+     * move into» — a room of four beds with one occupant has nought free
+     * places by this reckoning and three vacant beds by the next one.
+     *
+     * The two were confused for one number until acceptance read the register
+     * of a half-empty room and saw zero. They are now both sent, under names
+     * that say which is which.
+     *
+     * Never negative: the register refuses to create the bed that would make
+     * it so, and a capacity lowered below the beds already registered reads as
+     * zero rather than as a number nobody can act on.
      */
     public function freePlaces(): int
     {
         return max(0, $this->capacity - $this->bedsCount());
+    }
+
+    /**
+     * How many registered places are free for somebody to move into today.
+     *
+     * A blocked bed counts for neither side: nobody holds it and nobody may be
+     * put in it, which is the one state `BED.status` exists to express.
+     */
+    public function vacantBeds(): int
+    {
+        return $this->relationLoaded('beds')
+            ? $this->beds->filter(fn (Bed $bed): bool => $bed->isAssignable())->count()
+            : $this->beds()->where('status', BedStatus::Free->value)->count();
     }
 
     public function occupiedBedsCount(): int

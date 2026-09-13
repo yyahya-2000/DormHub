@@ -19,17 +19,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Two different questions are asked of this table and they have different
  * answers, which is the subtlety FR-05 turns on.
  *
- * **Is the bed taken?** `moved_out_at IS NULL`. The moment a termination date
- * is written the bed is free and may receive somebody else, which is the
- * second criterion of FR-05 — «the bed becomes free automatically after
- * eviction».
+ * **Is the record closed?** `moved_out_at IS NOT NULL`. That is a fact about
+ * the paperwork: a termination has been written down. It is *not* the same as
+ * the bed being available, and reading it as though it were is the defect
+ * acceptance walked through — a termination recorded for the 31st of December
+ * closed the record in September and let somebody else be moved into an
+ * occupied bed.
  *
- * **May the person still use the dormitory?** `isCurrentOn($date)`. A
- * termination may be recorded with a date in the future, and until that date
- * arrives the person is still living there. FR-05's third criterion sets the
- * boundary from the other side — access ends **no later than** the stated
- * date — so the comparison is strict: on the stated date itself, access is
- * already gone.
+ * **May the person still use the dormitory, and is the bed still theirs?**
+ * `isCurrentOn($date)`. A termination may be recorded with a date in the
+ * future, and until that date arrives the person is still living there.
+ * FR-05's third criterion sets the boundary from the other side — access ends
+ * **no later than** the stated date — so the comparison is strict: on the
+ * stated date itself, access is already gone, and the bed is free from that
+ * morning for the next occupant.
+ *
+ * FR-03 is asked of the period rather than of either flag, and it is asked of
+ * the database: `residencies_bed_no_overlap` and `residencies_user_no_overlap`
+ * exclude two rows whose `[moved_in_at, moved_out_at)` ranges intersect on one
+ * bed, or on one person. `scopeOverlapping()` below asks the same question in
+ * SQL, and it is used only to *show* the row that stands in the way — never to
+ * decide, because a read that precedes a write decides nothing that a
+ * concurrent request cannot undo.
  */
 #[Fillable([
     'user_id',
@@ -130,6 +141,29 @@ class Residency extends Model
             ->where(function (Builder $inner) use ($date): void {
                 $inner->whereNull('moved_out_at')->orWhereDate('moved_out_at', '>', $date);
             });
+    }
+
+    /**
+     * Residencies whose period intersects `[$from, $until)`, with an absent
+     * `$until` meaning «and onwards, without end».
+     *
+     * The same arithmetic the exclusion constraint performs, expressed in the
+     * query builder so that the conflicting record can be shown to the warden
+     * after the database has refused the insert. The bounds are closed below
+     * and open above, exactly as in the constraint, so a residency ending on
+     * the day another begins is not a conflict here either.
+     *
+     * @param  Builder<Residency>  $query
+     */
+    public function scopeOverlapping(Builder $query, CarbonInterface $from, ?CarbonInterface $until = null): void
+    {
+        $query->where(function (Builder $inner) use ($from): void {
+            $inner->whereNull('moved_out_at')->orWhereDate('moved_out_at', '>', $from);
+        });
+
+        if ($until !== null) {
+            $query->whereDate('moved_in_at', '<', $until);
+        }
     }
 
     /**

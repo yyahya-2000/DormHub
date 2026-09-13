@@ -23,6 +23,29 @@ class Building extends Model
     use HasFactory;
 
     /**
+     * The same defaults the migration writes, repeated here for the same
+     * reason `Room` and `Residency` repeat theirs: a row created without them
+     * is complete in memory and not only after a round trip to the database.
+     *
+     * Without this, `POST /buildings` answered with `visiting_from`,
+     * `visiting_to`, `curfew_at` and `is_active` all null — the model had
+     * never been told what the column defaults are, and the response is built
+     * from the instance that was just saved rather than from a re-read. The
+     * contract declares `is_active` a required boolean, so a generated client
+     * typed it `boolean` and received null on the one response that creates
+     * the object.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'floors_count' => 1,
+        'visiting_from' => '08:00:00',
+        'visiting_to' => '23:00:00',
+        'curfew_at' => '23:00:00',
+        'is_active' => true,
+    ];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
