@@ -9,7 +9,10 @@
       "myCard": "My card",
       "audit": "Audit log",
       "notifications": "Notifications",
-      "personalData": "Personal data"
+      "personalData": "Personal data",
+      "checkpoint": "Security post",
+      "guestQueue": "Requests",
+      "guests": "Guests"
     }
   },
   "common": {
@@ -86,7 +89,27 @@
     "contact": "Contact",
     "account_status": "Account state",
     "email": "Email",
-    "password": "Password"
+    "password": "Password",
+    "guest_full_name": "Guest's full name",
+    "guest_doc_type": "Document type",
+    "guest_doc_number": "Document number",
+    "visit_date": "Date of the visit",
+    "planned_from": "Arrival",
+    "planned_to": "Departure",
+    "purpose": "Purpose",
+    "reason": "Reason",
+    "override_reason": "Reason for admitting on the decision",
+    "responsible_officer_mark": "Responsible officer's mark",
+    "building_id": "Dormitory",
+    "guest_request_id": "Request",
+    "guest_visit_id": "Visit",
+    "code": "Access code",
+    "surname": "Surname",
+    "revision": "Revision of the text",
+    "correction": "Text of the correction",
+    "from": "Start of the period",
+    "until": "End of the period",
+    "format": "Export format"
   },
   "login": {
     "title": "Sign in",
@@ -139,7 +162,9 @@
       "rooms": "Rooms and places",
       "plan": "Floor plan",
       "staff": "Staff",
-      "accounts": "Accounts"
+      "accounts": "Accounts",
+      "guestRequests": "Guest requests",
+      "visitRegister": "Visitor register"
     },
     "fields": {
       "id": "Number in the system",
@@ -360,7 +385,26 @@
       "staff.appointed": "Staff member appointed",
       "staff.revoked": "Staff role revoked",
       "resident.account_issued": "Resident account issued",
-      "auth.password_set": "Account password set"
+      "auth.password_set": "Account password set",
+      "resident.credential_issued": "One-time sign-in code issued",
+      "consent.granted": "Consent given",
+      "consent.withdrawn": "Consent withdrawn",
+      "guest_request.submitted": "Guest request filed",
+      "guest_request.approved": "Guest request approved",
+      "guest_request.rejected": "Guest request refused",
+      "guest_request.cancelled": "Guest request withdrawn",
+      "guest_request.expired": "Guest request lapsed",
+      "guest_request.decision_refused": "Decision on a guest request refused",
+      "guest_request.document_viewed": "Guest's document number read",
+      "checkpoint.guest_verified": "Guest verified at the post",
+      "checkpoint.entry_recorded": "Guest entry recorded",
+      "checkpoint.entry_refused": "Entry refused",
+      "checkpoint.admitted_on_decision": "Admitted on the responsible officer's decision",
+      "checkpoint.exit_recorded": "Guest exit recorded",
+      "guest_visit.overdue": "Visit overdue",
+      "guest_visit.corrected": "Correction against a visit",
+      "visit_register.viewed": "Visitor register read",
+      "visit_register.exported": "Visitor register exported"
     },
     "results": {
       "success": "Success",
@@ -618,5 +662,274 @@
     "throttledBodySoon": "Too many attempts have come from this address in a row and the server stopped taking them. Try again shortly.",
     "note": "The number of attempts is limited here exactly as it is at sign-in: guessing at a one-time code is guessing.",
     "backToLogin": "Back to sign-in"
+  },
+  "guestStatus": {
+    "pending_review": "Awaiting a decision",
+    "approved": "Approved",
+    "in_progress": "Guest in the building",
+    "overdue": "Departure deadline passed",
+    "rejected": "Refused",
+    "cancelled": "Withdrawn",
+    "expired": "Lapsed undecided",
+    "completed": "Completed"
+  },
+  "visitStatus": {
+    "in_building": "In the building",
+    "closed": "Left",
+    "overdue": "Deadline passed",
+    "closed_late": "Left after the deadline"
+  },
+  "guestDocumentType": {
+    "internal_passport": "Internal passport",
+    "foreign_passport": "Foreign or travel passport",
+    "residence_permit": "Residence or temporary-residence permit",
+    "student_card": "Student card",
+    "driving_licence": "Driving licence"
+  },
+  "guest": {
+    "heading": "Guests",
+    "lead": "The resident files the request, the duty officer of the building approves it, the security post records the entry and the exit.",
+    "buildingChoice": "Dormitory",
+    "noResidency": "A guest is invited by somebody who lives here. The register holds no place for you at the moment — speak to the warden.",
+    "formHeading": "New request",
+    "windowAside": "Visiting hours {{from}} to {{to}}",
+    "windowNote": "The interval has to fall inside the visiting hours of this dormitory: {{from}} to {{to}}. The hours come from the building row rather than from the source — change the regime of the building and this form changes with it.",
+    "windowBreached": "The time given falls outside the visiting hours, {{from}} to {{to}}. The server will refuse the request.",
+    "fields": {
+      "guestName": "Guest's full name",
+      "guestNameNote": "As written in the document the guest will present at the post.",
+      "docType": "Document",
+      "docNumber": "Document number",
+      "docNumberNote": "Stored encrypted and never returned. Screens show the last four characters.",
+      "visitDate": "Date of the visit",
+      "plannedFrom": "Arrival",
+      "plannedTo": "Departure",
+      "purpose": "Purpose",
+      "purposeNote": "Optional. A stated purpose makes the decision easier."
+    },
+    "foreignTitle": "Foreign document",
+    "foreignBody": "The request will be flagged and the warning about the university's procedure attached. A visit running past midnight is not approved without the mark of the officer responsible for migration registration.",
+    "foreignNotSubmitted": "The system submits no arrival notification of its own.",
+    "submit": "File the request",
+    "filedTitle": "Request for {{name}} filed",
+    "filedBody": "The duty officer of the building decides. The access code appears here once the request is approved: before the decision there is none.",
+    "mineHeading": "My requests",
+    "mineCount_one": "{{count, number}} request",
+    "mineCount_other": "{{count, number}} requests",
+    "mineEmpty": "Nothing filed yet.",
+    "codeLabel": "Access code",
+    "codeNote": "Give it to the guest. At the post it is typed into the terminal.",
+    "decisionComment": "The duty officer wrote: {{comment}}",
+    "visitRecorded": "Entry recorded {{entered}}, exit {{left}}.",
+    "visitStillIn": "not yet recorded",
+    "withdraw": "Withdraw the request"
+  },
+  "guestQueue": {
+    "heading": "Guest requests",
+    "leadDuty": "The duty officer of this dormitory decides. A refusal without a reason is impossible: the reason is stored and reaches the resident.",
+    "leadReadOnly": "The queue of this dormitory, read only. The duty officer approves and refuses.",
+    "filterHeading": "Filter",
+    "filterStatus": "State",
+    "filterAll": "Every state",
+    "filterDate": "Date of the visit",
+    "filterDateNote": "Leave empty for every day.",
+    "listHeading": "Queue",
+    "listCount_one": "{{count, number}} request",
+    "listCount_other": "{{count, number}} requests",
+    "empty": "Nothing matches this filter.",
+    "fields": {
+      "when": "When",
+      "host": "Inviting resident",
+      "decidedAt": "Decided at"
+    },
+    "approve": "Approve",
+    "reject": "Refuse",
+    "rejectConfirm": "Refuse with this reason",
+    "reasonRequired": "The reason is required. The resident sees it in full.",
+    "reasonDirectory": "From the directory",
+    "reasonPick": "Pick a reason",
+    "reasonLabel": "Reason for the refusal",
+    "reasonNote": "A reason from the directory can be edited. Three characters at least.",
+    "reasons": {
+      "quotaSpent": "The number of guests approved for that date is already at the ceiling.",
+      "outsideWindow": "The hours asked for fall outside the visiting window of the dormitory.",
+      "documentUnclear": "The document data are incomplete or disagree with the request.",
+      "residentAbsent": "The inviting resident is away at that time.",
+      "quarantine": "Guests are restricted for now by an order over this dormitory."
+    },
+    "officerMarkLabel": "Mark of the officer responsible for migration registration",
+    "officerMarkNote": "The document is a foreign one and the interval runs past midnight. Without the mark the server refuses.",
+    "officerMarkTitle": "The responsible officer's mark is needed",
+    "officerMarkBody": "A foreign document, and an interval running past midnight. Fill in the mark and approve again.",
+    "officerMarkGround": "The arrival notification is the receiving party's duty (art. 20 part 2 of Federal Law No. 109-FZ). The system does not submit it.",
+    "quotaTitle": "The daily ceiling is spent",
+    "quotaBody": {
+      "resident": "This resident already has {{limit}} approved for {{date}} — the ceiling for a day.",
+      "building": "The dormitory already has {{limit}} approved for {{date}} — the ceiling for a day."
+    },
+    "transitionTitle": "The request has already been decided",
+    "transitionBody": "It now stands as «{{status}}». Refresh the list.",
+    "officerMarkSaved": "Mark recorded"
+  },
+  "guestDocument": {
+    "warning": "The document number in full is given on a request of its own. Every such reading is written to the audit log with your name on it.",
+    "reveal": "Show the number in full",
+    "hide": "Hide",
+    "recorded": "The reading is in the audit log."
+  },
+  "checkpoint": {
+    "heading": "Security post",
+    "lead": "Find the guest, compare the card with the document, record the entry. What is recorded here is what the visitor register holds.",
+    "doctrine": "The system restricts nobody's movement; it records what happened. Whether a person is admitted is decided by the security service under the university's local act. All the program refuses is to assert that an entry was within the rules when it was not.",
+    "noPost": "No dormitory's security post is attached to your account.",
+    "buildingChoice": "Dormitory",
+    "search": {
+      "heading": "Step 1. Find the guest",
+      "by": "Search",
+      "byCode": "By code",
+      "bySurname": "By surname",
+      "codeLabel": "Access code",
+      "codeNote": "The code from an approved request. A scanner types it and presses Enter, which makes this one action.",
+      "surnameLabel": "Guest's surname",
+      "surnameNote": "A surname search covers today and no other day.",
+      "action": "Find",
+      "clear": "Clear",
+      "readOnly": "The search changes nothing. A record appears only once the entry is marked.",
+      "noCodeTitle": "No such code in this dormitory",
+      "noCodeBody": "Check the code character by character. The request may be for another building, or may not be approved yet: before the decision there is no code.",
+      "noNameTitle": "Nobody of that surname is expected today",
+      "noNameBody": "A surname search covers today and no other day. Ask the guest for the code."
+    },
+    "matches": {
+      "heading": "Step 2. Which of them",
+      "count_one": "{{count, number}} match",
+      "count_other": "{{count, number}} matches",
+      "open": "Open the card",
+      "empty": "No matches."
+    },
+    "card": {
+      "heading": "Step 2. Compare with the document",
+      "checkedAt": "Read at {{time}}",
+      "guest": "Guest",
+      "host": "Invited by",
+      "room": "Premises",
+      "interval": "Permitted interval",
+      "dueAt": "Due out by",
+      "status": "State",
+      "maskedNote": "The last four characters are shown: enough to compare against the document in hand. The number in full is not shown at the post.",
+      "consentPending": "The guest's consent is not on record. It is taken here, before the entry: pressing «Record the entry» puts the text on the screen.",
+      "noEntryNote": "To turn somebody away, simply do not record an entry. Verification and the record are separate steps exactly so that a refusal leaves no trace of an entry that never happened.",
+      "back": "Back to the search"
+    },
+    "verdict": {
+      "allowed": "The entry may be recorded",
+      "refused": "The entry may not be recorded"
+    },
+    "reason": {
+      "outside_permitted_interval": "The time now falls outside the permitted interval.",
+      "request_not_approved": "The request is not approved.",
+      "guest_already_inside": "An entry on this request is already recorded.",
+      "wrong_visit_date": "The request is for another day."
+    },
+    "refusal": {
+      "title": "No entry was recorded",
+      "overridable": "The responsible officer's decision may admit the guest. The reason goes onto the visit and into the audit log.",
+      "final": "This refusal is not one a decision sets aside."
+    },
+    "override": {
+      "heading": "Admitted on the responsible officer's decision",
+      "body": "The entry is recorded with a mark that it was made against the rule. The mark goes both onto the visit and into the audit log, so «show me every entry admitted against the interval» is one query.",
+      "reasonLabel": "Reason",
+      "reasonNote": "Who allowed it and on what ground. Three characters at least.",
+      "action": "Record the entry on the decision"
+    },
+    "entry": {
+      "action": "Record the entry",
+      "recordedTitle": "Entry recorded",
+      "recordedAt": "Entered at {{time}}",
+      "deadlineFrozen": "The departure deadline is frozen on the visit: the earlier of the end of the interval and the dormitory's control time. Editing the building row no longer moves it.",
+      "next": "Next guest"
+    },
+    "exit": {
+      "action": "Record the exit",
+      "recordedTitle": "Exit recorded",
+      "recordedAt": "Left at {{time}}",
+      "writtenOnce": "The time of the exit is the server's and is written once. A mistake is put right by a correcting entry in the visitor register, never by rewriting the row.",
+      "alreadyTitle": "The exit is already recorded",
+      "alreadyBody": "The exit on this visit was recorded {{time}}."
+    },
+    "consent": {
+      "heading": "The guest's consent",
+      "forGuest": "Given in person by {{name}}",
+      "separate": "A step of its own and not a tick on the entry: art. 9 part 1 of Federal Law No. 152-FZ has consent executed separately from other documents.",
+      "revision": "Revision of the text: {{revision}}",
+      "requiredTitle": "Without consent no entry is recorded",
+      "requiredBody": "The server refused: the guest's consent is not on record. Show the text of revision {{revision}} and take the consent.",
+      "text": {
+        "title": "Consent to the processing of personal data — guest",
+        "draft": "A placeholder text. It states what the system does with the data, but the operator's responsible officer has not approved it: before the system carries real data it is replaced under a new revision identifier.",
+        "purpose": "I consent to the processing by the dormitory of my personal data, for the purpose of admitting me as a guest and of keeping the visitor register that clause 2.1.2 of the rules of internal order requires.",
+        "processedLabel": "What is processed.",
+        "processed": "Surname, name and patronymic; the type and number of the identity document presented at the security post; the room I am visiting and the resident who invited me; the time I entered and the time I left.",
+        "notProcessedLabel": "What is not processed.",
+        "notProcessed": "No copy, scan or photograph of the document is taken. The number is stored and shown masked.",
+        "groundLabel": "The only ground.",
+        "ground": "I am not a party to the accommodation contract, so this consent is the sole ground on which my data may be processed (art. 6 part 1 cl. 1 of Federal Law No. 152-FZ). Without it the dormitory cannot record my entry.",
+        "withdrawalLabel": "Withdrawal.",
+        "withdrawal": "I may withdraw this consent at the security post at any time. Withdrawal ends the visit and stops further processing; the record that the consent was given, and the entries already made in the register, are kept for the period the local act sets."
+      },
+      "whatIsStored": "The record holds the fact, the date and the revision of the text. A guest has no account, so the record names the request instead.",
+      "agree": "The guest agrees",
+      "refuse": "The guest does not agree",
+      "refuseNote": "If the guest does not agree, no entry is recorded and no trace of one is left.",
+      "mismatchTitle": "The text on the screen is a different revision",
+      "mismatchBody": "The server asks for revision {{server}}; the screen carries {{screen}}. Take the consent from the approved text kept at the post: a record naming a wording the guest never read proves nothing."
+    },
+    "board": {
+      "heading": "Recorded at this terminal",
+      "count_one": "{{count, number}} in the building",
+      "count_other": "{{count, number}} in the building",
+      "scope": "The list is built from what this terminal itself recorded during this shift and lives in the browser tab. The full record is the dormitory's visitor register, which the warden and the administrator keep.",
+      "empty": "Nothing recorded at this terminal during this shift.",
+      "room": "Premises {{room}}",
+      "entered": "entered at {{time}}",
+      "dueAt": "due out by {{time}}",
+      "late": "The departure deadline has passed.",
+      "dismiss": "Drop from the list",
+      "closedHeading": "Already left",
+      "left": "left at {{time}}"
+    }
+  },
+  "visitRegister": {
+    "heading": "Visitor register",
+    "lead": "Guest, document, whom they are visiting, premises, entry, exit, and whoever recorded it. The six columns of clause 2.1.2 of the rules of internal order, plus the operator.",
+    "noClaim": "The export is a presentation of the data. It carries no claim to satisfy any particular reporting obligation, and it stands in for the access-control integration this iteration does not build.",
+    "periodHeading": "Period",
+    "from": "From",
+    "until": "Until",
+    "periodNote": "The period is taken against the entry: a guest admitted at 23:50 on the 30th and recorded leaving at 00:20 belongs to the 30th, the day an officer would have written them down on.",
+    "show": "Show",
+    "export": "Export CSV",
+    "exportNote": "The document number is exported masked. The export itself is written to the audit log.",
+    "tableHeading": "Entries",
+    "total_one": "{{count, number}} entry",
+    "total_other": "{{count, number}} entries",
+    "empty": "No entries over this period.",
+    "stillIn": "no exit recorded",
+    "columns": {
+      "guest_full_name": "Guest",
+      "guest_document": "Document",
+      "inviting_resident": "Visiting",
+      "room": "Premises",
+      "checked_in_at": "Entered",
+      "checked_out_at": "Left",
+      "operator": "Recorded by"
+    },
+    "admittedOnDecision": "Admitted on the responsible officer's decision: {{note}}",
+    "correctionAt": "Correction of {{time}}",
+    "correct": "Record a correction",
+    "correctNote": "The row does not change. The correction sits beside it and travels with it into the export.",
+    "correctLabel": "Text of the correction",
+    "correctSave": "Record the correction"
   }
 }
