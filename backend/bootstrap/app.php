@@ -10,6 +10,7 @@ use App\Exceptions\IllegalTransitionException;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\LoginLockedException;
 use App\Exceptions\NoAcceptedClaimException;
+use App\Exceptions\PhotoStorageFailedException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Exceptions\VisitAlreadyClosedException;
@@ -177,6 +178,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (NoAcceptedClaimException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ] + $exception->context(), 409));
+
+        /*
+         * FR-36 and FR-24's photographs, and the acceptance finding of
+         * 15.09.2026: a file the object store refused used to leave the route
+         * answering 201 with nothing attached.
+         *
+         * 503 rather than 422 or 500. The body was well formed, the caller was
+         * entitled to send it and the application did what it was asked; what
+         * failed is the store behind it, and the same call succeeds unchanged
+         * once the store is back. The record is not written — the refusal
+         * happens before the service is called — so there is nothing for the
+         * client to undo before retrying.
+         */
+        $exceptions->render(fn (PhotoStorageFailedException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 503));
 
         /*
          * §3.3.4 maps the quota breach to 422, and the body carries which of

@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Files;
 
+use App\Exceptions\PhotoStorageFailedException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Photographs on their way from a form to the object store: FR-36's up to
@@ -60,17 +64,15 @@ final readonly class PhotoStore
      *
      * @param  list<UploadedFile>  $files
      * @return list<string>
+     *
+     * @throws PhotoStorageFailedException the disk refused the write (503)
      */
     public function store(array $files): array
     {
         $paths = [];
 
         foreach (array_slice($files, 0, $this->maximum) as $file) {
-            $path = Storage::disk($this->disk)->putFile($this->directory, $file);
-
-            if (is_string($path) && $path !== '') {
-                $paths[] = $path;
-            }
+            $paths[] = $this->write($file);
         }
 
         return $paths;
@@ -84,6 +86,8 @@ final readonly class PhotoStore
      * then be repeated by every caller — the controller, the seeder and
      * whatever imports a backlog later. The ceiling still applies: a store
      * configured with `maximum: 1` keeps this the only file it will take.
+     *
+     * @throws PhotoStorageFailedException the disk refused the write (503)
      */
     public function storeOne(?UploadedFile $file): ?string
     {
@@ -91,19 +95,58 @@ final readonly class PhotoStore
             return null;
         }
 
-        return $this->store([$file])[0] ?? null;
+        return $this->write($file);
     }
 
     /**
-     * A temporary URL for reading one photograph back, where the disk can
-     * produce one, and a plain path where it cannot.
+     * One file onto the disk, or an exception — and never a quiet nothing.
      *
-     * The S3-compatible disk of the deployment signs a URL that expires; the
-     * local disk of the test suite does not implement signing at all, and the
-     * whole point of returning null there is that a test must not silently
-     * assert a link that only works because the file happened to be public.
+     * **This method is the acceptance finding of 15.09.2026.** The loop above
+     * used to keep the path when `putFile()` returned a string and to skip it
+     * otherwise, which reads as caution and behaves as data loss: the
+     * deployment's bucket did not exist, `'throw' => false` turned every
+     * `UnableToWriteFile` into a `false`, and the route answered 201 with an
+     * empty list of photographs. A resident cannot tell that answer from a
+     * submission they forgot to attach anything to.
+     *
+     * Two things were wrong and both are fixed here. The disks now throw
+     * (`config/filesystems.php`), so a refused write arrives as an exception
+     * carrying the reason; and a `false` that survives anyway — a driver that
+     * reports failure by return value — is turned into the same exception, so
+     * there is no path by which a lost file becomes a 201.
      */
-    public function temporaryUrl(string $path, int $minutes = 15): ?string
+    private function write(UploadedFile $file): string
+    {
+        try {
+            $path = Storage::disk($this->disk)->putFile($this->directory, $file);
+        } catch (FilesystemException|RuntimeException $failure) {
+            throw new PhotoStorageFailedException($this->disk, $failure);
+        }
+
+        if (! is_string($path) || $path === '') {
+            throw new PhotoStorageFailedException($this->disk);
+        }
+
+        return $path;
+    }
+
+    /**
+     * The file itself, streamed back to the reader.
+     *
+     * **A signed link would be the cheaper answer and it does not work here**
+     * (acceptance of 15.09.2026). The S3-compatible store is signed for as
+     * `minio:9000`, a name that exists only inside the Compose network, and
+     * SigV4 covers the Host header — so a browser can neither resolve the link
+     * nor be handed a rewritten one. Streaming is the one answer that works
+     * unchanged on both disks the project has, and it keeps the photograph
+     * behind the same token as the record it belongs to. See
+     * `App\Http\Controllers\Api\V1\Concerns\ServesPhotographs`.
+     *
+     * Streamed and not read into a string: a photograph is a few hundred
+     * kilobytes and there is no reason for it to pass through the request's
+     * memory limit on its way out.
+     */
+    public function stream(string $path): ?StreamedResponse
     {
         $disk = Storage::disk($this->disk);
 
@@ -111,11 +154,7 @@ final readonly class PhotoStore
             return null;
         }
 
-        try {
-            return $disk->temporaryUrl($path, now()->addMinutes($minutes));
-        } catch (\RuntimeException) {
-            return null;
-        }
+        return $disk->response($path);
     }
 
     public function disk(): string

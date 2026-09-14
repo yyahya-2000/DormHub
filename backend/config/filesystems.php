@@ -30,11 +30,21 @@ return [
 
     'disks' => [
 
+        /*
+        | `throw` is true on every disk of this application, and the acceptance
+        | of 15.09.2026 is the reason. A refused write answered `false` and
+        | `App\Files\PhotoStore` dropped the path, so a submission whose
+        | photographs never reached the store came back 201 with an empty list
+        | — the one failure mode nobody could see. An exception is louder than
+        | a return value that everybody forgets to read, and the store turns it
+        | into a refusal of the request (`PhotoStorageFailedException`, 503).
+        */
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
             'serve' => true,
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 
@@ -43,7 +53,7 @@ return [
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 
@@ -56,7 +66,7 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 
