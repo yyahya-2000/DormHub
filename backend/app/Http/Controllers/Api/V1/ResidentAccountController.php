@@ -4,27 +4,26 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\Citizenship;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\ReissueResidentCredentialRequest;
-use App\Http\Requests\Api\V1\SetPasswordRequest;
+use App\Http\Requests\Api\V1\ChangePasswordRequest;
 use App\Http\Requests\Api\V1\StoreResidentAccountRequest;
-use App\Http\Resources\UserResource;
+use App\Http\Resources\IssuedAccountResource;
 use App\Models\Building;
-use App\Models\User;
 use App\Services\PasswordSetup;
 use App\Services\ResidentAccountIssuer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
 /**
- * FR-42. Two routes, at the two ends of one credential: the warden or manager
- * creates the account, and the resident — with the code that reached their own
- * contact — puts a password on it.
+ * FR-42. Two routes, at the two ends of one password: the warden or manager
+ * creates the account and is shown the generated password once, and the
+ * resident — signed in with it — replaces it with one of their own.
  *
- * The answer to the first is a `UserResource`, which is written out field by
- * field and has no password among them. That is what makes the third criterion
- * checkable rather than merely intended: there is no branch in which a secret
- * could be added to this response, because the resource does not know one.
+ * The password exists in readable form in exactly one response body, the one
+ * `store()` returns. `IssuedAccountResource` is the only resource in the
+ * project with a password field; `UserResource`, which every other route
+ * answers with, has none and therefore cannot leak one.
  */
 final class ResidentAccountController extends Controller
 {
@@ -33,47 +32,40 @@ final class ResidentAccountController extends Controller
         Building $building,
         ResidentAccountIssuer $accounts,
     ): JsonResponse {
-        $resident = $accounts->issue(
+        $issued = $accounts->issue(
             actor: $request->user(),
             building: $building,
             attributes: $request->payload(),
             ipAddress: $request->ip(),
         );
 
-        return UserResource::make($resident)
+        return IssuedAccountResource::make($issued)
             ->response()
             ->setStatusCode(201);
     }
 
     /**
-     * FR-42, the way back. A code lives an hour; an account whose code expired
-     * unspent used to be unreachable for good, because the address it holds is
-     * unique and nothing could release it. This route sends a second code, and
-     * the answer is 202 rather than 204: what happened is that the delivery was
-     * accepted, and whether a mail server takes it is not this application's
-     * fact to assert.
+     * The closed list `citizenship` is validated against, with the names
+     * beside the codes, so that the form draws a dropdown instead of trusting
+     * whatever somebody types.
      */
-    public function reissueCredential(
-        ReissueResidentCredentialRequest $request,
-        Building $building,
-        User $resident,
-        ResidentAccountIssuer $accounts,
-    ): Response {
-        $accounts->reissue(
-            actor: $request->user(),
-            resident: $resident,
-            building: $building,
-            ipAddress: $request->ip(),
-        );
-
-        return response()->noContent(202);
+    public function citizenships(): JsonResponse
+    {
+        return response()->json(['data' => Citizenship::options()]);
     }
 
-    public function setPassword(SetPasswordRequest $request, PasswordSetup $passwords): Response
+    /**
+     * FR-42: the resident replaces the password the office gave them.
+     *
+     * Behind the session rather than behind a one-time code: the account has a
+     * password from the moment it is created, so the person changing it is the
+     * person signed in with it. The old password is asked for anyway — a
+     * stolen token must not be enough to take the account over.
+     */
+    public function changePassword(ChangePasswordRequest $request, PasswordSetup $passwords): Response
     {
-        $passwords->complete(
-            email: $request->email(),
-            token: $request->token(),
+        $passwords->change(
+            user: $request->user(),
             password: $request->password(),
             ipAddress: $request->ip(),
         );
