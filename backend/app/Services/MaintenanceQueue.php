@@ -76,21 +76,35 @@ final readonly class MaintenanceQueue
             ->inBuilding($building)
             ->with(['reporter', 'room', 'assignee', 'building']);
 
+        $archived ? $query->archived() : $query->open();
+
+        /*
+         * The tie-break follows the main key in each list, which it did not
+         * before (acceptance of 15.09.2026): the archive ordered `created_at`
+         * descending and then broke ties by `id` ascending, so two requests
+         * filed in the same second came back the wrong way round relative to
+         * everything else on the page. A tie-break pointing against the sort
+         * it breaks is a page boundary that moves.
+         */
         if ($archived) {
-            $query->archived()->orderByDesc('created_at');
+            $query->orderByDesc('created_at')->orderByDesc('id');
         } else {
-            $query->open()->orderByRaw($this->urgencyOrdering())->orderBy('created_at');
+            $query
+                ->orderByRaw($this->urgencyOrdering())
+                ->orderBy('created_at')
+                ->orderBy('id');
         }
 
         /** @var LengthAwarePaginator<int, MaintenanceRequest> $page */
-        $page = $query->orderBy('id')->paginate($perPage ?? $this->pageSize);
+        $page = $query->paginate($perPage ?? $this->pageSize);
 
         return $page;
     }
 
     /**
-     * FR-40, fourth criterion, asked of every dormitory at once: the open
-     * requests the threshold or a missed planned date has made overdue.
+     * FR-40, fourth criterion, asked of every dormitory at once: the requests
+     * still to be done that the threshold or a missed planned date has made
+     * overdue.
      *
      * Used by `ScanOverdueMaintenance`, which is why it returns a builder and
      * not a collection — the pass reads the table in chunks and a dormitory
@@ -103,7 +117,15 @@ final readonly class MaintenanceQueue
         $moment = CarbonImmutable::instance($moment ?? CarbonImmutable::now());
 
         return MaintenanceRequest::query()
-            ->open()
+            /*
+             * `notDone()` and not `open()`, which is the acceptance finding of
+             * 15.09.2026. `open()` is everything short of a final state and
+             * that includes `completed` — work reported done and waiting for
+             * the reporter to confirm it — so the nightly digest carried
+             * repairs the warden had already made. §3.5.2 draws this selection
+             * as «past target_date and not done».
+             */
+            ->notDone()
             ->where(fn (Builder $inner) => $inner
                 ->where('created_at', '<=', $moment->subDays($this->overdueAfterDays))
                 ->orWhere(fn (Builder $late) => $late

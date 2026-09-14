@@ -300,6 +300,118 @@ final class MaintenanceQueueTest extends TestCase
             ->assertJsonPath('data.0.overdue', true);
     }
 
+    /**
+     * The acceptance finding of 15.09.2026: the nightly pass chased work that
+     * had already been done.
+     *
+     * `scopeOpen()` is every status short of a final one and `completed` is
+     * one of them — the work is reported done and the reporter has a week to
+     * confirm it (FR-39). A planned date falling inside that week made the
+     * request overdue, so the digest told the warden he was late with a repair
+     * he had finished and was waiting to have signed off. §3.5.2 draws the
+     * selection as «past target_date and **not done**», and §4.5 indexes it as
+     * `completed_at IS NULL`.
+     *
+     * The request stays in the queue all the same — it is still his until the
+     * resident answers — which is why the two questions are two scopes.
+     */
+    public function test_work_reported_done_is_not_chased_as_overdue(): void
+    {
+        Notification::fake();
+
+        $done = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->completed(daysAgo: 1)
+            ->create(['target_date' => CarbonImmutable::now()->subDays(2)->toDateString()]);
+
+        $this->artisan('maintenance:scan-overdue')->assertSuccessful();
+
+        $this->assertSame(
+            0,
+            AuditLog::query()
+                ->where('action', AuditAction::MaintenanceRequestOverdue->value)
+                ->where('subject_id', $done->id)
+                ->count(),
+            'A request whose work is done was flagged overdue by the nightly pass.',
+        );
+
+        Notification::assertNothingSent();
+
+        // The same answer on the screen, and the request is still in the queue
+        // — it is finished with only when the reporter says so.
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $done->id)
+            ->assertJsonPath('data.0.overdue', false);
+    }
+
+    /**
+     * The mirror of it: a request reopened out of `completed` is chased again,
+     * because reopening clears `completed_at` and the work is once more
+     * outstanding.
+     */
+    public function test_a_reopened_request_is_chased_again(): void
+    {
+        Notification::fake();
+
+        $reopened = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->completed(daysAgo: 1)
+            ->create(['target_date' => CarbonImmutable::now()->subDays(2)->toDateString()]);
+
+        Sanctum::actingAs($this->resident);
+
+        $this->postJson("/api/v1/maintenance-requests/{$reopened->id}/reopening", [
+            'comment' => 'The tap drips again as soon as it is turned off.',
+        ])->assertOk();
+
+        $this->artisan('maintenance:scan-overdue')->assertSuccessful();
+
+        $this->assertNotNull(AuditLog::query()
+            ->where('action', AuditAction::MaintenanceRequestOverdue->value)
+            ->where('subject_id', $reopened->id)
+            ->first());
+    }
+
+    /**
+     * The archive is read newest first, and the tie-break follows the sort it
+     * breaks.
+     *
+     * The acceptance of 15.09.2026: the archive ordered `created_at`
+     * descending and then broke ties by `id` **ascending**, so two requests
+     * filed in the same second came back against the order of everything else
+     * on the page — and a tie-break pointing the wrong way is a page boundary
+     * that moves between one request and the next.
+     */
+    public function test_the_archive_breaks_a_tie_in_the_direction_it_sorts(): void
+    {
+        $filedAt = CarbonImmutable::now()->subDays(4);
+
+        $first = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->confirmed()
+            ->create(['created_at' => $filedAt, 'updated_at' => $filedAt]);
+
+        $second = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->confirmed()
+            ->create(['created_at' => $filedAt, 'updated_at' => $filedAt]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue?scope=archive")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $second->id)
+            ->assertJsonPath('data.1.id', $first->id);
+    }
+
     private function request(
         int $daysAgo = 0,
         MaintenanceCategory $category = MaintenanceCategory::Plumbing,

@@ -203,6 +203,25 @@ class MaintenanceRequest extends Model
             return false;
         }
 
+        /*
+         * **Work that is done is not late, whatever the calendar says**
+         * (acceptance of 15.09.2026). A completed request is waiting for the
+         * reporter to confirm it, and FR-39 gives them a week to do so; a
+         * planned date that passes during that week is a date the work was
+         * finished before or after, and either way there is nothing left for
+         * the warden to chase. The nightly digest used to carry those rows,
+         * telling him he was late with a repair he had already made.
+         *
+         * `completed_at` and not the status, which is the predicate §4.5
+         * indexes and the one `MaintenanceQueue::overdueEverywhere()` asks in
+         * SQL — so the row this method calls overdue and the row the sweep
+         * selects are the same row. Reopening clears the column, so a request
+         * that comes back from `completed` starts being chased again.
+         */
+        if ($this->completed_at !== null) {
+            return false;
+        }
+
         $moment ??= CarbonImmutable::now();
 
         if ($this->target_date !== null && $this->target_date->lessThan($moment->copy()->startOfDay())) {
@@ -282,6 +301,27 @@ class MaintenanceRequest extends Model
                 MaintenanceRequestStatus::open(),
             ),
         );
+    }
+
+    /**
+     * FR-40's queue narrowed to the work that is still outstanding: open, and
+     * nobody has reported it done.
+     *
+     * **A scope of its own beside `open()` rather than a change to it**
+     * (acceptance of 15.09.2026). The two questions are genuinely different
+     * and the warden's screen needs both. His queue shows a completed request
+     * — it is still his until the resident confirms it, and FR-39's window is
+     * where the module's one nudge lives. The overdue sweep must not: §3.5.2
+     * draws the selection as «past target_date and **not done**», §4.5 indexes
+     * it as `WHERE completed_at IS NULL`, and the sweep was reading `open()`,
+     * which includes `completed`. The digest told the warden he was late with
+     * work he had finished and was waiting to have signed off.
+     *
+     * @param  Builder<MaintenanceRequest>  $query
+     */
+    public function scopeNotDone(Builder $query): void
+    {
+        $query->open()->whereNull('completed_at');
     }
 
     /**
