@@ -59,13 +59,32 @@ return [
     | Application Timezone
     |--------------------------------------------------------------------------
     |
-    | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | The dormitory's own zone, and a setting rather than a constant.
+    |
+    | **The acceptance finding of 15.09.2026.** This line read `'UTC'`, and a
+    | dormitory in Moscow is three hours ahead of it. After 21:00 in Moscow the
+    | server's day had not turned over yet: a find picked up «today» was
+    | refused with «a find cannot have happened later than today», and a guest
+    | approved for that evening was turned away at the post with «the request
+    | is for another day». The form put the resident's date in and the server
+    | compared it against its own.
+    |
+    | The visiting window is the sharper half of it. `planned_from` and
+    | `planned_to` are wall-clock times of the dormitory — «from 18:00 to
+    | 23:00» is what the resident asked for and what clause 2.2 of the rules of
+    | internal order bounds — and the post compares them against `now()`. With
+    | the application in UTC those two were three hours apart, so the window a
+    | guest was admitted in was not the window anybody had agreed.
+    |
+    | So the application runs in the dormitory's zone and every «today» falls
+    | where the people using it think it does. It is `env()` and not a literal
+    | because a deployment in another city is a change of configuration:
+    | NFR-09 already makes the visiting hours a property of the building, and a
+    | campus spread over two zones would make this one too.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Europe/Moscow'),
 
     /*
     |--------------------------------------------------------------------------

@@ -85,6 +85,74 @@ final class CheckpointTest extends TestCase
             ]);
     }
 
+    /**
+     * The acceptance finding of 15.09.2026: the dormitory's day and the
+     * server's day are not the same day.
+     *
+     * Half past nine in the evening UTC is half past midnight in Moscow — the
+     * dormitory is already on the sixteenth and a server keeping UTC is still
+     * on the fifteenth. The post then read a request approved for the
+     * sixteenth, compared it with its own date and answered «the request is
+     * for another day», with the guest standing at the desk and the resident
+     * holding a message that said the visit was approved. The window was three
+     * hours out for the same reason: `planned_from` and `planned_to` are the
+     * dormitory's wall-clock times and were being compared against a clock
+     * running somewhere else.
+     *
+     * The dormitory here admits guests around the clock, which is the regime
+     * NFR-09 makes a property of the building and `TimeWindow` documents — a
+     * window from 08:00 to 08:00 is twenty-four hours. It is the only regime
+     * under which a guest is legitimately at the desk at half past midnight,
+     * which is what makes it the case that shows the defect.
+     */
+    public function test_a_guest_is_admitted_on_the_dormitorys_day_and_not_the_servers(): void
+    {
+        // The dormitory's clock reads 00:30 on the sixteenth; a server keeping
+        // UTC reads 21:30 on the fifteenth.
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 21:30:00', 'UTC'));
+
+        $roundTheClock = $this->dormitory('Block C', [
+            'visiting_from' => '08:00:00',
+            'visiting_to' => '08:00:00',
+        ]);
+
+        $resident = $this->residentOf($roundTheClock, 'night-owl@example.test', '118');
+        $guard = $this->staff(RoleCode::SecurityOfficer, $roundTheClock, 'night-post@example.test');
+
+        $request = GuestRequest::factory()
+            ->forBuilding($roundTheClock)
+            ->from($resident)
+            ->approved($this->staff(RoleCode::DutyOfficer, $roundTheClock, 'night-duty@example.test'))
+            ->create([
+                'guest_full_name' => 'Ostap Verigin',
+                // The sixteenth: today, as anybody in the building would say.
+                'visit_date' => '2026-09-16',
+                'planned_from' => '00:00:00',
+                'planned_to' => '02:00:00',
+            ]);
+
+        Sanctum::actingAs($guard);
+
+        $this->postJson('/api/v1/checkpoint/verify', [
+            'building_id' => $roundTheClock->getKey(),
+            'code' => $request->access_code,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.0.admission.allowed', true)
+            ->assertJsonPath('data.0.admission.reason_code', null);
+
+        $this->postJson('/api/v1/checkpoint/check-in', [
+            'guest_request_id' => $request->getKey(),
+        ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.admitted_on_decision', false);
+
+        $this->assertSame(
+            GuestVisitStatus::InBuilding,
+            GuestVisit::query()->where('guest_request_id', $request->getKey())->sole()->status,
+        );
+    }
+
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();

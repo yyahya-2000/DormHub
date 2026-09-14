@@ -53,6 +53,42 @@ final class LostFoundPublicationTest extends TestCase
         $this->officer = $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
     }
 
+    /**
+     * The acceptance finding of 15.09.2026: «today» was the server's and not
+     * the dormitory's.
+     *
+     * The application ran in UTC and the dormitory stands in Moscow, three
+     * hours ahead. After nine in the evening the server's day had not turned
+     * over yet, so an umbrella picked up on the landing that evening — dated
+     * today by the form the resident was filling in — came back as «a find
+     * cannot have happened later than today». The date was right and the clock
+     * comparing it was in another country.
+     *
+     * The rule reads the dormitory's day now, and reads it through Carbon:
+     * Laravel's `before_or_equal:today` resolves the word with `strtotime()`,
+     * which knows nothing of a pinned clock, so a rule phrased that way could
+     * not be stood on a day boundary at all.
+     */
+    public function test_a_find_picked_up_this_evening_is_published_after_the_servers_day_has_turned(): void
+    {
+        // The dormitory's clock reads 00:30 on the sixteenth; a server keeping
+        // UTC reads 21:30 on the fifteenth.
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 21:30:00', 'UTC'));
+
+        // The date the resident's own calendar shows, written out rather than
+        // computed: a date derived from the application's own setting would
+        // move with it and the test would pass in any zone at all.
+        $today = '2026-09-16';
+
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found', $this->publication($this->building, [
+            'happened_on' => $today,
+        ]))
+            ->assertStatus(201)
+            ->assertJsonPath('data.happened_on', $today);
+    }
+
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();

@@ -16,7 +16,7 @@ use App\Models\Building;
 use App\Models\GuestRequest;
 use App\Models\User;
 use App\Notifications\GuestRequestDecided;
-use Carbon\CarbonImmutable;
+use App\Support\DormitoryClock;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -256,7 +256,7 @@ final readonly class GuestRequestService
      */
     public function expireUndecided(GuestRequest $request, ?CarbonInterface $now = null): GuestRequest
     {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         $reason = 'No decision was taken before the visit was due to begin, '
             .'so the request is treated as rejected.';

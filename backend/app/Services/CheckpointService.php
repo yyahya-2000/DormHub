@@ -17,7 +17,7 @@ use App\Models\Building;
 use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use App\Models\User;
-use Carbon\CarbonImmutable;
+use App\Support\DormitoryClock;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +66,7 @@ final readonly class CheckpointService
         ?CarbonInterface $now = null,
         ?string $ipAddress = null,
     ): Collection {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         $query = GuestRequest::query()
             ->inBuilding($building)
@@ -113,7 +113,7 @@ final readonly class CheckpointService
      */
     public function cardFor(GuestRequest $request, ?CarbonInterface $now = null): CheckpointCard
     {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         $request->loadMissing(['student', 'building', 'visit']);
 
@@ -138,7 +138,7 @@ final readonly class CheckpointService
      */
     public function admissionRefusal(GuestRequest $request, ?CarbonInterface $now = null): ?EntryNotPermittedException
     {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         if ($request->status->isInsideTheBuilding()) {
             return EntryNotPermittedException::alreadyInside();
@@ -183,7 +183,7 @@ final readonly class CheckpointService
         ?CarbonInterface $now = null,
         ?string $ipAddress = null,
     ): GuestVisit {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
         $refusal = $this->admissionRefusal($request, $now);
         $override = $refusal !== null;
 
@@ -276,7 +276,7 @@ final readonly class CheckpointService
         ?CarbonInterface $now = null,
         ?string $ipAddress = null,
     ): GuestVisit {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         if ($visit->checked_out_at !== null) {
             throw new VisitAlreadyClosedException(
@@ -341,7 +341,7 @@ final readonly class CheckpointService
      */
     public function markOverdue(GuestVisit $visit, ?CarbonInterface $now = null): bool
     {
-        $now ??= CarbonImmutable::now();
+        $now ??= DormitoryClock::now();
 
         return DB::transaction(function () use ($visit, $now): bool {
             $locked = GuestVisit::query()->lockForUpdate()->find($visit->getKey());

@@ -7,6 +7,7 @@ namespace App\Http\Requests\Api\V1;
 use App\Guests\TimeWindow;
 use App\Models\Building;
 use App\Models\GuestRequest;
+use App\Support\DormitoryClock;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Validation\Validator;
@@ -53,7 +54,13 @@ final class StoreGuestRequestRequest extends FormRequest
         return [
             'building_id' => ['required', 'integer', 'exists:buildings,id'],
             'guest_full_name' => ['required', 'string', 'min:2', 'max:255'],
-            'visit_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            /*
+             * «Today» is the dormitory's and not the server's (acceptance of
+             * 15.09.2026): `after_or_equal:today` is resolved by Laravel with
+             * `strtotime()`, in the server's zone, and the server ran three
+             * hours behind the dormitory.
+             */
+            'visit_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.DormitoryClock::todayAsDate()],
             'planned_from' => ['required', 'date_format:H:i'],
             'planned_to' => ['required', 'date_format:H:i'],
         ];

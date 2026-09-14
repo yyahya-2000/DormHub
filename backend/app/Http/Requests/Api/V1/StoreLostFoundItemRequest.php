@@ -8,6 +8,7 @@ use App\Enums\LostFoundCustody;
 use App\Enums\LostFoundItemKind;
 use App\Models\Building;
 use App\Models\LostFoundItem;
+use App\Support\DormitoryClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\UploadedFile;
@@ -95,8 +96,17 @@ final class StoreLostFoundItemRequest extends FormRequest
              * cannot have happened tomorrow; nothing here refuses an old one,
              * because somebody clearing a desk drawer in December may well be
              * publishing what they picked up in September.
+             *
+             * **«Today» is the dormitory's and not the server's** (acceptance
+             * of 15.09.2026). The rule used to read `before_or_equal:today`,
+             * which Laravel resolves with `strtotime()` — the server's clock,
+             * in the server's zone. The application ran in UTC, so after 21:00
+             * in Moscow a find picked up that evening was refused as happening
+             * «later than today». `DormitoryClock` answers the day the people
+             * filling in the form are living in, and it answers through Carbon,
+             * so a test can stand on a day boundary and see it.
              */
-            'happened_on' => ['required', 'date', 'before_or_equal:today'],
+            'happened_on' => ['required', 'date', 'before_or_equal:'.DormitoryClock::todayAsDate()],
 
             /*
              * NULL unless a declaration has actually been made. Not before the
@@ -108,7 +118,7 @@ final class StoreLostFoundItemRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'date',
-                'before_or_equal:today',
+                'before_or_equal:'.DormitoryClock::todayAsDate(),
                 'after_or_equal:happened_on',
             ],
 
