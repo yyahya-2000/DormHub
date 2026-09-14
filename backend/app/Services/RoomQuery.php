@@ -33,10 +33,11 @@ final readonly class RoomQuery
     /**
      * FR-02: the register of one dormitory, a page at a time.
      *
-     * `$search` matches part of a room number and `$onlyFree` keeps the rooms
-     * holding a place somebody could move into. Both are asked of the database
-     * rather than of the page, so a filtered answer is the whole of what
-     * matches and not the part of it that happened to fall on page one.
+     * `$search` matches part of a room number, `$onlyFree` keeps the rooms
+     * holding a place somebody could move into, and `$floor` keeps one storey.
+     * All three are asked of the database rather than of the page, so a
+     * filtered answer is the whole of what matches and not the part of it that
+     * happened to fall on page one.
      *
      * @return LengthAwarePaginator<int, Room>
      */
@@ -45,6 +46,7 @@ final readonly class RoomQuery
         Building $building,
         ?string $search = null,
         bool $onlyFree = false,
+        ?int $floor = null,
         ?int $perPage = null,
         ?string $ipAddress = null,
     ): LengthAwarePaginator {
@@ -64,6 +66,12 @@ final readonly class RoomQuery
             );
         }
 
+        if ($floor !== null) {
+            // `(building_id, floor)` is the index the create migration put
+            // there for exactly this question.
+            $query->where('floor', $floor);
+        }
+
         /** @var LengthAwarePaginator<int, Room> $rooms */
         $rooms = $query
             ->orderBy('floor')
@@ -79,6 +87,7 @@ final readonly class RoomQuery
                 'page' => $rooms->currentPage(),
                 'search' => $search,
                 'only_free' => $onlyFree,
+                'floor' => $floor,
             ],
             ipAddress: $ipAddress,
         );

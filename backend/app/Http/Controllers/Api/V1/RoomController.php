@@ -36,6 +36,7 @@ final class RoomController extends Controller
                 building: $building,
                 search: $request->search(),
                 onlyFree: $request->onlyFree(),
+                floor: $request->floor(),
                 perPage: $request->perPage(),
                 ipAddress: $request->ip(),
             )

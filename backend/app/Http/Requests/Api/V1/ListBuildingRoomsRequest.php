@@ -13,9 +13,15 @@ use Illuminate\Foundation\Http\FormRequest;
  * object, so a warden asking about a neighbouring dormitory is refused before
  * a single row is read.
  *
- * Two filters and a page. `q` matches part of a room number, `free=1` keeps the
- * rooms somebody could still be moved into; both are asked of the database, so
- * a client never pages through a dormitory looking for the rooms it wanted.
+ * Three filters and a page. `q` matches part of a room number, `free=1` keeps
+ * the rooms somebody could still be moved into, and `floor` keeps one storey;
+ * all three are asked of the database, so a client never pages through a
+ * dormitory looking for the rooms it wanted.
+ *
+ * `floor` is the one the floor card of FR-02 needs. Without it that screen read
+ * the whole register a hundred rows at a time and threw away everything on the
+ * other storeys, which is a query per hundred rooms to answer a question the
+ * `(building_id, floor)` index answers in one.
  */
 final class ListBuildingRoomsRequest extends FormRequest
 {
@@ -35,6 +41,9 @@ final class ListBuildingRoomsRequest extends FormRequest
         return [
             'q' => ['sometimes', 'nullable', 'string', 'max:32'],
             'free' => ['sometimes', 'boolean'],
+            // The same bounds the room form accepts, so a storey that could
+            // never have been created cannot be asked for either.
+            'floor' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.config('dormitory.housing.max_page_size')],
         ];
@@ -53,6 +62,18 @@ final class ListBuildingRoomsRequest extends FormRequest
     public function onlyFree(): bool
     {
         return $this->boolean('free');
+    }
+
+    /**
+     * The storey asked for, or null for the whole dormitory. An empty value is
+     * the same as an absent one: a client that clears the filter sends the
+     * parameter back empty rather than dropping it from the query string.
+     */
+    public function floor(): ?int
+    {
+        $floor = $this->query('floor');
+
+        return is_numeric($floor) ? (int) $floor : null;
     }
 
     public function perPage(): int
