@@ -17,7 +17,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * FR-16, FR-17 and FR-23 at the protocol boundary.
+ * FR-16 and FR-17 at the protocol boundary.
  *
  * The controller does three things and no fourth: it takes an already
  * authorised and already validated request, calls the one service method that
@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Gate;
  * in `GuestRequestService` — because it is a property of the register. None is
  * here.
  *
- * The three routes that carry no body ask `Gate::authorize()` instead of
+ * The two routes that carry no body ask `Gate::authorize()` instead of
  * arriving through a form request. A form request whose only content is an
  * `authorize()` method is a file that says nothing the one line says, and the
  * refusal is identical either way — a 403 the handler records as
@@ -45,7 +45,7 @@ final class GuestRequestController extends Controller
      */
     public function index(ListGuestRequestsRequest $request): AnonymousResourceCollection
     {
-        $query = GuestRequest::query()->with(['building', 'student', 'visit']);
+        $query = GuestRequest::query()->with($this->relations());
 
         $building = $request->building();
 
@@ -64,7 +64,7 @@ final class GuestRequestController extends Controller
         }
 
         return GuestRequestResource::collection(
-            $query->orderByDesc('visit_date')->orderByDesc('id')->get()
+            $query->orderByDesc('visit_date')->orderByDesc('id')->paginate($request->perPage())
         );
     }
 
@@ -77,16 +77,13 @@ final class GuestRequestController extends Controller
             student: $request->user(),
             building: $request->building(),
             guestFullName: $request->guestFullName(),
-            documentType: $request->documentType(),
-            documentNumber: $request->documentNumber(),
             visitDate: $request->visitDate(),
             plannedFrom: $request->plannedFrom(),
             plannedTo: $request->plannedTo(),
-            purpose: $request->purpose(),
             ipAddress: $request->ip(),
         );
 
-        return GuestRequestResource::make($submitted->load(['building', 'student']))
+        return GuestRequestResource::make($submitted->load($this->relations()))
             ->response()
             ->setStatusCode(201);
     }
@@ -95,13 +92,11 @@ final class GuestRequestController extends Controller
     {
         Gate::authorize('view', $guestRequest);
 
-        return GuestRequestResource::make($guestRequest->load(['building', 'student', 'visit']));
+        return GuestRequestResource::make($guestRequest->load($this->relations()));
     }
 
     /**
-     * FR-17, and FR-23's second criterion through the same door: the mark of
-     * the responsible officer travels in this body and the service decides
-     * whether it was needed.
+     * FR-17.
      */
     public function approve(
         DecideGuestRequestRequest $request,
@@ -112,11 +107,10 @@ final class GuestRequestController extends Controller
             officer: $request->user(),
             request: $guestRequest,
             comment: $request->comment(),
-            responsibleOfficerMark: $request->responsibleOfficerMark(),
             ipAddress: $request->ip(),
         );
 
-        return GuestRequestResource::make($approved->load(['building', 'student']));
+        return GuestRequestResource::make($approved->load($this->relations()));
     }
 
     /**
@@ -135,7 +129,7 @@ final class GuestRequestController extends Controller
             ipAddress: $request->ip(),
         );
 
-        return GuestRequestResource::make($rejected->load(['building', 'student']));
+        return GuestRequestResource::make($rejected->load($this->relations()));
     }
 
     public function cancel(
@@ -151,35 +145,23 @@ final class GuestRequestController extends Controller
             ipAddress: $request->ip(),
         );
 
-        return GuestRequestResource::make($cancelled->load(['building', 'student']));
+        return GuestRequestResource::make($cancelled->load($this->relations()));
     }
 
     /**
-     * NFR-06: the document number in full, once, to somebody who may, and
-     * recorded as an event of its own.
+     * What every answer loads: the names the client draws instead of
+     * identifiers, and the room beside the inviting resident.
      *
-     * A route rather than a field. A field that appeared for privileged
-     * readers would be sent on every list and every refresh, and the log would
-     * fill with readings nobody performed — which would make the record
-     * useless for the question it exists to answer.
+     * @return list<string>
      */
-    public function documentNumber(
-        Request $request,
-        GuestRequest $guestRequest,
-        GuestRequestService $requests,
-    ): JsonResponse {
-        Gate::authorize('viewDocumentNumber', $guestRequest);
-
-        return response()->json([
-            'data' => [
-                'guest_request_id' => $guestRequest->getKey(),
-                'guest_doc_type' => $guestRequest->guest_doc_type?->value,
-                'guest_doc_number' => $requests->revealDocumentNumber(
-                    viewer: $request->user(),
-                    request: $guestRequest,
-                    ipAddress: $request->ip(),
-                ),
-            ],
-        ]);
+    private function relations(): array
+    {
+        return [
+            'building',
+            'student.residencies.bed.room',
+            'decidedBy',
+            'visit.checkedInBy',
+            'visit.checkedOutBy',
+        ];
     }
 }
