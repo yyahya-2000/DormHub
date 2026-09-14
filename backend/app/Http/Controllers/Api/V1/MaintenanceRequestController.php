@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Files\PhotoStore;
+use App\Http\Controllers\Api\V1\Concerns\ServesPhotographs;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ConfirmMaintenanceRequestRequest;
 use App\Http\Requests\Api\V1\ListMaintenanceRequestsRequest;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * FR-36 … FR-39 at the protocol boundary.
@@ -46,6 +48,8 @@ use Illuminate\Support\Facades\Gate;
  */
 final class MaintenanceRequestController extends Controller
 {
+    use ServesPhotographs;
+
     /**
      * The caller's own requests, newest first, a page at a time.
      *
@@ -106,6 +110,45 @@ final class MaintenanceRequestController extends Controller
         return MaintenanceRequestResource::make(
             $maintenanceRequest->load(['building', 'room', 'reporter', 'assignee', 'workLog.actor'])
         );
+    }
+
+    /**
+     * FR-36's photographs, read back one at a time.
+     *
+     * **The route the schema always described and nobody had written**
+     * (acceptance of 15.09.2026). `photo_paths` carries paths and not URLs, and
+     * the client is supposed to ask for the image when it is about to draw it;
+     * until now there was nothing to ask.
+     *
+     * The answer is the file itself and not a signed link — see
+     * `ServesPhotographs` for the reason a link cannot be followed from a
+     * browser on this deployment.
+     *
+     * By index and not by path: a path in the query would be a path a client
+     * could edit, and the check that it belonged to this request would be
+     * doing the work the index does by construction. An index outside the list
+     * is a 404 — there is no such photograph — rather than a 422, because
+     * nothing about the request is malformed.
+     *
+     * The authorisation is `view` on the request itself: whoever may read the
+     * card may see the picture on it. A request of another dormitory is a 403
+     * before the store is touched.
+     */
+    public function photo(
+        Request $request,
+        MaintenanceRequest $maintenanceRequest,
+        int $index,
+        PhotoStore $photos,
+    ): StreamedResponse {
+        Gate::authorize('view', $maintenanceRequest);
+
+        $path = $maintenanceRequest->photoPaths()[$index] ?? null;
+
+        if ($path === null) {
+            abort(404, 'This request carries no photograph under that index.');
+        }
+
+        return $this->photographResponse($photos, $path);
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Files\PhotoStore;
+use App\Http\Controllers\Api\V1\Concerns\ServesPhotographs;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ListLostFoundItemsRequest;
 use App\Http\Requests\Api\V1\StoreLostFoundItemRequest;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * FR-24, FR-25 and the closure of FR-26 at the protocol boundary.
@@ -50,6 +52,8 @@ use Illuminate\Support\Facades\Gate;
  */
 final class LostFoundController extends Controller
 {
+    use ServesPhotographs;
+
     public function __construct(private readonly PhotoStore $photos) {}
 
     /**
@@ -104,6 +108,40 @@ final class LostFoundController extends Controller
         Gate::authorize('view', $lostFoundItem);
 
         return $this->card($lostFoundItem);
+    }
+
+    /**
+     * FR-24's photograph, read back.
+     *
+     * **The route the schema always described and nobody had written**
+     * (acceptance of 15.09.2026). `photo_path` carries a path and not a URL,
+     * and the client is supposed to ask for the image when it is about to draw
+     * it; until now there was nothing to ask. The answer is the file itself —
+     * see `ServesPhotographs` for why it is not a signed link.
+     *
+     * No index, unlike the maintenance module's: FR-24 says «the photograph»
+     * in the singular and the column holds one path. An entry published
+     * without one is a 404 — there is no photograph — and not an empty answer
+     * a client would have to tell apart from a link.
+     *
+     * The authorisation is `view` on the entry, which is the feed's own
+     * question: a find of another dormitory is a 403 before the store is
+     * touched. The picture carries no more than the card does, and the card
+     * has never said who published it.
+     */
+    public function photo(
+        Request $request,
+        LostFoundItem $lostFoundItem,
+    ): StreamedResponse {
+        Gate::authorize('view', $lostFoundItem);
+
+        $path = $lostFoundItem->photo_path;
+
+        if (! is_string($path) || $path === '') {
+            abort(404, 'This entry carries no photograph.');
+        }
+
+        return $this->photographResponse($this->photos, $path);
     }
 
     /**
