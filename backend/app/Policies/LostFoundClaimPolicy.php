@@ -86,12 +86,31 @@ final class LostFoundClaimPolicy
     /**
      * FR-26, first criterion: «a warden's decision on a referred claim».
      *
-     * The warden or the manager of the dormitory the entry belongs to. The
-     * person whose refusal is under review is outside it by construction —
-     * they hold the object, not the capability — and so is the claimant.
+     * The warden or the manager of the dormitory the entry belongs to, and
+     * never the claimant.
+     *
+     * **The exclusion of the claimant used to be asserted here and enforced
+     * nowhere** (acceptance of 15.09.2026). The docblock said they were
+     * outside the circle «by construction» and the contract for
+     * `POST /lost-found/claims/{id}/decision` says «not the claimant» in so
+     * many words; the method asked `LostFoundItemPolicy::judge`, which asks
+     * only whether the account holds the capability in that dormitory. So a
+     * manager could claim a find, wait for the finder to refuse, refer his own
+     * refusal to himself and uphold it — `claimant_id == decided_by` on the
+     * row, and every step of it recorded as ordinary work.
+     *
+     * A dispute is settled by somebody who is not a party to it; that is the
+     * whole of what makes the warden's decision worth anything. The refusal is
+     * a 403 and not a 409, because what is wrong is the account and not the
+     * state of the claim: the same claim is perfectly decidable — by any other
+     * warden or manager of that building.
      */
     public function judge(User $user, LostFoundClaim $claim): bool
     {
+        if ((int) $claim->claimant_id === (int) $user->getKey()) {
+            return false;
+        }
+
         $item = $this->itemOf($claim);
 
         return $item !== null && $this->items->judge($user, $item);

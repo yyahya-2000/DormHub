@@ -188,11 +188,30 @@ final class LostFoundItemPolicy
      * and the claimant could not settle.
      *
      * The warden or the manager of **this** dormitory. Not the administrator,
-     * not the security officer, and not the person holding the object — whose
-     * refusal is what is being reviewed.
+     * not the security officer, not the person holding the object — whose
+     * refusal is what is being reviewed — and not anybody who has filed a
+     * claim on the entry.
+     *
+     * **The last of those is the acceptance finding of 15.09.2026, and it is
+     * stated at the level of the entry rather than of the claim on purpose.**
+     * `LostFoundClaimPolicy::judge` refuses the claimant of the claim being
+     * decided, which is the leak acceptance found; this line closes the other
+     * half of the same door. A manager with a claim of his own on an umbrella
+     * has an interest in every claim made against it, and `viewClaims()` — the
+     * list of identifying marks — is decided through this method too. The
+     * marks are what makes a claim checkable, so a rival claimant reading them
+     * is a rival claimant learning exactly what to write.
+     *
+     * A warden who wants his own claim settled is in the ordinary position of
+     * any resident: he asks the person holding the object, and a refusal goes
+     * to a colleague who holds the same capability.
      */
     public function judge(User $user, LostFoundItem $item): bool
     {
+        if ($item->claims()->where('claimant_id', $user->getKey())->exists()) {
+            return false;
+        }
+
         $building = $this->buildingOf($item);
 
         return $building !== null && $this->buildings->decideLostFoundDisputes($user, $building);
