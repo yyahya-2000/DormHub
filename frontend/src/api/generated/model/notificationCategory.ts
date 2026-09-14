@@ -20,13 +20,39 @@
  * route at all: it is a quarter-hourly sweep that reads each dormitory's own
  * control time.
  *
- * The remaining routes of §3.3.6 — announcements, lost-and-found and
- * maintenance — belong to later increments and are deliberately absent from
- * this document rather than described as unimplemented: the file is the input
- * for client generation, and a generated client should not carry methods that
- * answer 404.
+ * The sixth is the announcement module of increment 2: FR-09 (publication),
+ * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
+ * an important announcement, is Could priority and outside the MVP — there is
+ * no route for it and no column behind one.
  *
- * Eight properties of the contract are worth reading before the paths.
+ * The seventh is the maintenance module of increment 3: FR-36 (the resident
+ * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
+ * FR-39 (confirmation and reopening) and FR-40 (the dormitory's queue and its
+ * export). Two of its requirements have no route at all and are scheduled
+ * passes: FR-39's automatic closure of a request nobody confirmed, and FR-40's
+ * nightly flagging of the requests past the configured threshold.
+ *
+ * The eighth is the lost-and-found module of increment 4: FR-24 (publishing a
+ * find), FR-25 (the list of finds for one's own dormitory) and FR-26 (the
+ * claim, the holder's answer, the referral of a disagreement and the warden's
+ * decision). Two properties of it are worth reading before the paths, because
+ * both are refusals rather than features. **Publication passes through no
+ * staff approval step** — the module is peer-to-peer, the finder keeps the
+ * object and decides on claims, and a moderation queue would cost the module
+ * its only advantage over a message board. And **the find card carries
+ * neither the name nor the contacts of the person who published it** — the
+ * exchange runs through claims inside the system, otherwise a dormitory's
+ * feed becomes an open list of residents' telephone numbers. A member of
+ * staff enters in two cases only: an object deposited with the administration
+ * for safekeeping, and a claim the two sides could not settle.
+ *
+ * FR-27, the control of the six-month retention period of Civil Code art. 228
+ * cl. 1, is Could priority and outside the MVP. There is no route for it and
+ * no scheduled pass behind one; the two dates it will be counted from —
+ * `happened_on` and `declared_on` — are in the model all the same, because a
+ * declaration date cannot be retrofitted onto records created without one.
+ *
+ * Nine properties of the contract are worth reading before the paths.
  *
  * Authorisation is scoped by building, not only by role. A grant of a role names
  * the dormitory it holds in, and every building-addressed route decides on the
@@ -80,6 +106,15 @@
  * between 08:00 and 23:00 — and are this deployment's values rather than the
  * sector's.
  *
+ * An announcement is addressed by `building_id`, and a null one means every
+ * dormitory. That single column is the audience: the feed filters on it, the
+ * fan-out reads it, and there is no recipient list that could disagree with
+ * it. Leaving it out is the administrator's right and nobody else's — a warden
+ * who could would be addressing dormitories his grant does not name. The
+ * validity period is the same kind of thing: `expires_at` is a comparison the
+ * feed makes and not a status anybody sets, so an announcement leaves the feed
+ * for the archive by itself and no job has to run for it to happen.
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -99,7 +134,14 @@
  * `maintenance_status` a movement of a maintenance request, and
  * `document_signature` a document waiting to be signed.
  *
- * Three of them are mandatory and cannot be switched off — see
+ * `announcement` and `mandatory_announcement` are FR-09 reaching the
+ * resident. They are two categories for one kind of object because the
+ * delivery rule genuinely differs by the announcement: a notice the
+ * resident is required to acknowledge (FR-12) rests on clause 4.2.7 of the
+ * rules of internal order and cannot be switched off, while a routine one
+ * rests on nothing but convenience and can.
+ *
+ * Four of them are mandatory and cannot be switched off — see
  * `NotificationSetting.mandatory` for the ground the line is drawn on.
  */
 export type NotificationCategory = typeof NotificationCategory[keyof typeof NotificationCategory];
@@ -111,4 +153,6 @@ export const NotificationCategory = {
   visit_overdue: 'visit_overdue',
   maintenance_status: 'maintenance_status',
   document_signature: 'document_signature',
+  announcement: 'announcement',
+  mandatory_announcement: 'mandatory_announcement',
 } as const;

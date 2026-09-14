@@ -20,13 +20,39 @@
  * route at all: it is a quarter-hourly sweep that reads each dormitory's own
  * control time.
  *
- * The remaining routes of §3.3.6 — announcements, lost-and-found and
- * maintenance — belong to later increments and are deliberately absent from
- * this document rather than described as unimplemented: the file is the input
- * for client generation, and a generated client should not carry methods that
- * answer 404.
+ * The sixth is the announcement module of increment 2: FR-09 (publication),
+ * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
+ * an important announcement, is Could priority and outside the MVP — there is
+ * no route for it and no column behind one.
  *
- * Eight properties of the contract are worth reading before the paths.
+ * The seventh is the maintenance module of increment 3: FR-36 (the resident
+ * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
+ * FR-39 (confirmation and reopening) and FR-40 (the dormitory's queue and its
+ * export). Two of its requirements have no route at all and are scheduled
+ * passes: FR-39's automatic closure of a request nobody confirmed, and FR-40's
+ * nightly flagging of the requests past the configured threshold.
+ *
+ * The eighth is the lost-and-found module of increment 4: FR-24 (publishing a
+ * find), FR-25 (the list of finds for one's own dormitory) and FR-26 (the
+ * claim, the holder's answer, the referral of a disagreement and the warden's
+ * decision). Two properties of it are worth reading before the paths, because
+ * both are refusals rather than features. **Publication passes through no
+ * staff approval step** — the module is peer-to-peer, the finder keeps the
+ * object and decides on claims, and a moderation queue would cost the module
+ * its only advantage over a message board. And **the find card carries
+ * neither the name nor the contacts of the person who published it** — the
+ * exchange runs through claims inside the system, otherwise a dormitory's
+ * feed becomes an open list of residents' telephone numbers. A member of
+ * staff enters in two cases only: an object deposited with the administration
+ * for safekeeping, and a claim the two sides could not settle.
+ *
+ * FR-27, the control of the six-month retention period of Civil Code art. 228
+ * cl. 1, is Could priority and outside the MVP. There is no route for it and
+ * no scheduled pass behind one; the two dates it will be counted from —
+ * `happened_on` and `declared_on` — are in the model all the same, because a
+ * declaration date cannot be retrofitted onto records created without one.
+ *
+ * Nine properties of the contract are worth reading before the paths.
  *
  * Authorisation is scoped by building, not only by role. A grant of a role names
  * the dormitory it holds in, and every building-addressed route decides on the
@@ -80,6 +106,15 @@
  * between 08:00 and 23:00 — and are this deployment's values rather than the
  * sector's.
  *
+ * An announcement is addressed by `building_id`, and a null one means every
+ * dormitory. That single column is the audience: the feed filters on it, the
+ * fan-out reads it, and there is no recipient list that could disagree with
+ * it. Leaving it out is the administrator's right and nobody else's — a warden
+ * who could would be addressing dormitories his grant does not name. The
+ * validity period is the same kind of thing: `expires_at` is a comparison the
+ * feed makes and not a status anybody sets, so an announcement leaves the feed
+ * for the archive by itself and no job has to run for it to happen.
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -109,6 +144,10 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptLostFoundClaim200,
+  AcceptMaintenanceRequest200,
+  AcknowledgeAnnouncement200,
+  AnnouncementInput,
   AppointStaff200,
   AppointStaff201,
   ApproveGuestRequest200,
@@ -121,6 +160,10 @@ import type {
   CheckOutGuest200,
   CheckOutInput,
   CheckpointSearchInput,
+  ClaimLostFoundItem201,
+  CompleteMaintenanceWork200,
+  ConfirmMaintenanceWork200,
+  ConfirmationWindowClosedError,
   ConsentInput,
   ConsentRequiredError,
   CorrectGuestVisit201,
@@ -131,11 +174,14 @@ import type {
   CreateResidency201,
   CreateRoom201,
   CurrentUser200,
+  DecideLostFoundClaim200,
+  DeclineLostFoundClaim200,
   DeletionBlocked,
   EntryNotPermittedError,
   Error,
   ExportVisitRegister200One,
   ExportVisitRegisterParams,
+  FileMaintenanceRequest201,
   ForbiddenResponse,
   GiveConsent201,
   GuestApprovalInput,
@@ -145,6 +191,8 @@ import type {
   IllegalTransitionError,
   InvalidCredentials,
   IssueResidentAccount201,
+  ListAnnouncements200,
+  ListAnnouncementsParams,
   ListAuditLogs200,
   ListAuditLogsParams,
   ListBuildingRooms200,
@@ -153,31 +201,59 @@ import type {
   ListConsents200,
   ListGuestRequests200,
   ListGuestRequestsParams,
+  ListLostFound200,
+  ListLostFoundClaims200,
+  ListLostFoundParams,
+  ListMyMaintenanceRequests200,
+  ListMyMaintenanceRequestsParams,
   ListNotificationSettings200,
   ListNotifications200,
   ListNotificationsParams,
   ListPendingConsents200,
   Login200,
   LoginRequest,
+  LostFoundAcceptanceInput,
+  LostFoundClaimInput,
+  LostFoundDecisionInput,
+  LostFoundDeclineInput,
+  LostFoundItemInput,
+  LostFoundReferralInput,
+  MaintenanceAcceptanceInput,
+  MaintenanceCommentInput,
+  MaintenanceQueuePage,
+  MaintenanceRejectionInput,
+  MaintenanceRequestInput,
   MandatoryCategory,
   MarkNotificationRead200,
+  NoAcceptedClaimError,
   NotFoundResponse,
   NotificationSettingsInput,
   OfficerMarkRequiredError,
+  PublishAnnouncement201,
+  PublishLostFoundItem201,
   QuotaError,
   RecordGuestConsent201,
+  ReferLostFoundClaim200,
   RejectGuestRequest200,
+  RejectMaintenanceRequest200,
+  ReopenMaintenanceRequest200,
   ResidencyConflict,
   ResidencyInput,
   ResidentAccountInput,
+  ResolveLostFoundItem200,
   RoomInput,
   SetPasswordInput,
+  ShowAnnouncementReaders200,
   ShowBuilding200,
   ShowGuestDocumentNumber200,
   ShowGuestRequest200,
+  ShowLostFoundItem200,
+  ShowMaintenanceQueueParams,
+  ShowMaintenanceRequest200,
   ShowResidentCard200,
   ShowRoom200,
   StaffAppointmentInput,
+  StartMaintenanceWork200,
   SubmitGuestRequest201,
   TerminateResidency200,
   TerminateResidencyBody,
@@ -4329,6 +4405,568 @@ export function useListAuditLogs<TData = Awaited<ReturnType<typeof listAuditLogs
 
 
 
+export type listAnnouncementsResponse200 = {
+  data: ListAnnouncements200
+  status: 200
+}
+
+export type listAnnouncementsResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type listAnnouncementsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type listAnnouncementsResponseSuccess = (listAnnouncementsResponse200) & {
+  headers: Headers;
+};
+export type listAnnouncementsResponseError = (listAnnouncementsResponse401 | listAnnouncementsResponse422) & {
+  headers: Headers;
+};
+
+export type listAnnouncementsResponse = (listAnnouncementsResponseSuccess | listAnnouncementsResponseError)
+
+export const getListAnnouncementsUrl = (params?: ListAnnouncementsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/announcements?${stringifiedParams}` : `/announcements`
+}
+
+/**
+ * FR-11. The announcements addressed to the dormitories this account is
+ * attached to, plus those addressed to every dormitory, published and not
+ * yet expired, newest first, with the unread marked.
+ *
+ * **The route carries no building parameter, and that is the boundary.**
+ * The audience is computed from the grants of the token, so there is no
+ * way to phrase a request for another dormitory's feed — the horizontal
+ * boundary of FR-07 is the absence of a parameter here rather than a check
+ * somebody has to remember. FR-05 applies on top of it: a resident whose
+ * departure date has passed stops seeing that dormitory's feed.
+ *
+ * `is_unread` is computed per reader by a left join against the
+ * acknowledgements, so one resident acknowledging a notice does not mark
+ * it read for the rest of the dormitory.
+ *
+ * `archived=true` returns the other side of the `expires_at` comparison —
+ * the announcements that have left the feed. Nothing moves them there;
+ * there is no archiving job and no status column.
+ * @summary The caller's own announcement feed
+ */
+export const listAnnouncements = async (params?: ListAnnouncementsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAnnouncementsResponse> => {
+
+  return apiFetch<listAnnouncementsResponse>(getListAnnouncementsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAnnouncementsQueryKey = (params?: ListAnnouncementsParams,) => {
+    return [
+    `/announcements`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAnnouncementsQueryOptions = <TData = Awaited<ReturnType<typeof listAnnouncements>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(params?: ListAnnouncementsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAnnouncementsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAnnouncements>>> = ({ signal }) => listAnnouncements(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAnnouncementsQueryResult = NonNullable<Awaited<ReturnType<typeof listAnnouncements>>>
+export type ListAnnouncementsQueryError = UnauthenticatedResponse | ValidationFailedResponse
+
+
+export function useListAnnouncements<TData = Awaited<ReturnType<typeof listAnnouncements>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params: undefined |  ListAnnouncementsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAnnouncements>>,
+          TError,
+          Awaited<ReturnType<typeof listAnnouncements>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAnnouncements<TData = Awaited<ReturnType<typeof listAnnouncements>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListAnnouncementsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAnnouncements>>,
+          TError,
+          Awaited<ReturnType<typeof listAnnouncements>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAnnouncements<TData = Awaited<ReturnType<typeof listAnnouncements>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListAnnouncementsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The caller's own announcement feed
+ */
+
+export function useListAnnouncements<TData = Awaited<ReturnType<typeof listAnnouncements>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListAnnouncementsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncements>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAnnouncementsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type publishAnnouncementResponse201 = {
+  data: PublishAnnouncement201
+  status: 201
+}
+
+export type publishAnnouncementResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type publishAnnouncementResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type publishAnnouncementResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type publishAnnouncementResponseSuccess = (publishAnnouncementResponse201) & {
+  headers: Headers;
+};
+export type publishAnnouncementResponseError = (publishAnnouncementResponse401 | publishAnnouncementResponse403 | publishAnnouncementResponse422) & {
+  headers: Headers;
+};
+
+export type publishAnnouncementResponse = (publishAnnouncementResponseSuccess | publishAnnouncementResponseError)
+
+export const getPublishAnnouncementUrl = () => {
+
+
+
+
+  return `/announcements`
+}
+
+/**
+ * FR-09. The warden or the manager of the dormitory named, and the
+ * administrator.
+ *
+ * **Omitting `building_id` addresses every dormitory, and it is the
+ * administrator's alone.** A null building is an audience and not a
+ * missing field (§3.4.2); a warden permitted to leave it out would be
+ * addressing buildings his grant does not name, which is FR-07's boundary
+ * crossed by an omission rather than by a leak. A warden who tries gets
+ * 403.
+ *
+ * `published_at` is not accepted. Publication happens now — a settable
+ * date would let a notice be back-dated, and FR-12's evidence is that the
+ * resident was told on a day they can check.
+ *
+ * `expires_at` is the validity period of FR-09 and may be omitted, in
+ * which case the announcement does not expire. An expiry already past is
+ * 422: it would produce a notice in no feed and in no archive.
+ *
+ * The fan-out to the audience is queued. A resident who has switched the
+ * routine announcement category off receives nothing; one who has
+ * switched it off still receives an announcement marked
+ * `is_mandatory`, because that category cannot be switched off (FR-34).
+ * @summary Publish an announcement
+ */
+export const publishAnnouncement = async (announcementInput: AnnouncementInput, options?: Parameters<typeof apiFetch>[1]): Promise<publishAnnouncementResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<publishAnnouncementResponse>(getPublishAnnouncementUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(announcementInput)
+  }
+);}
+
+
+
+
+
+export const getPublishAnnouncementMutationKey = () => ['publishAnnouncement'] as const;
+
+export const getPublishAnnouncementMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAnnouncement>>, TError,PublishAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishAnnouncement>>, TError,PublishAnnouncementMutationVariables, TContext> => {
+
+const mutationKey = getPublishAnnouncementMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishAnnouncement>>, PublishAnnouncementMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  publishAnnouncement(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishAnnouncementMutationResult = NonNullable<Awaited<ReturnType<typeof publishAnnouncement>>>
+    export type PublishAnnouncementMutationBody = AnnouncementInput
+    export type PublishAnnouncementMutationError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse
+    export type PublishAnnouncementMutationVariables = {data: AnnouncementInput}
+
+    /**
+ * @summary Publish an announcement
+ */
+export const usePublishAnnouncement = <TError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAnnouncement>>, TError,PublishAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof publishAnnouncement>>,
+        TError,
+        PublishAnnouncementMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPublishAnnouncementMutationOptions(options), queryClient);
+    }
+
+export type acknowledgeAnnouncementResponse200 = {
+  data: AcknowledgeAnnouncement200
+  status: 200
+}
+
+export type acknowledgeAnnouncementResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type acknowledgeAnnouncementResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acknowledgeAnnouncementResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acknowledgeAnnouncementResponseSuccess = (acknowledgeAnnouncementResponse200) & {
+  headers: Headers;
+};
+export type acknowledgeAnnouncementResponseError = (acknowledgeAnnouncementResponse401 | acknowledgeAnnouncementResponse403 | acknowledgeAnnouncementResponse404) & {
+  headers: Headers;
+};
+
+export type acknowledgeAnnouncementResponse = (acknowledgeAnnouncementResponseSuccess | acknowledgeAnnouncementResponseError)
+
+export const getAcknowledgeAnnouncementUrl = (announcement: number,) => {
+
+
+
+
+  return `/announcements/${announcement}/ack`
+}
+
+/**
+ * FR-12, first criterion: the fact and the time of the acknowledgement are
+ * recorded, as a row carrying the reader and the moment.
+ *
+ * **Idempotent, and 200 on the first call as on the twentieth.** A repeat
+ * returns the acknowledgement already on record rather than writing a
+ * second one — `UNIQUE (announcement_id, user_id)` in the database, not a
+ * check in a service — and the moment stored stays the first reading. A
+ * status that told the first call from a repeat would invite a client to
+ * treat the repeat as an error, which is the opposite of what idempotence
+ * is for.
+ *
+ * Only the audience may acknowledge: a row asserting that somebody read a
+ * notice they could not see would be worse than no row. Any announcement
+ * may be acknowledged, not only a mandatory one — the same row is what
+ * clears the unread mark of FR-11.
+ *
+ * The announcement comes back carrying the mark, so a client that
+ * acknowledges from the feed redraws one row rather than reloading.
+ * @summary Acknowledge an announcement
+ */
+export const acknowledgeAnnouncement = async (announcement: number, options?: Parameters<typeof apiFetch>[1]): Promise<acknowledgeAnnouncementResponse> => {
+
+  return apiFetch<acknowledgeAnnouncementResponse>(getAcknowledgeAnnouncementUrl(announcement),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAcknowledgeAnnouncementMutationKey = () => ['acknowledgeAnnouncement'] as const;
+
+export const getAcknowledgeAnnouncementMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext> => {
+
+const mutationKey = getAcknowledgeAnnouncementMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, AcknowledgeAnnouncementMutationVariables> = (props) => {
+          const {announcement} = props ?? {};
+
+          return  acknowledgeAnnouncement(announcement,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcknowledgeAnnouncementMutationResult = NonNullable<Awaited<ReturnType<typeof acknowledgeAnnouncement>>>
+
+    export type AcknowledgeAnnouncementMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+    export type AcknowledgeAnnouncementMutationVariables = {announcement: number}
+
+    /**
+ * @summary Acknowledge an announcement
+ */
+export const useAcknowledgeAnnouncement = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof acknowledgeAnnouncement>>,
+        TError,
+        AcknowledgeAnnouncementMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcknowledgeAnnouncementMutationOptions(options), queryClient);
+    }
+
+export type showAnnouncementReadersResponse200 = {
+  data: ShowAnnouncementReaders200
+  status: 200
+}
+
+export type showAnnouncementReadersResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showAnnouncementReadersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showAnnouncementReadersResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type showAnnouncementReadersResponseSuccess = (showAnnouncementReadersResponse200) & {
+  headers: Headers;
+};
+export type showAnnouncementReadersResponseError = (showAnnouncementReadersResponse401 | showAnnouncementReadersResponse403 | showAnnouncementReadersResponse404) & {
+  headers: Headers;
+};
+
+export type showAnnouncementReadersResponse = (showAnnouncementReadersResponseSuccess | showAnnouncementReadersResponseError)
+
+export const getShowAnnouncementReadersUrl = (announcement: number,) => {
+
+
+
+
+  return `/announcements/${announcement}/readers`
+}
+
+/**
+ * FR-12, second criterion: the acknowledged share and a named list of
+ * those who have not read, **within the caller's own dormitory**.
+ *
+ * The route returns personal data assembled for a purpose — residents who
+ * have not complied with an instruction — and it is guarded twice over.
+ *
+ * The caller must hold the publishing capability in the dormitory the
+ * announcement names; a warden of another building gets 403 and the
+ * refusal is in the audit log as `access.denied`. And for an announcement
+ * addressed to every dormitory, where a building-scoped warden
+ * legitimately may look, the names returned are narrowed to his own
+ * building — `building_ids` in the response says which dormitories the
+ * figures are about. The administrator, whose grant names none, sees them
+ * all.
+ *
+ * The audience is the residents of those dormitories by the register, less
+ * those the register says have moved out (FR-05): a warden is not handed
+ * the name of somebody who failed to read a notice they could not see.
+ *
+ * Reading this list is itself an event of the audit log
+ * (`announcement.readers_viewed`). The acknowledgements are not: the row
+ * already carries who and when.
+ * @summary Who has acknowledged an announcement, and who has not
+ */
+export const showAnnouncementReaders = async (announcement: number, options?: Parameters<typeof apiFetch>[1]): Promise<showAnnouncementReadersResponse> => {
+
+  return apiFetch<showAnnouncementReadersResponse>(getShowAnnouncementReadersUrl(announcement),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowAnnouncementReadersQueryKey = (announcement: number,) => {
+    return [
+    `/announcements/${announcement}/readers`
+    ] as const;
+    }
+
+
+export const getShowAnnouncementReadersQueryOptions = <TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowAnnouncementReadersQueryKey(announcement);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showAnnouncementReaders>>> = ({ signal }) => showAnnouncementReaders(announcement, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: announcement !== null && announcement !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowAnnouncementReadersQueryResult = NonNullable<Awaited<ReturnType<typeof showAnnouncementReaders>>>
+export type ShowAnnouncementReadersQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ announcement: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showAnnouncementReaders>>,
+          TError,
+          Awaited<ReturnType<typeof showAnnouncementReaders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showAnnouncementReaders>>,
+          TError,
+          Awaited<ReturnType<typeof showAnnouncementReaders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Who has acknowledged an announcement, and who has not
+ */
+
+export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowAnnouncementReadersQueryOptions(announcement,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export type listGuestRequestsResponse200 = {
   data: ListGuestRequests200
   status: 200
@@ -6150,5 +6788,2924 @@ export const useCorrectGuestVisit = <TError = UnauthenticatedResponse | Forbidde
         TContext
       > => {
       return useMutation(getCorrectGuestVisitMutationOptions(options), queryClient);
+    }
+
+export type listMyMaintenanceRequestsResponse200 = {
+  data: ListMyMaintenanceRequests200
+  status: 200
+}
+
+export type listMyMaintenanceRequestsResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type listMyMaintenanceRequestsResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type listMyMaintenanceRequestsResponseSuccess = (listMyMaintenanceRequestsResponse200) & {
+  headers: Headers;
+};
+export type listMyMaintenanceRequestsResponseError = (listMyMaintenanceRequestsResponse401 | listMyMaintenanceRequestsResponse422) & {
+  headers: Headers;
+};
+
+export type listMyMaintenanceRequestsResponse = (listMyMaintenanceRequestsResponseSuccess | listMyMaintenanceRequestsResponseError)
+
+export const getListMyMaintenanceRequestsUrl = (params?: ListMyMaintenanceRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/maintenance-requests?${stringifiedParams}` : `/maintenance-requests`
+}
+
+/**
+ * FR-36. **The route takes no parameter by which one person could name
+ * another**, and that absence is the protection: the list is filtered by
+ * the identifier of the token. The warden's queue is a different route, a
+ * sub-resource of the building, decided on the building object.
+ *
+ * This is where the module parts company with the guest one, which puts
+ * both lists behind a single route. There, the two lists are the same rows
+ * read with a different scope. Here they are not: the queue carries
+ * filters, an age, an overdue flag and an export, none of which means
+ * anything on «my own three requests».
+ * @summary The caller's own maintenance requests
+ */
+export const listMyMaintenanceRequests = async (params?: ListMyMaintenanceRequestsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listMyMaintenanceRequestsResponse> => {
+
+  return apiFetch<listMyMaintenanceRequestsResponse>(getListMyMaintenanceRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMyMaintenanceRequestsQueryKey = (params?: ListMyMaintenanceRequestsParams,) => {
+    return [
+    `/maintenance-requests`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMyMaintenanceRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(params?: ListMyMaintenanceRequestsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMyMaintenanceRequestsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyMaintenanceRequests>>> = ({ signal }) => listMyMaintenanceRequests(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListMyMaintenanceRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listMyMaintenanceRequests>>>
+export type ListMyMaintenanceRequestsQueryError = UnauthenticatedResponse | ValidationFailedResponse
+
+
+export function useListMyMaintenanceRequests<TData = Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params: undefined |  ListMyMaintenanceRequestsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyMaintenanceRequests>>,
+          TError,
+          Awaited<ReturnType<typeof listMyMaintenanceRequests>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyMaintenanceRequests<TData = Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListMyMaintenanceRequestsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyMaintenanceRequests>>,
+          TError,
+          Awaited<ReturnType<typeof listMyMaintenanceRequests>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyMaintenanceRequests<TData = Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListMyMaintenanceRequestsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The caller's own maintenance requests
+ */
+
+export function useListMyMaintenanceRequests<TData = Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListMyMaintenanceRequestsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyMaintenanceRequests>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListMyMaintenanceRequestsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type fileMaintenanceRequestResponse201 = {
+  data: FileMaintenanceRequest201
+  status: 201
+}
+
+export type fileMaintenanceRequestResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type fileMaintenanceRequestResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type fileMaintenanceRequestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type fileMaintenanceRequestResponseSuccess = (fileMaintenanceRequestResponse201) & {
+  headers: Headers;
+};
+export type fileMaintenanceRequestResponseError = (fileMaintenanceRequestResponse401 | fileMaintenanceRequestResponse403 | fileMaintenanceRequestResponse422) & {
+  headers: Headers;
+};
+
+export type fileMaintenanceRequestResponse = (fileMaintenanceRequestResponseSuccess | fileMaintenanceRequestResponseError)
+
+export const getFileMaintenanceRequestUrl = () => {
+
+
+
+
+  return `/maintenance-requests`
+}
+
+/**
+ * FR-36, `multipart/form-data` because of the photographs.
+ *
+ * **The room is never in the body.** For `location: own_room` the request
+ * is bound to the room of the submitter's *active residency record*, read
+ * from the housing register — a client that could name the room could name
+ * somebody else's. A common area has no row in the register, so it is
+ * named in words through `location_note`, and `room_id` comes back null.
+ *
+ * **A resident without an active residency record cannot file**, and the
+ * answer is 403 rather than 422: nothing about the body is wrong. The
+ * check is a policy question put to the register, and the same 403 answers
+ * a resident of block A filing against block B.
+ *
+ * Up to three photographs. The ceiling is configuration, is stated by this
+ * route's validation as a 422 naming `photos`, and is stated again as a
+ * CHECK constraint in the database.
+ *
+ * On success the request is created in `submitted`, the first row of its
+ * work log is written in the same transaction with a null `from_status` —
+ * the request did not move, it came into being — and the staff who triage
+ * in that dormitory are notified after the commit.
+ * @summary File a maintenance request
+ */
+export const fileMaintenanceRequest = async (maintenanceRequestInput: MaintenanceRequestInput, options?: Parameters<typeof apiFetch>[1]): Promise<fileMaintenanceRequestResponse> => {
+    const formData = new FormData();
+formData.append(`building_id`, maintenanceRequestInput.building_id.toString())
+formData.append(`category`, maintenanceRequestInput.category);
+formData.append(`location`, maintenanceRequestInput.location);
+if(maintenanceRequestInput.location_note !== undefined) {
+ formData.append(`location_note`, maintenanceRequestInput.location_note);
+ }
+if(maintenanceRequestInput.title !== undefined) {
+ formData.append(`title`, maintenanceRequestInput.title);
+ }
+formData.append(`description`, maintenanceRequestInput.description);
+if(maintenanceRequestInput.urgency !== undefined) {
+ formData.append(`urgency`, maintenanceRequestInput.urgency);
+ }
+if(maintenanceRequestInput.photos !== undefined) {
+ maintenanceRequestInput.photos.forEach(value => formData.append(`photos`, value));
+ }
+
+  return apiFetch<fileMaintenanceRequestResponse>(getFileMaintenanceRequestUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getFileMaintenanceRequestMutationKey = () => ['fileMaintenanceRequest'] as const;
+
+export const getFileMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext> => {
+
+const mutationKey = getFileMaintenanceRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof fileMaintenanceRequest>>, FileMaintenanceRequestMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  fileMaintenanceRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FileMaintenanceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof fileMaintenanceRequest>>>
+    export type FileMaintenanceRequestMutationBody = MaintenanceRequestInput
+    export type FileMaintenanceRequestMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse
+    export type FileMaintenanceRequestMutationVariables = {data: MaintenanceRequestInput}
+
+    /**
+ * @summary File a maintenance request
+ */
+export const useFileMaintenanceRequest = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof fileMaintenanceRequest>>,
+        TError,
+        FileMaintenanceRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getFileMaintenanceRequestMutationOptions(options), queryClient);
+    }
+
+export type showMaintenanceRequestResponse200 = {
+  data: ShowMaintenanceRequest200
+  status: 200
+}
+
+export type showMaintenanceRequestResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showMaintenanceRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showMaintenanceRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type showMaintenanceRequestResponseSuccess = (showMaintenanceRequestResponse200) & {
+  headers: Headers;
+};
+export type showMaintenanceRequestResponseError = (showMaintenanceRequestResponse401 | showMaintenanceRequestResponse403 | showMaintenanceRequestResponse404) & {
+  headers: Headers;
+};
+
+export type showMaintenanceRequestResponse = (showMaintenanceRequestResponseSuccess | showMaintenanceRequestResponseError)
+
+export const getShowMaintenanceRequestUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}`
+}
+
+/**
+ * The resident who filed it always reads it; the staff of that dormitory
+ * read it if their capability covers the queue. Another resident of the
+ * same dormitory does not — a defect in somebody's room is not theirs.
+ *
+ * The card carries `work_log`, which is where the reason for a refusal and
+ * the comment on each move actually live (§3.4.1, decision 6). There is no
+ * `rejection_reason` on the request itself to disagree with the history.
+ * @summary One maintenance request with its history
+ */
+export const showMaintenanceRequest = async (maintenanceRequest: number, options?: Parameters<typeof apiFetch>[1]): Promise<showMaintenanceRequestResponse> => {
+
+  return apiFetch<showMaintenanceRequestResponse>(getShowMaintenanceRequestUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowMaintenanceRequestQueryKey = (maintenanceRequest: number,) => {
+    return [
+    `/maintenance-requests/${maintenanceRequest}`
+    ] as const;
+    }
+
+
+export const getShowMaintenanceRequestQueryOptions = <TData = Awaited<ReturnType<typeof showMaintenanceRequest>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(maintenanceRequest: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowMaintenanceRequestQueryKey(maintenanceRequest);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showMaintenanceRequest>>> = ({ signal }) => showMaintenanceRequest(maintenanceRequest, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: maintenanceRequest !== null && maintenanceRequest !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowMaintenanceRequestQueryResult = NonNullable<Awaited<ReturnType<typeof showMaintenanceRequest>>>
+export type ShowMaintenanceRequestQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useShowMaintenanceRequest<TData = Awaited<ReturnType<typeof showMaintenanceRequest>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ maintenanceRequest: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceRequest>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceRequest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceRequest<TData = Awaited<ReturnType<typeof showMaintenanceRequest>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ maintenanceRequest: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceRequest>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceRequest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceRequest<TData = Awaited<ReturnType<typeof showMaintenanceRequest>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ maintenanceRequest: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One maintenance request with its history
+ */
+
+export function useShowMaintenanceRequest<TData = Awaited<ReturnType<typeof showMaintenanceRequest>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ maintenanceRequest: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequest>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowMaintenanceRequestQueryOptions(maintenanceRequest,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type acceptMaintenanceRequestResponse200 = {
+  data: AcceptMaintenanceRequest200
+  status: 200
+}
+
+export type acceptMaintenanceRequestResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type acceptMaintenanceRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptMaintenanceRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptMaintenanceRequestResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type acceptMaintenanceRequestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type acceptMaintenanceRequestResponseSuccess = (acceptMaintenanceRequestResponse200) & {
+  headers: Headers;
+};
+export type acceptMaintenanceRequestResponseError = (acceptMaintenanceRequestResponse401 | acceptMaintenanceRequestResponse403 | acceptMaintenanceRequestResponse404 | acceptMaintenanceRequestResponse409 | acceptMaintenanceRequestResponse422) & {
+  headers: Headers;
+};
+
+export type acceptMaintenanceRequestResponse = (acceptMaintenanceRequestResponseSuccess | acceptMaintenanceRequestResponseError)
+
+export const getAcceptMaintenanceRequestUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/accept`
+}
+
+/**
+ * FR-37. **The warden or the manager of this dormitory**, and nobody else:
+ * not the duty officer, who decides on guest requests and has nothing to
+ * do with these; not the administrator, who reads every queue and promises
+ * no dates; and never the resident who filed it.
+ *
+ * «Acceptance without a planned completion date is impossible» — so
+ * `target_date` is required by this route, is a required argument of the
+ * service behind it, and is a CHECK constraint on the table. A date
+ * already in the past is refused: the resident is told that date the
+ * moment this succeeds.
+ *
+ * `assigned_to` and `urgency` are optional. FR-37 names a responsible
+ * party and a reassignment of priority beside the date; a dormitory whose
+ * warden does the work himself has nobody else to name, and a required
+ * field would be filled in with his own name on every row.
+ *
+ * The resident is notified, and the message carries the planned date.
+ * @summary Accept a request into work, with a planned completion date
+ */
+export const acceptMaintenanceRequest = async (maintenanceRequest: number,
+    maintenanceAcceptanceInput: MaintenanceAcceptanceInput, options?: Parameters<typeof apiFetch>[1]): Promise<acceptMaintenanceRequestResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<acceptMaintenanceRequestResponse>(getAcceptMaintenanceRequestUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceAcceptanceInput)
+  }
+);}
+
+
+
+
+
+export const getAcceptMaintenanceRequestMutationKey = () => ['acceptMaintenanceRequest'] as const;
+
+export const getAcceptMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMaintenanceRequest>>, TError,AcceptMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptMaintenanceRequest>>, TError,AcceptMaintenanceRequestMutationVariables, TContext> => {
+
+const mutationKey = getAcceptMaintenanceRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptMaintenanceRequest>>, AcceptMaintenanceRequestMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  acceptMaintenanceRequest(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptMaintenanceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof acceptMaintenanceRequest>>>
+    export type AcceptMaintenanceRequestMutationBody = MaintenanceAcceptanceInput
+    export type AcceptMaintenanceRequestMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type AcceptMaintenanceRequestMutationVariables = {maintenanceRequest: number;data: MaintenanceAcceptanceInput}
+
+    /**
+ * @summary Accept a request into work, with a planned completion date
+ */
+export const useAcceptMaintenanceRequest = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMaintenanceRequest>>, TError,AcceptMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof acceptMaintenanceRequest>>,
+        TError,
+        AcceptMaintenanceRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptMaintenanceRequestMutationOptions(options), queryClient);
+    }
+
+export type rejectMaintenanceRequestResponse200 = {
+  data: RejectMaintenanceRequest200
+  status: 200
+}
+
+export type rejectMaintenanceRequestResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type rejectMaintenanceRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type rejectMaintenanceRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type rejectMaintenanceRequestResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type rejectMaintenanceRequestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type rejectMaintenanceRequestResponseSuccess = (rejectMaintenanceRequestResponse200) & {
+  headers: Headers;
+};
+export type rejectMaintenanceRequestResponseError = (rejectMaintenanceRequestResponse401 | rejectMaintenanceRequestResponse403 | rejectMaintenanceRequestResponse404 | rejectMaintenanceRequestResponse409 | rejectMaintenanceRequestResponse422) & {
+  headers: Headers;
+};
+
+export type rejectMaintenanceRequestResponse = (rejectMaintenanceRequestResponseSuccess | rejectMaintenanceRequestResponseError)
+
+export const getRejectMaintenanceRequestUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/reject`
+}
+
+/**
+ * FR-37, first criterion: «rejection without a reason is impossible». The
+ * reason is required by this route and is a required argument of the
+ * service behind it, so there is no path by which a refusal is recorded
+ * without one.
+ *
+ * The reason is stored as the comment of the work-log row this transition
+ * writes, and not as a column on the request (§3.4.1, decision 6).
+ *
+ * Only a `submitted` request can be refused. A request already taken into
+ * work and then found to be somebody else's business is not withdrawn
+ * afterwards — FR-38's graph has no such edge.
+ * @summary Refuse a request, with a stated reason
+ */
+export const rejectMaintenanceRequest = async (maintenanceRequest: number,
+    maintenanceRejectionInput: MaintenanceRejectionInput, options?: Parameters<typeof apiFetch>[1]): Promise<rejectMaintenanceRequestResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<rejectMaintenanceRequestResponse>(getRejectMaintenanceRequestUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceRejectionInput)
+  }
+);}
+
+
+
+
+
+export const getRejectMaintenanceRequestMutationKey = () => ['rejectMaintenanceRequest'] as const;
+
+export const getRejectMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMaintenanceRequest>>, TError,RejectMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectMaintenanceRequest>>, TError,RejectMaintenanceRequestMutationVariables, TContext> => {
+
+const mutationKey = getRejectMaintenanceRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectMaintenanceRequest>>, RejectMaintenanceRequestMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  rejectMaintenanceRequest(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectMaintenanceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof rejectMaintenanceRequest>>>
+    export type RejectMaintenanceRequestMutationBody = MaintenanceRejectionInput
+    export type RejectMaintenanceRequestMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type RejectMaintenanceRequestMutationVariables = {maintenanceRequest: number;data: MaintenanceRejectionInput}
+
+    /**
+ * @summary Refuse a request, with a stated reason
+ */
+export const useRejectMaintenanceRequest = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMaintenanceRequest>>, TError,RejectMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof rejectMaintenanceRequest>>,
+        TError,
+        RejectMaintenanceRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRejectMaintenanceRequestMutationOptions(options), queryClient);
+    }
+
+export type startMaintenanceWorkResponse200 = {
+  data: StartMaintenanceWork200
+  status: 200
+}
+
+export type startMaintenanceWorkResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type startMaintenanceWorkResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type startMaintenanceWorkResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type startMaintenanceWorkResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type startMaintenanceWorkResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type startMaintenanceWorkResponseSuccess = (startMaintenanceWorkResponse200) & {
+  headers: Headers;
+};
+export type startMaintenanceWorkResponseError = (startMaintenanceWorkResponse401 | startMaintenanceWorkResponse403 | startMaintenanceWorkResponse404 | startMaintenanceWorkResponse409 | startMaintenanceWorkResponse422) & {
+  headers: Headers;
+};
+
+export type startMaintenanceWorkResponse = (startMaintenanceWorkResponseSuccess | startMaintenanceWorkResponseError)
+
+export const getStartMaintenanceWorkUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/start`
+}
+
+/**
+ * FR-38, `accepted → in progress`. The staff who triage in this dormitory.
+ *
+ * FR-38's chain is kept strict: there is no `accepted → completed` edge,
+ * so work cannot be reported complete on a request nobody started. The
+ * convenience is real — a dripping tap is mended before anybody would
+ * press a second button — and it is refused because the graph is the
+ * requirement's, and because the history would otherwise have no answer to
+ * «when was it begun».
+ * @summary Report that the work has begun
+ */
+export const startMaintenanceWork = async (maintenanceRequest: number,
+    maintenanceCommentInput?: MaintenanceCommentInput, options?: Parameters<typeof apiFetch>[1]): Promise<startMaintenanceWorkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<startMaintenanceWorkResponse>(getStartMaintenanceWorkUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceCommentInput)
+  }
+);}
+
+
+
+
+
+export const getStartMaintenanceWorkMutationKey = () => ['startMaintenanceWork'] as const;
+
+export const getStartMaintenanceWorkMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startMaintenanceWork>>, TError,StartMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startMaintenanceWork>>, TError,StartMaintenanceWorkMutationVariables, TContext> => {
+
+const mutationKey = getStartMaintenanceWorkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startMaintenanceWork>>, StartMaintenanceWorkMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  startMaintenanceWork(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartMaintenanceWorkMutationResult = NonNullable<Awaited<ReturnType<typeof startMaintenanceWork>>>
+    export type StartMaintenanceWorkMutationBody = MaintenanceCommentInput | undefined
+    export type StartMaintenanceWorkMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type StartMaintenanceWorkMutationVariables = {maintenanceRequest: number;data?: MaintenanceCommentInput}
+
+    /**
+ * @summary Report that the work has begun
+ */
+export const useStartMaintenanceWork = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startMaintenanceWork>>, TError,StartMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startMaintenanceWork>>,
+        TError,
+        StartMaintenanceWorkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getStartMaintenanceWorkMutationOptions(options), queryClient);
+    }
+
+export type completeMaintenanceWorkResponse200 = {
+  data: CompleteMaintenanceWork200
+  status: 200
+}
+
+export type completeMaintenanceWorkResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type completeMaintenanceWorkResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type completeMaintenanceWorkResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type completeMaintenanceWorkResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type completeMaintenanceWorkResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type completeMaintenanceWorkResponseSuccess = (completeMaintenanceWorkResponse200) & {
+  headers: Headers;
+};
+export type completeMaintenanceWorkResponseError = (completeMaintenanceWorkResponse401 | completeMaintenanceWorkResponse403 | completeMaintenanceWorkResponse404 | completeMaintenanceWorkResponse409 | completeMaintenanceWorkResponse422) & {
+  headers: Headers;
+};
+
+export type completeMaintenanceWorkResponse = (completeMaintenanceWorkResponseSuccess | completeMaintenanceWorkResponseError)
+
+export const getCompleteMaintenanceWorkUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/completion`
+}
+
+/**
+ * FR-38, `in progress → completed`, and the line the whole module turns
+ * on (§3.5.2): **the request is closed by the person who reported it, not
+ * by the person who fixed it**. A status set by whoever did the work
+ * proves nothing; confirmation by the resident produces a two-sided
+ * record.
+ *
+ * So `completed` is a waiting state and not an ending. The only ways out
+ * of it are the reporter's word — `/confirmation` or `/reopening` — and
+ * the clock, which closes the request after the configurable window of
+ * FR-39 and marks it as automatically closed.
+ *
+ * `completed_at` is rewritten on each completion, which is what restarts
+ * the confirmation window after a reopening.
+ * @summary Report the work done — which does not close the request
+ */
+export const completeMaintenanceWork = async (maintenanceRequest: number,
+    maintenanceCommentInput?: MaintenanceCommentInput, options?: Parameters<typeof apiFetch>[1]): Promise<completeMaintenanceWorkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<completeMaintenanceWorkResponse>(getCompleteMaintenanceWorkUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceCommentInput)
+  }
+);}
+
+
+
+
+
+export const getCompleteMaintenanceWorkMutationKey = () => ['completeMaintenanceWork'] as const;
+
+export const getCompleteMaintenanceWorkMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeMaintenanceWork>>, TError,CompleteMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeMaintenanceWork>>, TError,CompleteMaintenanceWorkMutationVariables, TContext> => {
+
+const mutationKey = getCompleteMaintenanceWorkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeMaintenanceWork>>, CompleteMaintenanceWorkMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  completeMaintenanceWork(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteMaintenanceWorkMutationResult = NonNullable<Awaited<ReturnType<typeof completeMaintenanceWork>>>
+    export type CompleteMaintenanceWorkMutationBody = MaintenanceCommentInput | undefined
+    export type CompleteMaintenanceWorkMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type CompleteMaintenanceWorkMutationVariables = {maintenanceRequest: number;data?: MaintenanceCommentInput}
+
+    /**
+ * @summary Report the work done — which does not close the request
+ */
+export const useCompleteMaintenanceWork = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeMaintenanceWork>>, TError,CompleteMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof completeMaintenanceWork>>,
+        TError,
+        CompleteMaintenanceWorkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteMaintenanceWorkMutationOptions(options), queryClient);
+    }
+
+export type confirmMaintenanceWorkResponse200 = {
+  data: ConfirmMaintenanceWork200
+  status: 200
+}
+
+export type confirmMaintenanceWorkResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type confirmMaintenanceWorkResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type confirmMaintenanceWorkResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type confirmMaintenanceWorkResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type confirmMaintenanceWorkResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type confirmMaintenanceWorkResponseSuccess = (confirmMaintenanceWorkResponse200) & {
+  headers: Headers;
+};
+export type confirmMaintenanceWorkResponseError = (confirmMaintenanceWorkResponse401 | confirmMaintenanceWorkResponse403 | confirmMaintenanceWorkResponse404 | confirmMaintenanceWorkResponse409 | confirmMaintenanceWorkResponse422) & {
+  headers: Headers;
+};
+
+export type confirmMaintenanceWorkResponse = (confirmMaintenanceWorkResponseSuccess | confirmMaintenanceWorkResponseError)
+
+export const getConfirmMaintenanceWorkUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/confirmation`
+}
+
+/**
+ * FR-39. **The reporter, and nobody else** — not the warden who accepted
+ * it, not the manager who marked it complete, not the administrator. This
+ * is not a capability some role holds over a class of objects; it is the
+ * fact that one particular person filed one particular request, so the
+ * policy is an identity comparison.
+ *
+ * A warden who believes a resident unreasonable does not close the request
+ * over their head: the confirmation window runs out and the request closes
+ * marked `auto_closed`, which is a different and honest record.
+ *
+ * On success `confirmed_at` is set and `auto_closed` stays false. A CHECK
+ * constraint refuses a row that claims both.
+ * @summary The reporter confirms the work and the request closes
+ */
+export const confirmMaintenanceWork = async (maintenanceRequest: number,
+    maintenanceCommentInput?: MaintenanceCommentInput, options?: Parameters<typeof apiFetch>[1]): Promise<confirmMaintenanceWorkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<confirmMaintenanceWorkResponse>(getConfirmMaintenanceWorkUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceCommentInput)
+  }
+);}
+
+
+
+
+
+export const getConfirmMaintenanceWorkMutationKey = () => ['confirmMaintenanceWork'] as const;
+
+export const getConfirmMaintenanceWorkMutationOptions = <TError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmMaintenanceWork>>, TError,ConfirmMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmMaintenanceWork>>, TError,ConfirmMaintenanceWorkMutationVariables, TContext> => {
+
+const mutationKey = getConfirmMaintenanceWorkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmMaintenanceWork>>, ConfirmMaintenanceWorkMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  confirmMaintenanceWork(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmMaintenanceWorkMutationResult = NonNullable<Awaited<ReturnType<typeof confirmMaintenanceWork>>>
+    export type ConfirmMaintenanceWorkMutationBody = MaintenanceCommentInput | undefined
+    export type ConfirmMaintenanceWorkMutationError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type ConfirmMaintenanceWorkMutationVariables = {maintenanceRequest: number;data?: MaintenanceCommentInput}
+
+    /**
+ * @summary The reporter confirms the work and the request closes
+ */
+export const useConfirmMaintenanceWork = <TError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmMaintenanceWork>>, TError,ConfirmMaintenanceWorkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof confirmMaintenanceWork>>,
+        TError,
+        ConfirmMaintenanceWorkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getConfirmMaintenanceWorkMutationOptions(options), queryClient);
+    }
+
+export type reopenMaintenanceRequestResponse200 = {
+  data: ReopenMaintenanceRequest200
+  status: 200
+}
+
+export type reopenMaintenanceRequestResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type reopenMaintenanceRequestResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type reopenMaintenanceRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type reopenMaintenanceRequestResponse409 = {
+  data: IllegalTransitionError | ConfirmationWindowClosedError
+  status: 409
+}
+
+export type reopenMaintenanceRequestResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type reopenMaintenanceRequestResponseSuccess = (reopenMaintenanceRequestResponse200) & {
+  headers: Headers;
+};
+export type reopenMaintenanceRequestResponseError = (reopenMaintenanceRequestResponse401 | reopenMaintenanceRequestResponse403 | reopenMaintenanceRequestResponse404 | reopenMaintenanceRequestResponse409 | reopenMaintenanceRequestResponse422) & {
+  headers: Headers;
+};
+
+export type reopenMaintenanceRequestResponse = (reopenMaintenanceRequestResponseSuccess | reopenMaintenanceRequestResponseError)
+
+export const getReopenMaintenanceRequestUrl = (maintenanceRequest: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/reopening`
+}
+
+/**
+ * FR-39, first criterion: «reopening within the configurable window
+ * returns the request to accepted and increments a reopen counter».
+ *
+ * Back to `accepted` and not to `submitted`, which is the requirement's
+ * word and the right one: the dormitory has already agreed the defect is
+ * theirs and has already named a date. The planned date stays on the row —
+ * it is now visibly missed, which is what FR-40's overdue flag is for.
+ *
+ * The reason is optional. FR-37 makes a refusal without one impossible and
+ * FR-39 makes no such demand; the resident who has already waited through
+ * one repair is the wrong person to put a form in front of. The history
+ * gets a sentence either way.
+ *
+ * **Two different 409s.** The request is not `completed` at all — the
+ * state machine refuses it. Or it is completed and the window has run out
+ * before the nightly pass reached the row: what has expired is the clock
+ * rather than the state, which no transition table can express, so the
+ * body carries `confirmation_window_days` and `window_closed_on` instead
+ * of two statuses.
+ * @summary The reporter says the defect is not fixed
+ */
+export const reopenMaintenanceRequest = async (maintenanceRequest: number,
+    maintenanceCommentInput?: MaintenanceCommentInput, options?: Parameters<typeof apiFetch>[1]): Promise<reopenMaintenanceRequestResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<reopenMaintenanceRequestResponse>(getReopenMaintenanceRequestUrl(maintenanceRequest),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(maintenanceCommentInput)
+  }
+);}
+
+
+
+
+
+export const getReopenMaintenanceRequestMutationKey = () => ['reopenMaintenanceRequest'] as const;
+
+export const getReopenMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ConfirmationWindowClosedError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenMaintenanceRequest>>, TError,ReopenMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopenMaintenanceRequest>>, TError,ReopenMaintenanceRequestMutationVariables, TContext> => {
+
+const mutationKey = getReopenMaintenanceRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopenMaintenanceRequest>>, ReopenMaintenanceRequestMutationVariables> = (props) => {
+          const {maintenanceRequest,data} = props ?? {};
+
+          return  reopenMaintenanceRequest(maintenanceRequest,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReopenMaintenanceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof reopenMaintenanceRequest>>>
+    export type ReopenMaintenanceRequestMutationBody = MaintenanceCommentInput | undefined
+    export type ReopenMaintenanceRequestMutationError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ConfirmationWindowClosedError | ValidationFailedResponse
+    export type ReopenMaintenanceRequestMutationVariables = {maintenanceRequest: number;data?: MaintenanceCommentInput}
+
+    /**
+ * @summary The reporter says the defect is not fixed
+ */
+export const useReopenMaintenanceRequest = <TError = UnauthenticatedResponse | Error | NotFoundResponse | IllegalTransitionError | ConfirmationWindowClosedError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenMaintenanceRequest>>, TError,ReopenMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof reopenMaintenanceRequest>>,
+        TError,
+        ReopenMaintenanceRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReopenMaintenanceRequestMutationOptions(options), queryClient);
+    }
+
+export type showMaintenanceQueueResponse200ApplicationJson = {
+  data: MaintenanceQueuePage
+  status: 200
+}
+
+export type showMaintenanceQueueResponse200TextCsv = {
+  data: string
+  status: 200
+}
+
+export type showMaintenanceQueueResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showMaintenanceQueueResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showMaintenanceQueueResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type showMaintenanceQueueResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type showMaintenanceQueueResponseSuccess = (showMaintenanceQueueResponse200ApplicationJson | showMaintenanceQueueResponse200TextCsv) & {
+  headers: Headers;
+};
+export type showMaintenanceQueueResponseError = (showMaintenanceQueueResponse401 | showMaintenanceQueueResponse403 | showMaintenanceQueueResponse404 | showMaintenanceQueueResponse422) & {
+  headers: Headers;
+};
+
+export type showMaintenanceQueueResponse = (showMaintenanceQueueResponseSuccess | showMaintenanceQueueResponseError)
+
+export const getShowMaintenanceQueueUrl = (building: number,
+    params?: ShowMaintenanceQueueParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/buildings/${building}/maintenance-queue?${stringifiedParams}` : `/buildings/${building}/maintenance-queue`
+}
+
+/**
+ * FR-40. The warden or the manager of this dormitory, and the
+ * administrator, who reads every queue — FR-40 names the campus
+ * directorate among the people the queue is for.
+ *
+ * **A sub-resource of the building, and that is the whole of the
+ * horizontal boundary.** The dormitory is a path parameter, the policy
+ * decides on the object, and every query begins from it: there is no code
+ * path in which a request of another dormitory is in the result set to be
+ * filtered out afterwards. A warden of block 1 asking for block 2 is 403,
+ * recorded as `access.denied`.
+ *
+ * With no filter the answer is the **open** requests, because FR-40's
+ * fourth criterion says the warden sees «all open requests» and a screen
+ * opening on three years of closed ones would be a different screen.
+ * Naming a status — `closed` included — says otherwise.
+ *
+ * The order is the one a queue is worked in: most pressing urgency first,
+ * oldest first inside one urgency. Sorting by age alone would bury an
+ * emergency reported this morning under a wobbly chair from March.
+ *
+ * **`age_days` is counted from submission and from nothing else**, as the
+ * Gherkin of §2.4.3 words it. Restarting the clock on acceptance would
+ * measure the warden rather than the wait.
+ *
+ * **`overdue` is configuration and not code** (FR-40, second criterion).
+ * A request is overdue when its planned completion date has passed — a
+ * promise broken to a named resident — or when it is older than
+ * `meta.overdue_after_days`, which catches the request nobody has triaged
+ * at all and has no date to be late against. Changing the setting changes
+ * the flag and the nightly digest together, with no code edit.
+ *
+ * The export is this route with `format=csv` rather than a route of its
+ * own: two routes would be two queries with the same chance of disagreeing
+ * about what «open» means. Either format is an audited action — an export
+ * discloses who reported what and when.
+ * @summary The maintenance queue of one dormitory, filtered and exported
+ */
+export const showMaintenanceQueue = async (building: number,
+    params?: ShowMaintenanceQueueParams, options?: Parameters<typeof apiFetch>[1]): Promise<showMaintenanceQueueResponse> => {
+
+  return apiFetch<showMaintenanceQueueResponse>(getShowMaintenanceQueueUrl(building,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowMaintenanceQueueQueryKey = (building: number,
+    params?: ShowMaintenanceQueueParams,) => {
+    return [
+    `/buildings/${building}/maintenance-queue`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getShowMaintenanceQueueQueryOptions = <TData = Awaited<ReturnType<typeof showMaintenanceQueue>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse>(building: number,
+    params?: ShowMaintenanceQueueParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowMaintenanceQueueQueryKey(building,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showMaintenanceQueue>>> = ({ signal }) => showMaintenanceQueue(building,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: building !== null && building !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowMaintenanceQueueQueryResult = NonNullable<Awaited<ReturnType<typeof showMaintenanceQueue>>>
+export type ShowMaintenanceQueueQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse
+
+
+export function useShowMaintenanceQueue<TData = Awaited<ReturnType<typeof showMaintenanceQueue>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse>(
+ building: number,
+    params: undefined |  ShowMaintenanceQueueParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceQueue>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceQueue>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceQueue<TData = Awaited<ReturnType<typeof showMaintenanceQueue>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse>(
+ building: number,
+    params?: ShowMaintenanceQueueParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceQueue>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceQueue>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceQueue<TData = Awaited<ReturnType<typeof showMaintenanceQueue>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse>(
+ building: number,
+    params?: ShowMaintenanceQueueParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The maintenance queue of one dormitory, filtered and exported
+ */
+
+export function useShowMaintenanceQueue<TData = Awaited<ReturnType<typeof showMaintenanceQueue>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ValidationFailedResponse>(
+ building: number,
+    params?: ShowMaintenanceQueueParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceQueue>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowMaintenanceQueueQueryOptions(building,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type listLostFoundResponse200 = {
+  data: ListLostFound200
+  status: 200
+}
+
+export type listLostFoundResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type listLostFoundResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type listLostFoundResponseSuccess = (listLostFoundResponse200) & {
+  headers: Headers;
+};
+export type listLostFoundResponseError = (listLostFoundResponse401 | listLostFoundResponse422) & {
+  headers: Headers;
+};
+
+export type listLostFoundResponse = (listLostFoundResponseSuccess | listLostFoundResponseError)
+
+export const getListLostFoundUrl = (params?: ListLostFoundParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/lost-found?${stringifiedParams}` : `/lost-found`
+}
+
+/**
+ * FR-25. **The route takes no building parameter**, and that absence is
+ * the first acceptance criterion: the dormitories are computed from the
+ * grants of the token, so there is no way to phrase a request for another
+ * one. The boundary is a missing parameter rather than a policy somebody
+ * has to remember to call — the same arrangement the announcement feed
+ * and the notification routes are built on. The administrator's grant
+ * names no dormitory and is therefore not confined to one.
+ *
+ * **The default is `published` alone, which is what «the published list»
+ * means.** FR-26's second criterion — «a declined claim returns the find
+ * to the published list» — only says something if a claimed entry is not
+ * in that list, so it is not; a claimed entry is read by asking for it
+ * with `status=claimed`.
+ *
+ * **`resolved` is not a value this route takes.** FR-26's third criterion
+ * is «after closure the record disappears from the public list», so the
+ * value is refused as a 422 naming the field rather than accepted and
+ * answered with an empty page a client would have to interpret. The
+ * person who published an entry still reads it at
+ * `GET /lost-found/{id}` after it has closed: it has left the feed and
+ * not the application.
+ *
+ * A resident whose residency record has ended stops reading that
+ * dormitory's feed on the stated date (FR-05).
+ * @summary The finds of the caller's own dormitory
+ */
+export const listLostFound = async (params?: ListLostFoundParams, options?: Parameters<typeof apiFetch>[1]): Promise<listLostFoundResponse> => {
+
+  return apiFetch<listLostFoundResponse>(getListLostFoundUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLostFoundQueryKey = (params?: ListLostFoundParams,) => {
+    return [
+    `/lost-found`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLostFoundQueryOptions = <TData = Awaited<ReturnType<typeof listLostFound>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(params?: ListLostFoundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLostFoundQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLostFound>>> = ({ signal }) => listLostFound(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListLostFoundQueryResult = NonNullable<Awaited<ReturnType<typeof listLostFound>>>
+export type ListLostFoundQueryError = UnauthenticatedResponse | ValidationFailedResponse
+
+
+export function useListLostFound<TData = Awaited<ReturnType<typeof listLostFound>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params: undefined |  ListLostFoundParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLostFound>>,
+          TError,
+          Awaited<ReturnType<typeof listLostFound>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLostFound<TData = Awaited<ReturnType<typeof listLostFound>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListLostFoundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLostFound>>,
+          TError,
+          Awaited<ReturnType<typeof listLostFound>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLostFound<TData = Awaited<ReturnType<typeof listLostFound>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListLostFoundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The finds of the caller's own dormitory
+ */
+
+export function useListLostFound<TData = Awaited<ReturnType<typeof listLostFound>>, TError = UnauthenticatedResponse | ValidationFailedResponse>(
+ params?: ListLostFoundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFound>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListLostFoundQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type publishLostFoundItemResponse201 = {
+  data: PublishLostFoundItem201
+  status: 201
+}
+
+export type publishLostFoundItemResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type publishLostFoundItemResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type publishLostFoundItemResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type publishLostFoundItemResponseSuccess = (publishLostFoundItemResponse201) & {
+  headers: Headers;
+};
+export type publishLostFoundItemResponseError = (publishLostFoundItemResponse401 | publishLostFoundItemResponse403 | publishLostFoundItemResponse422) & {
+  headers: Headers;
+};
+
+export type publishLostFoundItemResponse = (publishLostFoundItemResponseSuccess | publishLostFoundItemResponseError)
+
+export const getPublishLostFoundItemUrl = () => {
+
+
+
+
+  return `/lost-found`
+}
+
+/**
+ * FR-24, `multipart/form-data` because of the photograph.
+ *
+ * **The entry is in the feed the moment this answers 201.** FR-24's
+ * fourth criterion is «publication passes through no staff approval
+ * step», and §2.5.4 gives the reason: routing every find through a member
+ * of staff would put back the delay the module exists to remove. There is
+ * no moderation state in the vocabulary for an entry to wait in, and no
+ * field on this form by which one could be asked for.
+ *
+ * **The reporter is never in the body.** The record is bound to the
+ * publishing account as the finder (FR-24, second criterion); a client
+ * that could name a reporter could publish in somebody else's name. The
+ * identifier is not in the response either — see `LostFoundItem`.
+ *
+ * **`custody` says which of §2.5.4's two paths the find took.** The
+ * default is `finder`: the object stays with the resident who found it,
+ * who hands it over in person and decides on claims. `administration` is
+ * an object handed in at the security post or deposited for safekeeping —
+ * the case Civil Code art. 227 cl. 1 para. 2 addresses, in which the
+ * person representing the owner of the premises acquires the rights and
+ * bears the duties of the finder — and only an account holding the
+ * capability in that dormitory may assert it. A resident sending it gets
+ * 403: nothing about the value is malformed, and it is the account that
+ * may not make that statement about the university.
+ *
+ * **`declared_on` is offered and required on neither path.** It is the day
+ * the find was declared to the police or to a local self-government body
+ * (art. 227 cl. 2), null while nothing has been declared. The six-month
+ * period of art. 228 cl. 1 runs from it and never from the registration.
+ * FR-27 counts those days and is outside the MVP; the field is here
+ * because a declaration date cannot be retrofitted onto records created
+ * without one.
+ *
+ * Who may publish: anybody whose residency record in that dormitory is
+ * current, and any account holding the safekeeping capability there. A
+ * resident of block A publishing into block B gets 403.
+ * @summary Publish a find
+ */
+export const publishLostFoundItem = async (lostFoundItemInput: LostFoundItemInput, options?: Parameters<typeof apiFetch>[1]): Promise<publishLostFoundItemResponse> => {
+    const formData = new FormData();
+formData.append(`building_id`, lostFoundItemInput.building_id.toString())
+formData.append(`title`, lostFoundItemInput.title);
+if(lostFoundItemInput.description !== undefined) {
+ formData.append(`description`, lostFoundItemInput.description);
+ }
+formData.append(`place`, lostFoundItemInput.place);
+formData.append(`happened_on`, lostFoundItemInput.happened_on);
+if(lostFoundItemInput.declared_on !== undefined) {
+ formData.append(`declared_on`, lostFoundItemInput.declared_on);
+ }
+if(lostFoundItemInput.kind !== undefined) {
+ formData.append(`kind`, lostFoundItemInput.kind);
+ }
+if(lostFoundItemInput.custody !== undefined) {
+ formData.append(`custody`, lostFoundItemInput.custody);
+ }
+if(lostFoundItemInput.photo !== undefined) {
+ formData.append(`photo`, lostFoundItemInput.photo);
+ }
+
+  return apiFetch<publishLostFoundItemResponse>(getPublishLostFoundItemUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getPublishLostFoundItemMutationKey = () => ['publishLostFoundItem'] as const;
+
+export const getPublishLostFoundItemMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext> => {
+
+const mutationKey = getPublishLostFoundItemMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishLostFoundItem>>, PublishLostFoundItemMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  publishLostFoundItem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishLostFoundItemMutationResult = NonNullable<Awaited<ReturnType<typeof publishLostFoundItem>>>
+    export type PublishLostFoundItemMutationBody = LostFoundItemInput
+    export type PublishLostFoundItemMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse
+    export type PublishLostFoundItemMutationVariables = {data: LostFoundItemInput}
+
+    /**
+ * @summary Publish a find
+ */
+export const usePublishLostFoundItem = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof publishLostFoundItem>>,
+        TError,
+        PublishLostFoundItemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPublishLostFoundItemMutationOptions(options), queryClient);
+    }
+
+export type showLostFoundItemResponse200 = {
+  data: ShowLostFoundItem200
+  status: 200
+}
+
+export type showLostFoundItemResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showLostFoundItemResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showLostFoundItemResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type showLostFoundItemResponseSuccess = (showLostFoundItemResponse200) & {
+  headers: Headers;
+};
+export type showLostFoundItemResponseError = (showLostFoundItemResponse401 | showLostFoundItemResponse403 | showLostFoundItemResponse404) & {
+  headers: Headers;
+};
+
+export type showLostFoundItemResponse = (showLostFoundItemResponseSuccess | showLostFoundItemResponseError)
+
+export const getShowLostFoundItemUrl = (lostFoundItem: number,) => {
+
+
+
+
+  return `/lost-found/${lostFoundItem}`
+}
+
+/**
+ * FR-25, second criterion: **the card displays neither the name nor the
+ * contacts of the registering user**. There is no `reporter_id`, no
+ * `reporter_name`, no telephone and no e-mail anywhere in this response.
+ *
+ * The omission lives in the API Resource and not in the query. The
+ * service needs `reporter_id` to answer «whose decision is this» and the
+ * policy needs it to let the publisher read their own closed entry, so a
+ * query that did not select it would break the module; a Resource that
+ * never serialises the column cannot leak it through a later change to
+ * the query. §3.5.3 gives the reason it matters: a feed read by several
+ * hundred people with a name beside every entry is a directory of who
+ * found what and lives where.
+ *
+ * Who reads it: anybody attached to that dormitory, the person who
+ * published it — in any state, including after closure — and anybody
+ * whose claim is on it.
+ *
+ * `claim_count` says how many claims the entry carries and never what any
+ * of them says; the marks are read at
+ * `GET /lost-found/{id}/claims` by the three people party to them.
+ * @summary One find, without the person who published it
+ */
+export const showLostFoundItem = async (lostFoundItem: number, options?: Parameters<typeof apiFetch>[1]): Promise<showLostFoundItemResponse> => {
+
+  return apiFetch<showLostFoundItemResponse>(getShowLostFoundItemUrl(lostFoundItem),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowLostFoundItemQueryKey = (lostFoundItem: number,) => {
+    return [
+    `/lost-found/${lostFoundItem}`
+    ] as const;
+    }
+
+
+export const getShowLostFoundItemQueryOptions = <TData = Awaited<ReturnType<typeof showLostFoundItem>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowLostFoundItemQueryKey(lostFoundItem);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showLostFoundItem>>> = ({ signal }) => showLostFoundItem(lostFoundItem, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: lostFoundItem !== null && lostFoundItem !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowLostFoundItemQueryResult = NonNullable<Awaited<ReturnType<typeof showLostFoundItem>>>
+export type ShowLostFoundItemQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useShowLostFoundItem<TData = Awaited<ReturnType<typeof showLostFoundItem>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showLostFoundItem>>,
+          TError,
+          Awaited<ReturnType<typeof showLostFoundItem>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowLostFoundItem<TData = Awaited<ReturnType<typeof showLostFoundItem>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showLostFoundItem>>,
+          TError,
+          Awaited<ReturnType<typeof showLostFoundItem>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowLostFoundItem<TData = Awaited<ReturnType<typeof showLostFoundItem>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One find, without the person who published it
+ */
+
+export function useShowLostFoundItem<TData = Awaited<ReturnType<typeof showLostFoundItem>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItem>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowLostFoundItemQueryOptions(lostFoundItem,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type listLostFoundClaimsResponse200 = {
+  data: ListLostFoundClaims200
+  status: 200
+}
+
+export type listLostFoundClaimsResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type listLostFoundClaimsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listLostFoundClaimsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listLostFoundClaimsResponseSuccess = (listLostFoundClaimsResponse200) & {
+  headers: Headers;
+};
+export type listLostFoundClaimsResponseError = (listLostFoundClaimsResponse401 | listLostFoundClaimsResponse403 | listLostFoundClaimsResponse404) & {
+  headers: Headers;
+};
+
+export type listLostFoundClaimsResponse = (listLostFoundClaimsResponseSuccess | listLostFoundClaimsResponseError)
+
+export const getListLostFoundClaimsUrl = (lostFoundItem: number,) => {
+
+
+
+
+  return `/lost-found/${lostFoundItem}/claims`
+}
+
+/**
+ * FR-26. The person who has to answer them — the finder on the ordinary
+ * path, the staff of the dormitory for an object deposited with them —
+ * and the warden or manager who may be asked to review a refusal. Another
+ * resident of the same dormitory gets 403: the identifying marks are the
+ * one thing that makes a claim checkable, and a list of them readable by
+ * everybody would tell the next claimant exactly what to write.
+ * @summary The claims made against one find
+ */
+export const listLostFoundClaims = async (lostFoundItem: number, options?: Parameters<typeof apiFetch>[1]): Promise<listLostFoundClaimsResponse> => {
+
+  return apiFetch<listLostFoundClaimsResponse>(getListLostFoundClaimsUrl(lostFoundItem),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLostFoundClaimsQueryKey = (lostFoundItem: number,) => {
+    return [
+    `/lost-found/${lostFoundItem}/claims`
+    ] as const;
+    }
+
+
+export const getListLostFoundClaimsQueryOptions = <TData = Awaited<ReturnType<typeof listLostFoundClaims>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLostFoundClaimsQueryKey(lostFoundItem);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLostFoundClaims>>> = ({ signal }) => listLostFoundClaims(lostFoundItem, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: lostFoundItem !== null && lostFoundItem !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListLostFoundClaimsQueryResult = NonNullable<Awaited<ReturnType<typeof listLostFoundClaims>>>
+export type ListLostFoundClaimsQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+
+
+export function useListLostFoundClaims<TData = Awaited<ReturnType<typeof listLostFoundClaims>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLostFoundClaims>>,
+          TError,
+          Awaited<ReturnType<typeof listLostFoundClaims>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLostFoundClaims<TData = Awaited<ReturnType<typeof listLostFoundClaims>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLostFoundClaims>>,
+          TError,
+          Awaited<ReturnType<typeof listLostFoundClaims>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLostFoundClaims<TData = Awaited<ReturnType<typeof listLostFoundClaims>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The claims made against one find
+ */
+
+export function useListLostFoundClaims<TData = Awaited<ReturnType<typeof listLostFoundClaims>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLostFoundClaims>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListLostFoundClaimsQueryOptions(lostFoundItem,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type claimLostFoundItemResponse201 = {
+  data: ClaimLostFoundItem201
+  status: 201
+}
+
+export type claimLostFoundItemResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type claimLostFoundItemResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type claimLostFoundItemResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type claimLostFoundItemResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type claimLostFoundItemResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type claimLostFoundItemResponseSuccess = (claimLostFoundItemResponse201) & {
+  headers: Headers;
+};
+export type claimLostFoundItemResponseError = (claimLostFoundItemResponse401 | claimLostFoundItemResponse403 | claimLostFoundItemResponse404 | claimLostFoundItemResponse409 | claimLostFoundItemResponse422) & {
+  headers: Headers;
+};
+
+export type claimLostFoundItemResponse = (claimLostFoundItemResponseSuccess | claimLostFoundItemResponseError)
+
+export const getClaimLostFoundItemUrl = (lostFoundItem: number,) => {
+
+
+
+
+  return `/lost-found/${lostFoundItem}/claims`
+}
+
+/**
+ * FR-26: «the resident submits a claim describing identifying features».
+ *
+ * **A claim on one's own entry is 422 and not 403**, and the difference is
+ * deliberate: the account may claim any number of other finds, so nothing
+ * about its rights is in question — what is wrong is the object the
+ * request names, and the body says which. A 403 would also be written to
+ * the audit log as an access denial, which this is not. A notice of a
+ * loss is refused the same way: a claim is «that is mine», and the author
+ * of a loss is holding nothing.
+ *
+ * One person holds one outstanding claim per entry. A second attempt
+ * while the first is unanswered is 422; a claim that has been settled
+ * does not block a later one.
+ *
+ * The first claim moves the entry from `published` to `claimed`; a second
+ * leaves it where it is, because several claims may coexist (§3.5.5). A
+ * claim on an entry that has gone home is 403.
+ *
+ * The person holding the object is notified, with the marks and without
+ * the claimant's contacts.
+ * @summary Claim a find
+ */
+export const claimLostFoundItem = async (lostFoundItem: number,
+    lostFoundClaimInput: LostFoundClaimInput, options?: Parameters<typeof apiFetch>[1]): Promise<claimLostFoundItemResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<claimLostFoundItemResponse>(getClaimLostFoundItemUrl(lostFoundItem),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(lostFoundClaimInput)
+  }
+);}
+
+
+
+
+
+export const getClaimLostFoundItemMutationKey = () => ['claimLostFoundItem'] as const;
+
+export const getClaimLostFoundItemMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimLostFoundItem>>, TError,ClaimLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimLostFoundItem>>, TError,ClaimLostFoundItemMutationVariables, TContext> => {
+
+const mutationKey = getClaimLostFoundItemMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimLostFoundItem>>, ClaimLostFoundItemMutationVariables> = (props) => {
+          const {lostFoundItem,data} = props ?? {};
+
+          return  claimLostFoundItem(lostFoundItem,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimLostFoundItemMutationResult = NonNullable<Awaited<ReturnType<typeof claimLostFoundItem>>>
+    export type ClaimLostFoundItemMutationBody = LostFoundClaimInput
+    export type ClaimLostFoundItemMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type ClaimLostFoundItemMutationVariables = {lostFoundItem: number;data: LostFoundClaimInput}
+
+    /**
+ * @summary Claim a find
+ */
+export const useClaimLostFoundItem = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimLostFoundItem>>, TError,ClaimLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof claimLostFoundItem>>,
+        TError,
+        ClaimLostFoundItemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getClaimLostFoundItemMutationOptions(options), queryClient);
+    }
+
+export type acceptLostFoundClaimResponse200 = {
+  data: AcceptLostFoundClaim200
+  status: 200
+}
+
+export type acceptLostFoundClaimResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type acceptLostFoundClaimResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptLostFoundClaimResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptLostFoundClaimResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type acceptLostFoundClaimResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type acceptLostFoundClaimResponseSuccess = (acceptLostFoundClaimResponse200) & {
+  headers: Headers;
+};
+export type acceptLostFoundClaimResponseError = (acceptLostFoundClaimResponse401 | acceptLostFoundClaimResponse403 | acceptLostFoundClaimResponse404 | acceptLostFoundClaimResponse409 | acceptLostFoundClaimResponse422) & {
+  headers: Headers;
+};
+
+export type acceptLostFoundClaimResponse = (acceptLostFoundClaimResponseSuccess | acceptLostFoundClaimResponseError)
+
+export const getAcceptLostFoundClaimUrl = (lostFoundClaim: number,) => {
+
+
+
+
+  return `/lost-found/claims/${lostFoundClaim}/accept`
+}
+
+/**
+ * FR-26, §2.4.4, first scenario. **The person holding the object, and
+ * nobody else** — the finder on the ordinary path, the staff of the
+ * dormitory for an object deposited with them. Not another resident, not
+ * the claimant, and not the warden, whose one way into a claim is a
+ * referral. §2.5.4: the module is peer-to-peer and a member of staff
+ * deciding an ordinary claim would be the moderation step it was built to
+ * do without.
+ *
+ * «The claimant is notified with the handover point» — so
+ * `handover_point` is required, is a required argument of the service
+ * behind it, and is a CHECK constraint on the table. It is the one piece
+ * of location this module ever publishes, and it is a place the person
+ * holding the object chose.
+ *
+ * **The entry is not closed by this.** It stays `claimed` until the object
+ * actually changes hands and somebody says so at
+ * `POST /lost-found/{id}/resolve`. An acceptance that closed the entry
+ * would be the system recording a handover that had not happened.
+ * @summary Accept a claim, naming where the object changes hands
+ */
+export const acceptLostFoundClaim = async (lostFoundClaim: number,
+    lostFoundAcceptanceInput: LostFoundAcceptanceInput, options?: Parameters<typeof apiFetch>[1]): Promise<acceptLostFoundClaimResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<acceptLostFoundClaimResponse>(getAcceptLostFoundClaimUrl(lostFoundClaim),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(lostFoundAcceptanceInput)
+  }
+);}
+
+
+
+
+
+export const getAcceptLostFoundClaimMutationKey = () => ['acceptLostFoundClaim'] as const;
+
+export const getAcceptLostFoundClaimMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptLostFoundClaim>>, TError,AcceptLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptLostFoundClaim>>, TError,AcceptLostFoundClaimMutationVariables, TContext> => {
+
+const mutationKey = getAcceptLostFoundClaimMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptLostFoundClaim>>, AcceptLostFoundClaimMutationVariables> = (props) => {
+          const {lostFoundClaim,data} = props ?? {};
+
+          return  acceptLostFoundClaim(lostFoundClaim,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptLostFoundClaimMutationResult = NonNullable<Awaited<ReturnType<typeof acceptLostFoundClaim>>>
+    export type AcceptLostFoundClaimMutationBody = LostFoundAcceptanceInput
+    export type AcceptLostFoundClaimMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type AcceptLostFoundClaimMutationVariables = {lostFoundClaim: number;data: LostFoundAcceptanceInput}
+
+    /**
+ * @summary Accept a claim, naming where the object changes hands
+ */
+export const useAcceptLostFoundClaim = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptLostFoundClaim>>, TError,AcceptLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof acceptLostFoundClaim>>,
+        TError,
+        AcceptLostFoundClaimMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptLostFoundClaimMutationOptions(options), queryClient);
+    }
+
+export type declineLostFoundClaimResponse200 = {
+  data: DeclineLostFoundClaim200
+  status: 200
+}
+
+export type declineLostFoundClaimResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type declineLostFoundClaimResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type declineLostFoundClaimResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type declineLostFoundClaimResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type declineLostFoundClaimResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type declineLostFoundClaimResponseSuccess = (declineLostFoundClaimResponse200) & {
+  headers: Headers;
+};
+export type declineLostFoundClaimResponseError = (declineLostFoundClaimResponse401 | declineLostFoundClaimResponse403 | declineLostFoundClaimResponse404 | declineLostFoundClaimResponse409 | declineLostFoundClaimResponse422) & {
+  headers: Headers;
+};
+
+export type declineLostFoundClaimResponse = (declineLostFoundClaimResponseSuccess | declineLostFoundClaimResponseError)
+
+export const getDeclineLostFoundClaimUrl = (lostFoundClaim: number,) => {
+
+
+
+
+  return `/lost-found/claims/${lostFoundClaim}/decline`
+}
+
+/**
+ * FR-26, §2.4.4, second scenario. The same circle as the acceptance: the
+ * person holding the object.
+ *
+ * «The find returns to the published list» — and §3.5.5 says when: «the
+ * entry returns to Published if none of them is confirmed». So with two
+ * claims on the table the first refusal changes nothing about the entry
+ * and the second puts it back.
+ *
+ * **The reason is optional, and that is a decision.** FR-37 makes a
+ * refusal without a reason impossible for a maintenance request; FR-26
+ * makes no such demand of a claim, and a required field here would be a
+ * rule the requirement does not carry, put in front of a resident who is
+ * doing the dormitory a favour by answering at all. What the requirement
+ * puts in its place is the offer below.
+ *
+ * The claimant is notified, and `may_be_referred` comes back true: FR-26
+ * gives them the option of putting the refusal to the warden.
+ * @summary Decline a claim
+ */
+export const declineLostFoundClaim = async (lostFoundClaim: number,
+    lostFoundDeclineInput?: LostFoundDeclineInput, options?: Parameters<typeof apiFetch>[1]): Promise<declineLostFoundClaimResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<declineLostFoundClaimResponse>(getDeclineLostFoundClaimUrl(lostFoundClaim),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(lostFoundDeclineInput)
+  }
+);}
+
+
+
+
+
+export const getDeclineLostFoundClaimMutationKey = () => ['declineLostFoundClaim'] as const;
+
+export const getDeclineLostFoundClaimMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineLostFoundClaim>>, TError,DeclineLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof declineLostFoundClaim>>, TError,DeclineLostFoundClaimMutationVariables, TContext> => {
+
+const mutationKey = getDeclineLostFoundClaimMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof declineLostFoundClaim>>, DeclineLostFoundClaimMutationVariables> = (props) => {
+          const {lostFoundClaim,data} = props ?? {};
+
+          return  declineLostFoundClaim(lostFoundClaim,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeclineLostFoundClaimMutationResult = NonNullable<Awaited<ReturnType<typeof declineLostFoundClaim>>>
+    export type DeclineLostFoundClaimMutationBody = LostFoundDeclineInput | undefined
+    export type DeclineLostFoundClaimMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type DeclineLostFoundClaimMutationVariables = {lostFoundClaim: number;data?: LostFoundDeclineInput}
+
+    /**
+ * @summary Decline a claim
+ */
+export const useDeclineLostFoundClaim = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineLostFoundClaim>>, TError,DeclineLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof declineLostFoundClaim>>,
+        TError,
+        DeclineLostFoundClaimMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeclineLostFoundClaimMutationOptions(options), queryClient);
+    }
+
+export type referLostFoundClaimResponse200 = {
+  data: ReferLostFoundClaim200
+  status: 200
+}
+
+export type referLostFoundClaimResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type referLostFoundClaimResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type referLostFoundClaimResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type referLostFoundClaimResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type referLostFoundClaimResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type referLostFoundClaimResponseSuccess = (referLostFoundClaimResponse200) & {
+  headers: Headers;
+};
+export type referLostFoundClaimResponseError = (referLostFoundClaimResponse401 | referLostFoundClaimResponse403 | referLostFoundClaimResponse404 | referLostFoundClaimResponse409 | referLostFoundClaimResponse422) & {
+  headers: Headers;
+};
+
+export type referLostFoundClaimResponse = (referLostFoundClaimResponseSuccess | referLostFoundClaimResponseError)
+
+export const getReferLostFoundClaimUrl = (lostFoundClaim: number,) => {
+
+
+
+
+  return `/lost-found/claims/${lostFoundClaim}/referral`
+}
+
+/**
+ * FR-26: «a claim the two sides cannot settle is referred to the warden,
+ * who decides». **The claimant's own route**, and the first of §2.5.4's
+ * two occasions for a member of staff. Nobody refers on somebody else's
+ * behalf — not the person whose refusal is under review, and not the
+ * warden, who would then be handing themselves a case.
+ *
+ * A claim may be referred once. A second attempt is 409, and so is a
+ * referral of a claim nobody has answered: the warden gets «a claim the
+ * two sides cannot settle», and two sides that have not spoken have not
+ * failed to settle anything.
+ *
+ * The entry stays out of the feed while the disagreement is open: a
+ * referred claim is outstanding, and offering the object to somebody else
+ * while the warden is still looking at it is what the status prevents.
+ * @summary Refer a refused claim to the warden
+ */
+export const referLostFoundClaim = async (lostFoundClaim: number,
+    lostFoundReferralInput?: LostFoundReferralInput, options?: Parameters<typeof apiFetch>[1]): Promise<referLostFoundClaimResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<referLostFoundClaimResponse>(getReferLostFoundClaimUrl(lostFoundClaim),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(lostFoundReferralInput)
+  }
+);}
+
+
+
+
+
+export const getReferLostFoundClaimMutationKey = () => ['referLostFoundClaim'] as const;
+
+export const getReferLostFoundClaimMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof referLostFoundClaim>>, TError,ReferLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof referLostFoundClaim>>, TError,ReferLostFoundClaimMutationVariables, TContext> => {
+
+const mutationKey = getReferLostFoundClaimMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof referLostFoundClaim>>, ReferLostFoundClaimMutationVariables> = (props) => {
+          const {lostFoundClaim,data} = props ?? {};
+
+          return  referLostFoundClaim(lostFoundClaim,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReferLostFoundClaimMutationResult = NonNullable<Awaited<ReturnType<typeof referLostFoundClaim>>>
+    export type ReferLostFoundClaimMutationBody = LostFoundReferralInput | undefined
+    export type ReferLostFoundClaimMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type ReferLostFoundClaimMutationVariables = {lostFoundClaim: number;data?: LostFoundReferralInput}
+
+    /**
+ * @summary Refer a refused claim to the warden
+ */
+export const useReferLostFoundClaim = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof referLostFoundClaim>>, TError,ReferLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof referLostFoundClaim>>,
+        TError,
+        ReferLostFoundClaimMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReferLostFoundClaimMutationOptions(options), queryClient);
+    }
+
+export type decideLostFoundClaimResponse200 = {
+  data: DecideLostFoundClaim200
+  status: 200
+}
+
+export type decideLostFoundClaimResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type decideLostFoundClaimResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type decideLostFoundClaimResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type decideLostFoundClaimResponse409 = {
+  data: IllegalTransitionError
+  status: 409
+}
+
+export type decideLostFoundClaimResponse422 = {
+  data: ValidationFailedResponse
+  status: 422
+}
+
+export type decideLostFoundClaimResponseSuccess = (decideLostFoundClaimResponse200) & {
+  headers: Headers;
+};
+export type decideLostFoundClaimResponseError = (decideLostFoundClaimResponse401 | decideLostFoundClaimResponse403 | decideLostFoundClaimResponse404 | decideLostFoundClaimResponse409 | decideLostFoundClaimResponse422) & {
+  headers: Headers;
+};
+
+export type decideLostFoundClaimResponse = (decideLostFoundClaimResponseSuccess | decideLostFoundClaimResponseError)
+
+export const getDecideLostFoundClaimUrl = (lostFoundClaim: number,) => {
+
+
+
+
+  return `/lost-found/claims/${lostFoundClaim}/decision`
+}
+
+/**
+ * FR-26, first criterion: «a warden's decision on a referred claim». The
+ * second of §2.5.4's two occasions for a member of staff, and the only
+ * decision in the module taken over the head of the person holding the
+ * object.
+ *
+ * **The warden or the manager of that dormitory, and nobody else** — not
+ * the security officer, who keeps objects and settles nothing; not the
+ * administrator, for the reason they are outside `guest-requests/approve`;
+ * not the person whose refusal is under review; not the claimant.
+ *
+ * **Only a referred claim.** A claim nobody referred is 409, not 403: the
+ * caller holds the capability perfectly well and what is missing is the
+ * referral that would have put the decision in their hands. There is no
+ * route by which a member of staff reaches an ordinary claim at all.
+ *
+ * **`upheld` is a boolean and not two routes**, which is where this module
+ * departs from the shape the guest and maintenance modules use. There,
+ * approve and reject are separate acts with separate bodies; here it is
+ * one act — the warden read the claim, the refusal and the marks, and says
+ * which of the two residents is right — and the body is the same either
+ * way. `note` is required in both directions, because a decision that
+ * overrides a person entitled to make it is one nobody can answer if
+ * nobody explained it.
+ *
+ * **Upholding does not close the entry either.** It makes the claim
+ * `accepted`, which is the ground FR-26's first criterion admits for a
+ * closure; the closure itself is still the act of the person handing the
+ * object over.
+ * @summary The warden's decision on a referred claim
+ */
+export const decideLostFoundClaim = async (lostFoundClaim: number,
+    lostFoundDecisionInput: LostFoundDecisionInput, options?: Parameters<typeof apiFetch>[1]): Promise<decideLostFoundClaimResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<decideLostFoundClaimResponse>(getDecideLostFoundClaimUrl(lostFoundClaim),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(lostFoundDecisionInput)
+  }
+);}
+
+
+
+
+
+export const getDecideLostFoundClaimMutationKey = () => ['decideLostFoundClaim'] as const;
+
+export const getDecideLostFoundClaimMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideLostFoundClaim>>, TError,DecideLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideLostFoundClaim>>, TError,DecideLostFoundClaimMutationVariables, TContext> => {
+
+const mutationKey = getDecideLostFoundClaimMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideLostFoundClaim>>, DecideLostFoundClaimMutationVariables> = (props) => {
+          const {lostFoundClaim,data} = props ?? {};
+
+          return  decideLostFoundClaim(lostFoundClaim,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideLostFoundClaimMutationResult = NonNullable<Awaited<ReturnType<typeof decideLostFoundClaim>>>
+    export type DecideLostFoundClaimMutationBody = LostFoundDecisionInput
+    export type DecideLostFoundClaimMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse
+    export type DecideLostFoundClaimMutationVariables = {lostFoundClaim: number;data: LostFoundDecisionInput}
+
+    /**
+ * @summary The warden's decision on a referred claim
+ */
+export const useDecideLostFoundClaim = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | IllegalTransitionError | ValidationFailedResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideLostFoundClaim>>, TError,DecideLostFoundClaimMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof decideLostFoundClaim>>,
+        TError,
+        DecideLostFoundClaimMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDecideLostFoundClaimMutationOptions(options), queryClient);
+    }
+
+export type resolveLostFoundItemResponse200 = {
+  data: ResolveLostFoundItem200
+  status: 200
+}
+
+export type resolveLostFoundItemResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type resolveLostFoundItemResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resolveLostFoundItemResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resolveLostFoundItemResponse409 = {
+  data: NoAcceptedClaimError
+  status: 409
+}
+
+export type resolveLostFoundItemResponseSuccess = (resolveLostFoundItemResponse200) & {
+  headers: Headers;
+};
+export type resolveLostFoundItemResponseError = (resolveLostFoundItemResponse401 | resolveLostFoundItemResponse403 | resolveLostFoundItemResponse404 | resolveLostFoundItemResponse409) & {
+  headers: Headers;
+};
+
+export type resolveLostFoundItemResponse = (resolveLostFoundItemResponseSuccess | resolveLostFoundItemResponseError)
+
+export const getResolveLostFoundItemUrl = (lostFoundItem: number,) => {
+
+
+
+
+  return `/lost-found/${lostFoundItem}/resolve`
+}
+
+/**
+ * FR-26, §2.4.4: «when the finder then marks the item returned, the status
+ * becomes resolved with the time and the record no longer appears in the
+ * public list of available finds».
+ *
+ * **The «only» of FR-26's first criterion lives here.** A find closes as
+ * returned on a claim the finder accepted or on a warden's decision on a
+ * referred one, and both of those arrive at one place — a claim in status
+ * `accepted`. An entry nobody has claimed, or one whose claims are all
+ * outstanding, is 409 with the number of claims still waiting.
+ *
+ * The route belongs to the person holding the object and to nobody wider.
+ * A warden who upheld a referred claim has made the closure *admissible*
+ * and has not performed it: the closure records that an object changed
+ * hands, and the only person who can know that it did is the person who
+ * handed it over.
+ * @summary Mark a find returned to its owner
+ */
+export const resolveLostFoundItem = async (lostFoundItem: number, options?: Parameters<typeof apiFetch>[1]): Promise<resolveLostFoundItemResponse> => {
+
+  return apiFetch<resolveLostFoundItemResponse>(getResolveLostFoundItemUrl(lostFoundItem),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResolveLostFoundItemMutationKey = () => ['resolveLostFoundItem'] as const;
+
+export const getResolveLostFoundItemMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | NoAcceptedClaimError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLostFoundItem>>, TError,ResolveLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveLostFoundItem>>, TError,ResolveLostFoundItemMutationVariables, TContext> => {
+
+const mutationKey = getResolveLostFoundItemMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveLostFoundItem>>, ResolveLostFoundItemMutationVariables> = (props) => {
+          const {lostFoundItem} = props ?? {};
+
+          return  resolveLostFoundItem(lostFoundItem,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveLostFoundItemMutationResult = NonNullable<Awaited<ReturnType<typeof resolveLostFoundItem>>>
+
+    export type ResolveLostFoundItemMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | NoAcceptedClaimError
+    export type ResolveLostFoundItemMutationVariables = {lostFoundItem: number}
+
+    /**
+ * @summary Mark a find returned to its owner
+ */
+export const useResolveLostFoundItem = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | NoAcceptedClaimError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLostFoundItem>>, TError,ResolveLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveLostFoundItem>>,
+        TError,
+        ResolveLostFoundItemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResolveLostFoundItemMutationOptions(options), queryClient);
     }
 
