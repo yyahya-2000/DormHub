@@ -1,77 +1,51 @@
-import { AnnouncementCategory, type Announcement } from '@/api/generated/model'
+import type { Announcement } from '@/api/generated/model'
 
 /**
- * The small facts about an announcement that the feed, the publication form and
- * the readers report have to agree on.
+ * The small facts about an announcement that the feed and the publication form
+ * have to agree on.
  *
  * Nothing here decides anything. Whether a notice is in somebody's feed is
  * settled by the server against the addressee column and the residency
  * register; whether it has expired is settled by the same comparison the feed
  * query makes. What this module holds is the vocabulary and the arithmetic that
- * three screens would otherwise each write for themselves.
+ * the two screens would otherwise each write for themselves.
  */
 
 /**
- * The categories, in the order the filter offers them.
+ * The value the category select carries for «something else», and the length
+ * the free-typed category is cut to.
  *
- * Drawn from the generated enum rather than typed out, so a category added to
- * the contract appears in the filter on the next `npm run api:generate` instead
- * of quietly going missing from it. The order is the contract's, which runs
- * from the standing rules of the house down to the miscellaneous.
+ * The category is a plain string on the wire: the server offers a list of
+ * ready-made ones and accepts anything else up to this length, so the field is
+ * a dropdown with a way out rather than a closed enumeration. The sentinel is
+ * spelled so that no ready-made code can collide with it.
  */
-export const ANNOUNCEMENT_CATEGORIES: AnnouncementCategory[] =
-  Object.values(AnnouncementCategory)
+export const OTHER_CATEGORY = '__other__'
+export const CATEGORY_MAX_LENGTH = 32
 
 /**
- * The tone of a category. Four groups rather than five colours: the rules of
- * the house and safety are the two a resident is answerable to, planned works
- * interrupt the water and the lifts, and events and the general sort are
- * neither.
- */
-export const CATEGORY_TONE: Record<AnnouncementCategory, string> = {
-  house_rules: 'border-prussian/30 bg-prussian-wash text-prussian',
-  safety: 'border-brick/40 bg-brick-wash text-brick',
-  utilities: 'border-brass/45 bg-brass-wash text-brass',
-  events: 'border-rule bg-paper text-steel',
-  general: 'border-rule bg-paper text-steel',
-}
-
-/**
- * Whether this reader has acknowledged the notice.
+ * How long a body has to be before the card folds it.
  *
- * `acknowledged_at` and `is_unread` are two views of the same left join, and
- * the flag is the one the contract says is «FR-11's mark». The timestamp is
- * read only where the moment itself is shown.
+ * Four lines of the feed's width run to roughly this many characters, so the
+ * threshold and the clamp agree: below it the fold would hide nothing and the
+ * button would be a lie.
  */
-export function acknowledged(announcement: Announcement): boolean {
-  return (
-    announcement.acknowledged_at !== null && announcement.acknowledged_at !== undefined
-  )
-}
+export const BODY_FOLD_LENGTH = 300
 
 /**
- * FR-12: the notice asks to be acknowledged, and has not been.
+ * What to print for the category of a notice.
  *
- * The obligation and the category are two columns and not one — a water shutoff
- * is `utilities` and is normally mandatory, a film evening is `events` and never
- * is — so the question is asked of `is_mandatory` and never of the category.
+ * A ready-made category travels as a code and the server sends the name beside
+ * it; one somebody typed is its own name and comes with no label. Preferring
+ * the label and falling back to the value covers both without the card having
+ * to know which kind it was given.
  */
-export function awaitsAcknowledgement(announcement: Announcement): boolean {
-  return announcement.is_mandatory && !acknowledged(announcement)
-}
-
-/**
- * The acknowledged share as whole percent.
- *
- * The fraction arrives from the server, which computes it against the audience
- * the register defines, and is never recomputed here from the two lists: those
- * are the caller's own dormitory and the figure is about the whole audience,
- * so a client dividing one by the other would print a different and wrong
- * number. An empty audience gives 1 on the wire — «nobody to chase» — and this
- * turns it into 100 rather than into a red nought.
- */
-export function sharePercent(share: number): number {
-  return Math.round(Math.min(1, Math.max(0, share)) * 100)
+export function categoryLabel(announcement: Announcement): string {
+  const labelled = announcement as { category_label?: string | null }
+  const label = labelled.category_label
+  return label === null || label === undefined || label === ''
+    ? announcement.category
+    : label
 }
 
 /**
@@ -92,7 +66,7 @@ export function expiryDefault(daysAhead: number): string {
 /**
  * The moment a `datetime-local` field names, as an ISO instant the API accepts.
  *
- * The field carries no zone, so the browser's own is the one meant: a warden
+ * The field carries no zone, so the browser's own is the one meant: a manager
  * typing «23:00» means eleven in the evening where the dormitory is. `Date`
  * reads a zoneless string as local time and `toISOString` states which instant
  * that was, so the two together are the conversion and not a string edit.
