@@ -1,8 +1,4 @@
-import {
-  GuestDocumentType,
-  GuestRequestStatus,
-  GuestVisitStatus,
-} from '@/api/generated/model'
+import { GuestRequestStatus, GuestVisitStatus } from '@/api/generated/model'
 
 /**
  * The small facts about a guest request that several screens need to agree on:
@@ -49,33 +45,6 @@ export function withdrawable(status: GuestRequestStatus): boolean {
     status === GuestRequestStatus.pending_review ||
     status === GuestRequestStatus.approved
   )
-}
-
-/**
- * FR-23, first criterion, mirrored so the warning is on the screen before the
- * form is sent rather than only in the answer. The flag itself is derived by
- * the server from the document type and is never accepted from the client — a
- * client that could set it could clear it.
- */
-export function isForeignDocument(type: GuestDocumentType | ''): boolean {
-  return (
-    type === GuestDocumentType.foreign_passport ||
-    type === GuestDocumentType.residence_permit
-  )
-}
-
-/**
- * Whether the departure deadline has passed. The comparison is against the
- * clock of the machine the screen runs on, so it is a prompt to look and never
- * a verdict: the status `overdue` is written by the quarter-hourly sweep of
- * FR-20, on the server, against the dormitory's own control time.
- */
-export function pastDeadline(dueAt: string | null | undefined, now: Date = new Date()): boolean {
-  if (dueAt === null || dueAt === undefined || dueAt === '') {
-    return false
-  }
-  const deadline = new Date(dueAt)
-  return !Number.isNaN(deadline.getTime()) && deadline.getTime() < now.getTime()
 }
 
 /**

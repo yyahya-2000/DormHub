@@ -45,9 +45,7 @@ import { useFormatters } from '@/lib/format'
  * **Verification and the entry are separate steps.** `verify` reads and
  * renders; `check-in` writes. That is §3.5.1's design note and it is the reason
  * the officer can look at the card, look at the passport and turn the person
- * away without the system holding a record of an entry that never happened. The
- * screen states that in words, because the absence of a «refuse» button is a
- * decision and not an omission.
+ * away without the system holding a record of an entry that never happened.
  *
  * **The type is larger than the minimum.** NFR-10 puts the floor at 16 px; the
  * whole scale is redefined to that floor in `index.css`, and this screen sits
@@ -58,8 +56,7 @@ import { useFormatters } from '@/lib/format'
  * why: the ground for refusing a person entry to a dormitory is the
  * university's local act and the action of the security service, not a program.
  * What this terminal refuses is a *record* — it will not assert that an entry
- * was within the rules when the interval says it was not. The wording on every
- * refusal here holds to that.
+ * was within the rules when the interval says it was not.
  */
 
 type Stage =
@@ -245,17 +242,7 @@ export function CheckpointPage() {
     <div className="grid grid-cols-1 gap-6 text-lg">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('checkpoint.heading')}</h1>
-        <p className="mt-1 text-steel">{t('checkpoint.lead')}</p>
       </div>
-
-      {/*
-        The sentence the whole module rests on, kept at the top of the screen it
-        is most easily forgotten on. FR-20, §2.4.2: the program records, the
-        security service decides.
-      */}
-      <p className="border-l-4 border-prussian bg-prussian-wash px-4 py-3 text-ink">
-        {t('checkpoint.doctrine')}
-      </p>
 
       {noPost ? (
         <section className="border border-rule bg-paper-raised px-4 py-6">
@@ -307,11 +294,6 @@ export function CheckpointPage() {
                     ? t('checkpoint.search.codeLabel')
                     : t('checkpoint.search.surnameLabel')
                 }
-                note={
-                  by === 'code'
-                    ? t('checkpoint.search.codeNote')
-                    : t('checkpoint.search.surnameNote')
-                }
               >
                 <Input
                   id="post-term"
@@ -347,8 +329,6 @@ export function CheckpointPage() {
                 {t('checkpoint.search.clear')}
               </Button>
             </div>
-
-            <p className="m-0 text-steel">{t('checkpoint.search.readOnly')}</p>
           </form>
         </Panel>
       ) : null}
@@ -367,11 +347,6 @@ export function CheckpointPage() {
             {by === 'code'
               ? t('checkpoint.search.noCodeTitle')
               : t('checkpoint.search.noNameTitle')}
-          </p>
-          <p className="mt-1 mb-0 text-ink">
-            {by === 'code'
-              ? t('checkpoint.search.noCodeBody')
-              : t('checkpoint.search.noNameBody')}
           </p>
         </section>
       ) : null}
@@ -467,7 +442,6 @@ export function CheckpointPage() {
               time: formatters.time(stage.visit.due_at ?? stage.card.due_at),
             })}
           </p>
-          <p className="mt-2 mb-0 text-steel">{t('checkpoint.entry.deadlineFrozen')}</p>
           <div className="mt-4">
             <Button
               type="button"
@@ -491,7 +465,6 @@ export function CheckpointPage() {
               time: formatters.time(stage.visit.checked_out_at),
             })}
           </p>
-          <p className="mt-2 mb-0 text-steel">{t('checkpoint.exit.writtenOnce')}</p>
           <div className="mt-4">
             <Button
               type="button"

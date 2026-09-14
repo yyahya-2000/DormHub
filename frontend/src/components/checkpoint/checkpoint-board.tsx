@@ -4,28 +4,14 @@ import { Panel } from '@/components/panel'
 import { Button } from '@/components/ui/button'
 import type { BoardEntry } from '@/lib/checkpoint-board'
 import { useFormatters } from '@/lib/format'
-import { pastDeadline } from '@/lib/guest'
-import { cn } from '@/lib/utils'
 
 /**
  * Who this terminal has written in, and by when they are due out.
  *
- * **What it is.** The rows this terminal recorded during this shift, kept in
- * the tab and nowhere else. The contract gives the post four calls and no list
- * — §3.9.6 puts the register of a dormitory in the warden's and the
- * administrator's hands, not the desk's — so the board says in a line what it
- * covers. It is the notebook beside the journal.
- *
- * **The overdue row.** A visit whose deadline has passed is drawn in the brick
- * tone with the time it was due, and the wording is «the deadline has passed»
- * rather than «overdue»: the status `overdue` is written by the quarter-hourly
- * sweep of FR-20 on the server against the dormitory's own control time, and
- * this comparison is the terminal's clock reminding the officer to look. It
- * asserts nothing about the record.
- *
- * The system restricts nobody's movement, and neither does this list. A row
- * standing here after its deadline means a guest has not been written out; what
- * happens next is the security service's, and the screen says so.
+ * The rows this terminal recorded during this shift, kept in the tab and
+ * nowhere else. The contract gives the post four calls and no list — §3.9.6
+ * puts the register of a dormitory in the warden's and the administrator's
+ * hands, not the desk's. It is the notebook beside the journal.
  */
 export function CheckpointBoard({
   entries,
@@ -49,23 +35,15 @@ export function CheckpointBoard({
       caption={t('checkpoint.board.heading')}
       aside={t('checkpoint.board.count', { count: open.length })}
     >
-      <p className="border-b border-rule/70 px-4 py-3 text-steel">
-        {t('checkpoint.board.scope')}
-      </p>
-
       {open.length === 0 ? (
         <p className="px-4 py-6 text-lg text-steel">{t('checkpoint.board.empty')}</p>
       ) : (
         <ul className="m-0 list-none p-0">
           {open.map((entry) => {
-            const late = pastDeadline(entry.dueAt)
             return (
               <li
                 key={entry.visitId}
-                className={cn(
-                  'grid gap-2 border-b border-rule/70 px-4 py-4 last:border-b-0',
-                  late ? 'border-l-4 border-l-brick bg-brick-wash' : null,
-                )}
+                className="grid gap-2 border-b border-rule/70 px-4 py-4 last:border-b-0"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="m-0 min-w-0 text-xl font-semibold break-words text-ink">
@@ -87,12 +65,6 @@ export function CheckpointBoard({
                     time: formatters.time(entry.dueAt),
                   })}
                 </p>
-
-                {late ? (
-                  <p className="m-0 font-semibold text-brick">
-                    {t('checkpoint.board.late')}
-                  </p>
-                ) : null}
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Button

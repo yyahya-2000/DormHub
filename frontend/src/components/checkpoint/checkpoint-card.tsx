@@ -27,11 +27,8 @@ import { cn } from '@/lib/utils'
  * the entry button is offered at all, so the screen cannot present a control
  * the API would refuse.
  *
- * **The document number stays masked here.** The unmasking route is for the
- * warden and the administrator; at the desk the document is in the officer's
- * hand and the last four characters are what a comparison needs. The card says
- * so, because an officer hunting for a button that does not exist is an officer
- * not looking at the passport.
+ * The guest is a name and no more: the document itself is in the officer's
+ * hand, and the register keeps no copy of it.
  */
 export function CheckpointCardView({
   card,
@@ -82,13 +79,6 @@ export function CheckpointCardView({
         <p className="m-0 text-2xl font-semibold break-words text-ink">
           {card.guest?.full_name}
         </p>
-        <p className="mt-1 mb-0 text-ink">
-          {t(`guestDocumentType.${card.guest?.document_type}`, {
-            defaultValue: card.guest?.document_type_label ?? '',
-          })}{' '}
-          <span className="font-mono text-xl">{card.guest?.document_number_masked}</span>
-        </p>
-        <p className="mt-1 mb-0 text-steel">{t('checkpoint.card.maskedNote')}</p>
       </div>
 
       <dl className="m-0 grid gap-x-6 gap-y-0 sm:grid-cols-2">
@@ -139,13 +129,6 @@ export function CheckpointCardView({
             })}
           </p>
         ) : null}
-        {!allowed ? (
-          <p className="mt-2 mb-0 text-steel">
-            {overridable
-              ? t('checkpoint.refusal.overridable')
-              : t('checkpoint.refusal.final')}
-          </p>
-        ) : null}
       </div>
 
       <div className="grid gap-3 border-t border-rule px-4 py-4">
@@ -154,12 +137,6 @@ export function CheckpointCardView({
         ) : null}
         {exitError !== null && exitError !== undefined ? (
           <RequestRefusal error={exitError} />
-        ) : null}
-
-        {card.consent_on_record === false && !inside ? (
-          <p className="m-0 border-l-4 border-brass bg-brass-wash px-3 py-2 text-ink">
-            {t('checkpoint.card.consentPending')}
-          </p>
         ) : null}
 
         {/*
@@ -204,11 +181,10 @@ export function CheckpointCardView({
             <p className="m-0 font-semibold text-ink">
               {t('checkpoint.override.heading')}
             </p>
-            <p className="m-0 text-ink">{t('checkpoint.override.body')}</p>
             <FormField
               id="override-reason"
               label={t('checkpoint.override.reasonLabel')}
-              note={t('checkpoint.override.reasonNote')}
+              required
             >
               <Input
                 id="override-reason"
@@ -233,14 +209,6 @@ export function CheckpointCardView({
             </Button>
           </div>
         ) : null}
-
-        {/*
-          The way out that leaves no record. Said in words, because the absence
-          of a «refuse entry» button is a design decision and not an omission:
-          a refusal at the post is the officer's act, and the system's part in
-          it is to have written nothing.
-        */}
-        <p className="m-0 text-steel">{t('checkpoint.card.noEntryNote')}</p>
 
         <Button type="button" variant="outline" size="lg" onClick={onBack}>
           {t('checkpoint.card.back')}

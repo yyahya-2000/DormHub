@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { keepPreviousData } from '@tanstack/react-query'
+import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -9,12 +11,7 @@ import {
   type listBuildingsResponse,
   type listGuestRequestsResponse,
 } from '@/api/generated/dormitory'
-import {
-  GuestDocumentType,
-  type Building,
-  type GuestRequest,
-  type GuestRequestInput,
-} from '@/api/generated/model'
+import type { Building, GuestRequest, GuestRequestInput } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
 import { guestRequestBuildingsOf } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
@@ -24,69 +21,48 @@ import { Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
+import { lastPageOf, usePagination } from '@/hooks/use-pagination'
 import { useFormatters, todayIso } from '@/lib/format'
-import { clockBound, insideWindow, isForeignDocument, withdrawable } from '@/lib/guest'
+import { clockBound, insideWindow, withdrawable } from '@/lib/guest'
 import { useGuestRefresh } from '@/lib/guest-cache'
 
 /**
  * FR-16, the resident's half of the guest module: file a request, watch it,
  * withdraw it, and read the access code once it has been decided.
  *
- * **The visiting window is not in this file.** `visiting_from` and
- * `visiting_to` come down on the building row and become the `min` and `max` of
- * the two time fields, so a dormitory that closes at 22:00 changes a column and
- * this form changes with it — NFR-09 carried into the interface. The hours
- * 08:00–23:00 appear nowhere in this source, and clause 2.2 of the rules of
- * internal order is the default of a column rather than a constant in a screen.
+ * The visiting window is the building's own: `visiting_from` and `visiting_to`
+ * come down on the building row and become the `min` and `max` of the two time
+ * fields, so the hours 08:00–23:00 appear nowhere in this source.
  *
- * The bounds are a courtesy and not a check: the browser refuses an hour
- * outside them, the form says so in words for a browser that does not, and the
- * server refuses it again with the reason attached (§3.3.2). The lead time is
- * the case that proves the point — it is not on the building row the client can
- * read, so a request filed too late is accepted by this form and refused by the
- * API, and the refusal is what the screen then shows.
- *
- * **The access code appears only after a decision.** It does not exist before
- * one: it is drawn at approval, and until then there is nothing to present at
- * the post. The screen therefore has no placeholder for it and no «code is
- * being prepared» — a request awaiting review shows what it is, and nothing
- * else.
+ * The guest is a name and nothing else — the register keeps no document of
+ * theirs, so the form asks for none.
  */
 
 type RequestFields = {
   guestFullName: string
-  docType: GuestDocumentType
-  docNumber: string
   visitDate: string
   plannedFrom: string
   plannedTo: string
-  purpose: string
 }
 
 function emptyForm(): RequestFields {
   return {
     guestFullName: '',
-    docType: GuestDocumentType.internal_passport,
-    docNumber: '',
     visitDate: todayIso(),
     plannedFrom: '',
     plannedTo: '',
-    purpose: '',
   }
 }
 
 function payloadOf(form: RequestFields, buildingId: number): GuestRequestInput {
-  const purpose = form.purpose.trim()
   return {
     building_id: buildingId,
     guest_full_name: form.guestFullName.trim(),
-    guest_doc_type: form.docType,
-    guest_doc_number: form.docNumber.trim(),
     visit_date: form.visitDate,
     planned_from: form.plannedFrom,
     planned_to: form.plannedTo,
-    ...(purpose === '' ? {} : { purpose }),
   }
 }
 
@@ -105,16 +81,18 @@ export function GuestRequestsPage() {
   const rows = register.data?.status === 200 ? register.data.data.data : null
   const building = rows?.find((row) => row.id === buildingId) ?? null
 
-  const mine = useListGuestRequests<listGuestRequestsResponse, ApiError>(undefined, {
-    query: { retry: false },
-  })
-  const requests = mine.data?.status === 200 ? mine.data.data.data : null
+  const paging = usePagination({ resetKey: buildingId })
+  const mine = useListGuestRequests<listGuestRequestsResponse, ApiError>(
+    { ...paging.params },
+    { query: { retry: false, placeholderData: keepPreviousData } },
+  )
+  const body = mine.data?.status === 200 ? mine.data.data : null
+  const requests = body?.data ?? null
 
   return (
     <div className="grid grid-cols-1 gap-8">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('guest.heading')}</h1>
-        <p className="mt-1 text-steel">{t('guest.lead')}</p>
       </div>
 
       {buildings.length > 1 ? (
@@ -146,7 +124,9 @@ export function GuestRequestsPage() {
       <Panel
         caption={t('guest.mineHeading')}
         aside={
-          requests !== null ? t('guest.mineCount', { count: requests.length }) : undefined
+          body?.meta?.total === undefined
+            ? undefined
+            : t('guest.mineCount', { count: body.meta.total })
         }
       >
         {mine.isError ? (
@@ -175,6 +155,13 @@ export function GuestRequestsPage() {
             ))}
           </ul>
         ) : null}
+
+        <Pagination
+          page={paging.page}
+          lastPage={lastPageOf(body?.meta)}
+          onPageChange={paging.setPage}
+          disabled={mine.isFetching}
+        />
       </Panel>
     </div>
   )
@@ -182,9 +169,8 @@ export function GuestRequestsPage() {
 
 /**
  * The form. Stacked fields throughout, which is what carries it to 360 px
- * without a media query (NFR-11), and a native select and native date and time
- * fields — the resident fills this in on a telephone, and the platform's own
- * pickers are better than anything this project would script.
+ * without a media query (NFR-11), and native date and time fields — the
+ * resident fills this in on a telephone.
  */
 function SubmissionForm({
   buildingId,
@@ -203,7 +189,6 @@ function SubmissionForm({
 
   const windowFrom = clockBound(building?.visiting_from)
   const windowTo = clockBound(building?.visiting_to)
-  const foreign = isForeignDocument(form.docType)
   const outOfWindow =
     !insideWindow(form.plannedFrom, windowFrom, windowTo) ||
     !insideWindow(form.plannedTo, windowFrom, windowTo)
@@ -239,11 +224,6 @@ function SubmissionForm({
           <h2 className="m-0 text-lg font-semibold text-ink">
             {t('guest.filedTitle', { name: filed.guest_full_name })}
           </h2>
-          <p className="mt-2 mb-0 text-ink">{t('guest.filedBody')}</p>
-          {filed.foreign_guest_warning !== null &&
-          filed.foreign_guest_warning !== undefined ? (
-            <p className="mt-2 mb-0 text-ink">{filed.foreign_guest_warning}</p>
-          ) : null}
         </section>
       ) : null}
 
@@ -261,11 +241,7 @@ function SubmissionForm({
         <form className="grid gap-4 px-4 py-4" onSubmit={send}>
           {submit.isError ? <RequestRefusal error={submit.error} /> : null}
 
-          <FormField
-            id="guest-name"
-            label={t('guest.fields.guestName')}
-            note={t('guest.fields.guestNameNote')}
-          >
+          <FormField id="guest-name" label={t('guest.fields.guestName')} required>
             <Input
               id="guest-name"
               value={form.guestFullName}
@@ -277,57 +253,7 @@ function SubmissionForm({
             />
           </FormField>
 
-          <FormField id="guest-doc-type" label={t('guest.fields.docType')}>
-            <select
-              id="guest-doc-type"
-              className={selectClassName}
-              value={form.docType}
-              onChange={(event) =>
-                set('docType', event.target.value as GuestDocumentType)
-              }
-            >
-              {Object.values(GuestDocumentType).map((code) => (
-                <option key={code} value={code}>
-                  {t(`guestDocumentType.${code}`)}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          {/*
-            FR-23, first criterion, said before the form is sent rather than
-            only in the answer. The flag itself is the server's: it is derived
-            from the type and is not accepted from the client, so this notice is
-            a warning and never the thing that sets it.
-          */}
-          {foreign ? (
-            <section className="border-l-4 border-brass bg-brass-wash px-4 py-3">
-              <h3 className="m-0 text-lg font-semibold text-ink">
-                {t('guest.foreignTitle')}
-              </h3>
-              <p className="mt-2 mb-0 text-ink">{t('guest.foreignBody')}</p>
-              <p className="mt-2 mb-0 text-steel">{t('guest.foreignNotSubmitted')}</p>
-            </section>
-          ) : null}
-
-          <FormField
-            id="guest-doc-number"
-            label={t('guest.fields.docNumber')}
-            note={t('guest.fields.docNumberNote')}
-          >
-            <Input
-              id="guest-doc-number"
-              value={form.docNumber}
-              minLength={4}
-              maxLength={64}
-              autoComplete="off"
-              inputMode="text"
-              required
-              onChange={(event) => set('docNumber', event.target.value)}
-            />
-          </FormField>
-
-          <FormField id="guest-date" label={t('guest.fields.visitDate')}>
+          <FormField id="guest-date" label={t('guest.fields.visitDate')} required>
             <Input
               id="guest-date"
               type="date"
@@ -339,7 +265,7 @@ function SubmissionForm({
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="guest-from" label={t('guest.fields.plannedFrom')}>
+            <FormField id="guest-from" label={t('guest.fields.plannedFrom')} required>
               <Input
                 id="guest-from"
                 type="time"
@@ -350,7 +276,7 @@ function SubmissionForm({
                 onChange={(event) => set('plannedFrom', event.target.value)}
               />
             </FormField>
-            <FormField id="guest-to" label={t('guest.fields.plannedTo')}>
+            <FormField id="guest-to" label={t('guest.fields.plannedTo')} required>
               <Input
                 id="guest-to"
                 type="time"
@@ -363,15 +289,6 @@ function SubmissionForm({
             </FormField>
           </div>
 
-          {building !== null ? (
-            <p className="m-0 text-steel">
-              {t('guest.windowNote', {
-                from: formatters.clock(building.visiting_from),
-                to: formatters.clock(building.visiting_to),
-              })}
-            </p>
-          ) : null}
-
           {outOfWindow && building !== null ? (
             <p
               className="m-0 border-l-4 border-brick bg-brick-wash px-3 py-2 text-ink"
@@ -383,20 +300,6 @@ function SubmissionForm({
               })}
             </p>
           ) : null}
-
-          <FormField
-            id="guest-purpose"
-            label={t('guest.fields.purpose')}
-            note={t('guest.fields.purposeNote')}
-          >
-            <Input
-              id="guest-purpose"
-              value={form.purpose}
-              maxLength={255}
-              autoComplete="off"
-              onChange={(event) => set('purpose', event.target.value)}
-            />
-          </FormField>
 
           <div>
             <Button type="submit" disabled={submit.isPending}>
@@ -412,14 +315,15 @@ function SubmissionForm({
 /**
  * One request of the author's own. The code is the row's whole point once the
  * decision is in, so it is set in the monospaced face and given the width of a
- * line; a refusal shows the reason the duty officer wrote, because «rejected»
- * without it answers nothing.
+ * line; a refusal shows the reason the duty officer wrote.
  */
 function MyRequestRow({ request }: { request: GuestRequest }) {
   const { t } = useTranslation()
   const formatters = useFormatters()
   const refresh = useGuestRefresh()
   const cancel = useCancelGuestRequest<ApiError>()
+
+  const visit = request.visit ?? null
 
   return (
     <article className="grid gap-2 px-4 py-4">
@@ -436,33 +340,43 @@ function MyRequestRow({ request }: { request: GuestRequest }) {
           {formatters.date(request.visit_date)} · {request.planned_from}–
           {request.planned_to}
         </dd>
-        <dt className="label-caps">{t('guest.fields.docType')}</dt>
-        <dd className="m-0 text-ink">
-          {t(`guestDocumentType.${request.guest_doc_type}`, {
-            defaultValue: request.guest_doc_type_label ?? '',
-          })}{' '}
-          <span className="font-mono">{request.guest_doc_number_masked}</span>
-        </dd>
-        {request.purpose !== null && request.purpose !== undefined ? (
+
+        {request.decided_by_name !== null && request.decided_by_name !== undefined ? (
           <>
-            <dt className="label-caps">{t('guest.fields.purpose')}</dt>
-            <dd className="m-0 break-words text-ink">{request.purpose}</dd>
+            <dt className="label-caps">{t('guest.fields.decidedBy')}</dt>
+            <dd className="m-0 break-words text-ink">{request.decided_by_name}</dd>
+          </>
+        ) : null}
+
+        {visit !== null ? (
+          <>
+            <dt className="label-caps">{t('guest.fields.checkedIn')}</dt>
+            <dd className="m-0 break-words text-ink">
+              {formatters.dateTime(visit.checked_in_at)}
+              {visit.checked_in_by_name === null || visit.checked_in_by_name === undefined
+                ? null
+                : ` · ${visit.checked_in_by_name}`}
+            </dd>
+            <dt className="label-caps">{t('guest.fields.checkedOut')}</dt>
+            <dd className="m-0 break-words text-ink">
+              {visit.checked_out_at === null || visit.checked_out_at === undefined
+                ? t('guest.visitStillIn')
+                : formatters.dateTime(visit.checked_out_at)}
+              {visit.checked_out_by_name === null ||
+              visit.checked_out_by_name === undefined
+                ? null
+                : ` · ${visit.checked_out_by_name}`}
+            </dd>
           </>
         ) : null}
       </dl>
 
-      {/*
-        The code exists only after the decision, so there is nothing to draw
-        before one. Shown in full width and in the monospaced face: it is read
-        aloud over a telephone and typed at the post.
-      */}
       {request.access_code !== null && request.access_code !== undefined ? (
         <div className="border border-prussian/30 bg-prussian-wash px-4 py-3">
           <p className="label-caps m-0">{t('guest.codeLabel')}</p>
           <p className="m-0 font-mono text-2xl tracking-[0.2em] break-all text-prussian">
             {request.access_code}
           </p>
-          <p className="mt-1 mb-0 text-steel">{t('guest.codeNote')}</p>
         </div>
       ) : null}
 
@@ -471,19 +385,6 @@ function MyRequestRow({ request }: { request: GuestRequest }) {
       request.decision_comment !== '' ? (
         <p className="m-0 border-l-4 border-brick bg-brick-wash px-3 py-2 break-words text-ink">
           {t('guest.decisionComment', { comment: request.decision_comment })}
-        </p>
-      ) : null}
-
-      {request.visit !== null && request.visit !== undefined ? (
-        <p className="m-0 text-steel">
-          {t('guest.visitRecorded', {
-            entered: formatters.dateTime(request.visit.checked_in_at),
-            left:
-              request.visit.checked_out_at === null ||
-              request.visit.checked_out_at === undefined
-                ? t('guest.visitStillIn')
-                : formatters.dateTime(request.visit.checked_out_at),
-          })}
         </p>
       ) : null}
 
@@ -503,6 +404,7 @@ function MyRequestRow({ request }: { request: GuestRequest }) {
               )
             }
           >
+            <X aria-hidden="true" className="size-4" />
             {cancel.isPending ? `${t('common.saving')}…` : t('guest.withdraw')}
           </Button>
         </div>

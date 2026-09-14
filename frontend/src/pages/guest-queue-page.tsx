@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { keepPreviousData } from '@tanstack/react-query'
+import { Check, X } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -10,56 +12,43 @@ import {
 } from '@/api/generated/dormitory'
 import { GuestRequestStatus, type GuestRequest } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
-import { decidesGuestRequests, readsGuestDocument } from '@/auth/navigation'
+import { decidesGuestRequests } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { BuildingTabs } from '@/components/building-tabs'
 import { FormField, selectClassName } from '@/components/form-field'
-import { DocumentNumberReveal } from '@/components/guest/document-number-reveal'
 import { GuestStatusTag } from '@/components/guest/guest-status-tag'
 import { Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
+import { lastPageOf, usePagination } from '@/hooks/use-pagination'
 import { useFormatters } from '@/lib/format'
 import { awaitsDecision } from '@/lib/guest'
 import { useGuestRefresh } from '@/lib/guest-cache'
 
 /**
- * FR-17, the duty officer's queue.
+ * FR-17, the duty officer's list.
  *
- * **Whose screen this is.** The decision belongs to the duty officer of this
- * dormitory and to nobody else — not the warden, not the manager, not the
- * administrator. That is the agreement of 13.09.2026, it sits on one capability
- * on the server, and here it decides only whether the two buttons are drawn.
- * The other three roles read the same queue and see it without them; a token
- * that is not the duty officer's is refused by the API, and the refusal is
- * shown where the row was (§3.3.2).
+ * The decision belongs to the duty officer of this dormitory and to nobody
+ * else — that is the agreement of 13.09.2026, it sits on one capability on the
+ * server, and here it decides only whether the two buttons are drawn. The other
+ * roles read the same list and see it without them.
  *
- * **Designed to be worked from a telephone.** The register of stakeholders puts
- * it plainly: the decision has to take seconds and be taken away from a desk.
- * So a row is not a table cell — it is a block with the four facts a decision
- * needs, and the two actions are full-width targets under it. Nothing is behind
- * a menu, nothing needs a second screen, and the whole queue is one column at
- * every width.
- *
- * **A refusal cannot be silent.** FR-17's second criterion is «rejection
- * without a reason is impossible», and it is enforced in three places at once:
- * the route requires the field, the service requires the argument, and the form
- * below will not submit an empty one. The directory is a convenience over the
- * free text and not a replacement for it — a reason nobody foresaw is typed.
+ * A refusal cannot be silent: the route requires the reason, the service
+ * requires the argument, and the form below will not submit an empty one.
  */
 
 /**
  * The reasons a duty officer gives most often, as a directory over the free
  * text field. They are interface strings and not a server enumeration: the API
- * stores whatever sentence the officer sends, which is what keeps an unforeseen
- * reason expressible. Picking one fills the field; it can then be edited.
+ * stores whatever sentence the officer sends. Picking one fills the field; it
+ * can then be edited.
  */
 const REJECTION_REASONS = [
   'quotaSpent',
   'outsideWindow',
-  'documentUnclear',
   'residentAbsent',
   'quarantine',
 ] as const
@@ -68,7 +57,6 @@ const QUEUE_FILTERS: (GuestRequestStatus | 'all')[] = [
   GuestRequestStatus.pending_review,
   GuestRequestStatus.approved,
   GuestRequestStatus.in_progress,
-  GuestRequestStatus.overdue,
   GuestRequestStatus.rejected,
   'all',
 ]
@@ -81,31 +69,36 @@ export function GuestQueuePage() {
 
   const user = session.status === 'authenticated' ? session.user : null
   const decides = user !== null && decidesGuestRequests(user, buildingId)
-  const readsDocument = user !== null && readsGuestDocument(user, buildingId)
 
   const [status, setStatus] = useState<GuestRequestStatus | 'all'>(
     GuestRequestStatus.pending_review,
   )
   const [visitDate, setVisitDate] = useState('')
 
+  const paging = usePagination({ resetKey: `${buildingId}|${status}|${visitDate}` })
   const queue = useListGuestRequests<listGuestRequestsResponse, ApiError>(
     {
       building_id: buildingId,
       ...(status === 'all' ? {} : { status }),
       ...(visitDate === '' ? {} : { visit_date: visitDate }),
+      ...paging.params,
     },
-    { query: { enabled: Number.isInteger(buildingId), retry: false } },
+    {
+      query: {
+        enabled: Number.isInteger(buildingId),
+        retry: false,
+        placeholderData: keepPreviousData,
+      },
+    },
   )
 
-  const requests = queue.data?.status === 200 ? queue.data.data.data : null
+  const body = queue.data?.status === 200 ? queue.data.data : null
+  const requests = body?.data ?? null
 
   return (
     <div className="grid grid-cols-1 gap-8">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('guestQueue.heading')}</h1>
-        <p className="mt-1 text-steel">
-          {decides ? t('guestQueue.leadDuty') : t('guestQueue.leadReadOnly')}
-        </p>
       </div>
 
       <BuildingTabs buildingId={buildingId} />
@@ -130,11 +123,7 @@ export function GuestQueuePage() {
               ))}
             </select>
           </FormField>
-          <FormField
-            id="queue-date"
-            label={t('guestQueue.filterDate')}
-            note={t('guestQueue.filterDateNote')}
-          >
+          <FormField id="queue-date" label={t('guestQueue.filterDate')}>
             <Input
               id="queue-date"
               type="date"
@@ -148,9 +137,9 @@ export function GuestQueuePage() {
       <Panel
         caption={t('guestQueue.listHeading')}
         aside={
-          requests !== null
-            ? t('guestQueue.listCount', { count: requests.length })
-            : undefined
+          body?.meta?.total === undefined
+            ? undefined
+            : t('guestQueue.listCount', { count: body.meta.total })
         }
       >
         {queue.isError ? (
@@ -174,49 +163,37 @@ export function GuestQueuePage() {
           <ul className="m-0 list-none p-0">
             {requests.map((request) => (
               <li key={request.id} className="border-b border-rule/70 last:border-b-0">
-                <QueueRow
-                  request={request}
-                  decides={decides}
-                  readsDocument={readsDocument}
-                />
+                <QueueRow request={request} decides={decides} />
               </li>
             ))}
           </ul>
         ) : null}
+
+        <Pagination
+          page={paging.page}
+          lastPage={lastPageOf(body?.meta)}
+          onPageChange={paging.setPage}
+          disabled={queue.isFetching}
+        />
       </Panel>
     </div>
   )
 }
 
-function QueueRow({
-  request,
-  decides,
-  readsDocument,
-}: {
-  request: GuestRequest
-  decides: boolean
-  readsDocument: boolean
-}) {
+function QueueRow({ request, decides }: { request: GuestRequest; decides: boolean }) {
   const { t } = useTranslation()
   const formatters = useFormatters()
   const refresh = useGuestRefresh()
 
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
-  const [officerMark, setOfficerMark] = useState('')
 
   const approve = useApproveGuestRequest<ApiError>()
   const reject = useRejectGuestRequest<ApiError>()
 
-  /*
-   * FR-23, second criterion, mirrored so the field is on the screen before the
-   * 422 rather than after it. Both halves matter: a foreign document on a visit
-   * that ends the same evening creates no place of stay, and asking for the
-   * mark there would overstate the norm. The server decides either way.
-   */
-  const marksRequired =
-    request.is_foreign_document === true && request.spans_more_than_one_day === true
   const open = awaitsDecision(request.status)
+  const host = request.inviting_resident ?? null
+  const visit = request.visit ?? null
 
   return (
     <article className="grid gap-3 px-4 py-4">
@@ -233,40 +210,46 @@ function QueueRow({
           {formatters.date(request.visit_date)} · {request.planned_from}–
           {request.planned_to}
         </dd>
-        <dt className="label-caps">{t('guestQueue.fields.host')}</dt>
-        <dd className="m-0 break-words text-ink">{request.student_name}</dd>
-        <dt className="label-caps">{t('guest.fields.docType')}</dt>
-        <dd className="m-0 text-ink">
-          {t(`guestDocumentType.${request.guest_doc_type}`, {
-            defaultValue: request.guest_doc_type_label ?? '',
-          })}{' '}
-          <span className="font-mono">{request.guest_doc_number_masked}</span>
-        </dd>
-        {request.purpose !== null &&
-        request.purpose !== undefined &&
-        request.purpose !== '' ? (
-          <>
-            <dt className="label-caps">{t('guest.fields.purpose')}</dt>
-            <dd className="m-0 break-words text-ink">{request.purpose}</dd>
-          </>
-        ) : null}
-        {request.decided_at !== null && request.decided_at !== undefined ? (
-          <>
-            <dt className="label-caps">{t('guestQueue.fields.decidedAt')}</dt>
-            <dd className="m-0 text-ink">{formatters.dateTime(request.decided_at)}</dd>
-          </>
-        ) : null}
-      </dl>
 
-      {request.foreign_guest_warning !== null &&
-      request.foreign_guest_warning !== undefined ? (
-        <section className="border-l-4 border-brass bg-brass-wash px-3 py-2">
-          <h4 className="m-0 font-semibold text-ink">{t('guest.foreignTitle')}</h4>
-          <p className="mt-1 mb-0 break-words text-ink">
-            {request.foreign_guest_warning}
-          </p>
-        </section>
-      ) : null}
+        <dt className="label-caps">{t('guestQueue.fields.host')}</dt>
+        <dd className="m-0 break-words text-ink">
+          {host?.id === null || host?.id === undefined ? (
+            (request.student_name ?? t('common.empty'))
+          ) : (
+            <Link className="text-prussian underline" to={`/residents/${host.id}`}>
+              {host.full_name ?? request.student_name}
+            </Link>
+          )}
+          {host?.room === null || host?.room === undefined
+            ? null
+            : ` · ${t('guestQueue.fields.room', { room: host.room })}`}
+        </dd>
+
+        {request.decided_by_name !== null && request.decided_by_name !== undefined ? (
+          <>
+            <dt className="label-caps">{t('guestQueue.fields.decidedBy')}</dt>
+            <dd className="m-0 break-words text-ink">
+              {request.decided_by_name}
+              {request.decided_at === null || request.decided_at === undefined
+                ? null
+                : ` · ${formatters.dateTime(request.decided_at)}`}
+            </dd>
+          </>
+        ) : null}
+
+        {visit?.checked_out_by_name === null ||
+        visit?.checked_out_by_name === undefined ? null : (
+          <>
+            <dt className="label-caps">{t('guestQueue.fields.checkedOutBy')}</dt>
+            <dd className="m-0 break-words text-ink">
+              {visit.checked_out_by_name}
+              {visit.checked_out_at === null || visit.checked_out_at === undefined
+                ? null
+                : ` · ${formatters.dateTime(visit.checked_out_at)}`}
+            </dd>
+          </>
+        )}
+      </dl>
 
       {request.decision_comment !== null &&
       request.decision_comment !== undefined &&
@@ -276,59 +259,36 @@ function QueueRow({
         </p>
       ) : null}
 
-      {readsDocument ? <DocumentNumberReveal request={request} /> : null}
-
       {approve.isError ? <RequestRefusal error={approve.error} /> : null}
       {reject.isError ? <RequestRefusal error={reject.error} /> : null}
 
       {decides && open && !rejecting ? (
-        <div className="grid gap-3">
-          {marksRequired ? (
-            <FormField
-              id={`mark-${request.id}`}
-              label={t('guestQueue.officerMarkLabel')}
-              note={t('guestQueue.officerMarkNote')}
-            >
-              <Input
-                id={`mark-${request.id}`}
-                value={officerMark}
-                maxLength={255}
-                autoComplete="off"
-                onChange={(event) => setOfficerMark(event.target.value)}
-              />
-            </FormField>
-          ) : null}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              type="button"
-              size="lg"
-              className="h-auto min-h-12 min-w-0 whitespace-normal"
-              disabled={approve.isPending}
-              onClick={() =>
-                approve.mutate(
-                  {
-                    guestRequest: request.id,
-                    data:
-                      officerMark.trim() === ''
-                        ? {}
-                        : { responsible_officer_mark: officerMark.trim() },
-                  },
-                  { onSuccess: () => refresh() },
-                )
-              }
-            >
-              {approve.isPending ? `${t('common.saving')}…` : t('guestQueue.approve')}
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              className="h-auto min-h-12 min-w-0 whitespace-normal"
-              variant="outline"
-              onClick={() => setRejecting(true)}
-            >
-              {t('guestQueue.reject')}
-            </Button>
-          </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            type="button"
+            size="lg"
+            className="h-auto min-h-12 min-w-0 whitespace-normal"
+            disabled={approve.isPending}
+            onClick={() =>
+              approve.mutate(
+                { guestRequest: request.id, data: {} },
+                { onSuccess: () => refresh() },
+              )
+            }
+          >
+            <Check aria-hidden="true" className="size-5" />
+            {approve.isPending ? `${t('common.saving')}…` : t('guestQueue.approve')}
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            className="h-auto min-h-12 min-w-0 whitespace-normal"
+            variant="outline"
+            onClick={() => setRejecting(true)}
+          >
+            <X aria-hidden="true" className="size-5" />
+            {t('guestQueue.reject')}
+          </Button>
         </div>
       ) : null}
 
@@ -349,8 +309,6 @@ function QueueRow({
             )
           }}
         >
-          <p className="m-0 text-ink">{t('guestQueue.reasonRequired')}</p>
-
           <FormField
             id={`reason-pick-${request.id}`}
             label={t('guestQueue.reasonDirectory')}
@@ -375,11 +333,7 @@ function QueueRow({
             </select>
           </FormField>
 
-          <FormField
-            id={`reason-${request.id}`}
-            label={t('guestQueue.reasonLabel')}
-            note={t('guestQueue.reasonNote')}
-          >
+          <FormField id={`reason-${request.id}`} label={t('guestQueue.reasonLabel')} required>
             <textarea
               id={`reason-${request.id}`}
               className={`${selectClassName} h-24 py-2`}
