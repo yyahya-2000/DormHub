@@ -105,6 +105,16 @@ export function AppShell() {
   if (maintenanceBuildingsOf(user).length > 0) {
     tabs.push({ to: '/maintenance', label: t('app.section.maintenance') })
   }
+  /*
+   * The lost-and-found bureau, drawn for everybody and asking nothing first —
+   * the second section here to do so, and for the announcement feed's reason.
+   * The route carries no building parameter: the dormitories are computed from
+   * the grants of the token, so there is nothing to scope the link to and
+   * nobody it could refuse. An account attached to no dormitory gets an empty
+   * feed, which is an answer; the administrator, whose grant names none, gets
+   * every one of them.
+   */
+  tabs.push({ to: '/lost-found', label: t('app.section.lostFound') })
 
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
   // The personal account is nobody's privilege: the routes behind these two

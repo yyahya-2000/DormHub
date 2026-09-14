@@ -17,6 +17,9 @@ import { FloorPlanPage } from '@/pages/floor-plan-page'
 import { GuestQueuePage } from '@/pages/guest-queue-page'
 import { GuestRequestsPage } from '@/pages/guest-requests-page'
 import { LoginPage } from '@/pages/login-page'
+import { LostFoundItemPage } from '@/pages/lost-found-item-page'
+import { LostFoundPage } from '@/pages/lost-found-page'
+import { LostFoundPublishPage } from '@/pages/lost-found-publish-page'
 import { MaintenanceQueuePage } from '@/pages/maintenance-queue-page'
 import { MaintenanceRequestPage } from '@/pages/maintenance-request-page'
 import { MaintenanceRequestsPage } from '@/pages/maintenance-requests-page'
@@ -121,6 +124,24 @@ export default function App() {
               <Route
                 path="announcements/:announcementId/readers"
                 element={<AnnouncementReadersPage />}
+              />
+              {/*
+                The lost-and-found bureau, and none of its three routes takes a
+                building. The feed computes the dormitories from the grants of
+                the token, exactly as the announcement feed does, so FR-07's
+                horizontal boundary here is a missing parameter rather than a
+                check somebody has to remember to write. The card and the
+                publication form follow it: an entry belongs to the dormitory
+                it was published in, and which of the module's three readers is
+                looking — a resident who may claim it, the person holding the
+                object, the warden settling a refusal — is not a fact about the
+                address.
+              */}
+              <Route path="lost-found" element={<LostFoundPage />} />
+              <Route path="lost-found/new" element={<LostFoundPublishPage />} />
+              <Route
+                path="lost-found/:lostFoundItemId"
+                element={<LostFoundItemPage />}
               />
               <Route path="residents/:residentId" element={<ResidentCardPage />} />
               {/*
