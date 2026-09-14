@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
@@ -129,17 +128,6 @@ class GuestRequest extends Model
     public function visit(): HasOne
     {
         return $this->hasOne(GuestVisit::class);
-    }
-
-    /**
-     * The guest's own consent, taken at the post (FR-35, §2.7.1). It hangs on
-     * the request because the guest has no account to hang it on.
-     *
-     * @return HasMany<ConsentRecord, $this>
-     */
-    public function consentRecords(): HasMany
-    {
-        return $this->hasMany(ConsentRecord::class);
     }
 
     /**

@@ -110,9 +110,6 @@ final readonly class CheckpointCard
                 'status' => $this->visit->status->value,
             ],
 
-            'consent_on_record' => $this->request->consentRecords
-                ->contains(fn ($record): bool => $record->isInForce()),
-
             'admission' => [
                 'allowed' => $this->mayRecordEntry(),
                 'reason_code' => $this->refusal?->reasonCode,
@@ -151,7 +148,6 @@ final readonly class CheckpointCard
             'status' => $this->request->status->value,
             'status_label' => $this->request->status->label(),
             'visit' => null,
-            'consent_on_record' => false,
             'admission' => [
                 'allowed' => false,
                 'reason_code' => $this->refusal?->reasonCode,

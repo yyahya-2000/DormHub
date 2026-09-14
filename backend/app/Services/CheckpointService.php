@@ -8,7 +8,6 @@ use App\Enums\AuditAction;
 use App\Enums\AuditResult;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
-use App\Exceptions\ConsentRequiredException;
 use App\Exceptions\EntryNotPermittedException;
 use App\Exceptions\VisitAlreadyClosedException;
 use App\Guests\AccessCodeGenerator;
@@ -24,8 +23,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * The security post: FR-18 (find the guest), FR-19 (record the entry and the
- * exit), and the consent gate §2.7.1 puts between the two.
+ * The security post: FR-18 (find the guest) and FR-19 (record the entry and
+ * the exit).
  *
  * **Verification and the entry are two operations and that is the design.**
  * §3.5.1 splits them deliberately: `verify()` only reads and renders the card
@@ -36,13 +35,6 @@ use Illuminate\Support\Facades\DB;
  * recording nothing at all about a person who turned up. It is also why FR-19's
  * «two clicks» and the refusal path do not conflict: the card is already on
  * the screen when the officer decides.
- *
- * **Consent is taken here and not at submission.** The request is filed by the
- * resident while the personal data belong to the guest, so consent under
- * art. 9 part 1 of Federal Law No. 152-FZ cannot be given «on the guest's
- * behalf» (§2.7.1). It is taken from the guest, in person, at the desk, before
- * the entry is written — which is the first line of `checkIn()` and the reason
- * `ConsentRegistry::requireGrantedForGuest()` exists.
  *
  * **The system restricts nobody's movement.** FR-20 states it and §2.4.2
  * explains it: the ground for refusing a person entry to a dormitory is the
@@ -55,7 +47,6 @@ final readonly class CheckpointService
 {
     public function __construct(
         private GuestRequestStateMachine $states,
-        private ConsentRegistry $consents,
         private AuditRecorder $audit,
     ) {}
 
@@ -124,7 +115,7 @@ final readonly class CheckpointService
     {
         $now ??= CarbonImmutable::now();
 
-        $request->loadMissing(['student', 'building', 'visit', 'consentRecords']);
+        $request->loadMissing(['student', 'building', 'visit']);
 
         return new CheckpointCard(
             request: $request,
@@ -183,7 +174,6 @@ final readonly class CheckpointService
      * @param  string|null  $overrideReason  §2.4.2's «admit on the responsible officer's decision»,
      *                                       mandatory when the refusal is one that may be set aside
      *
-     * @throws ConsentRequiredException no consent from the guest (409)
      * @throws EntryNotPermittedException the rules admit no entry, and no reason was given (422)
      */
     public function checkIn(
@@ -193,11 +183,6 @@ final readonly class CheckpointService
         ?CarbonInterface $now = null,
         ?string $ipAddress = null,
     ): GuestVisit {
-        // §2.7.1, first line and deliberately first: for a guest, consent is
-        // the sole ground for the processing, so nothing about this evening is
-        // written down until it is on record.
-        $this->consents->requireGrantedForGuest($request);
-
         $now ??= CarbonImmutable::now();
         $refusal = $this->admissionRefusal($request, $now);
         $override = $refusal !== null;

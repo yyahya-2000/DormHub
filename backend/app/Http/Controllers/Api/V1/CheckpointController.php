@@ -7,24 +7,18 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CheckInGuestRequest;
 use App\Http\Requests\Api\V1\CheckOutGuestRequest;
-use App\Http\Requests\Api\V1\StoreGuestConsentRequest;
 use App\Http\Requests\Api\V1\VerifyGuestAtCheckpointRequest;
-use App\Http\Resources\ConsentRecordResource;
 use App\Http\Resources\GuestVisitResource;
 use App\Models\GuestRequest;
 use App\Services\CheckpointService;
-use App\Services\ConsentRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 
 /**
- * The security post: FR-18, FR-19, and the guest's consent between them.
+ * The security post: FR-18 and FR-19.
  *
- * **Four routes, in the order the desk uses them.** Find the guest. Take their
- * consent. Record the entry. Record the exit. The order is not a convention —
- * it is §2.7.1 — and the application refuses to be used in any other: the
- * check-in asks `ConsentRegistry` first and answers 409 when the third step is
- * attempted before the second.
+ * **Three routes, in the order the desk uses them.** Find the guest. Record
+ * the entry. Record the exit.
  *
  * **Verification and entry stay apart.** §3.5.1 splits them so the officer can
  * refuse entry without leaving a false record of an entry that never happened;
@@ -70,24 +64,6 @@ final class CheckpointController extends Controller
         }
 
         return response()->json($body, $this->statusFor($cards));
-    }
-
-    /**
-     * FR-35, guest half: the consent taken at the desk, before any entry is
-     * recorded.
-     */
-    public function consent(StoreGuestConsentRequest $request, ConsentRegistry $consents): JsonResponse
-    {
-        $record = $consents->recordForGuest(
-            request: $request->guestRequest(),
-            revision: $request->revision(),
-            operator: $request->user(),
-            ipAddress: $request->ip(),
-        );
-
-        return ConsentRecordResource::make($record)
-            ->response()
-            ->setStatusCode(201);
     }
 
     /**
