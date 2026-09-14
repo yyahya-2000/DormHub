@@ -1,15 +1,10 @@
 import { useState } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { keepPreviousData } from '@tanstack/react-query'
 import { ArrowLeft, DoorOpen, Plus } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import {
-  getListBuildingRoomsQueryOptions,
-  useListBuildingRooms,
-  type listBuildingRoomsResponse,
-} from '@/api/generated/dormitory'
-import type { Room } from '@/api/generated/model'
+import { useListBuildingRooms, type listBuildingRoomsResponse } from '@/api/generated/dormitory'
 import type { ApiError } from '@/api/http-client'
 import { may, Permission } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
@@ -17,61 +12,9 @@ import { RoomCard } from '@/components/housing/room-card'
 import { RoomForm } from '@/components/housing/room-form'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
-import { lastPageOf } from '@/hooks/use-pagination'
-
-/** The register pages at a hundred rows, and a floor fits inside one of them. */
-const PER_PAGE = 100
-
-/**
- * The rooms of one floor.
- *
- * The register is addressed by building and not by floor, so the pages of the
- * building are read in full — they are ordered by floor and cached, which is
- * what makes walking from floor to floor cost one request rather than one per
- * floor — and the floor is taken out of them here. The `free` filter is the
- * database's own.
- */
-function useRoomsOfFloor(
-  buildingId: number,
-  floor: number,
-  free: boolean,
-): { rooms: Room[]; isPending: boolean; error: ApiError | null } {
-  const enabled = Number.isInteger(buildingId) && Number.isInteger(floor)
-  const params = { ...(free ? { free: true } : {}), per_page: PER_PAGE }
-
-  const first = useListBuildingRooms<listBuildingRoomsResponse, ApiError>(
-    buildingId,
-    { ...params, page: 1 },
-    { query: { enabled, retry: false } },
-  )
-
-  const body = first.data?.status === 200 ? first.data.data : null
-  const pages = lastPageOf(body?.meta)
-
-  const rest = useQueries({
-    queries: Array.from({ length: pages > 1 ? pages - 1 : 0 }, (_, index) =>
-      getListBuildingRoomsQueryOptions<listBuildingRoomsResponse, ApiError>(
-        buildingId,
-        { ...params, page: index + 2 },
-        { query: { enabled, retry: false } },
-      ),
-    ),
-  })
-
-  const rooms = [
-    ...(body?.data ?? []),
-    ...rest.flatMap((page) =>
-      page.data !== undefined && page.data.status === 200 ? page.data.data.data : [],
-    ),
-  ].filter((room) => room.floor === floor)
-
-  return {
-    rooms,
-    isPending: first.isPending || rest.some((page) => page.isPending),
-    error: first.isError ? first.error : null,
-  }
-}
+import { lastPageOf, usePagination } from '@/hooks/use-pagination'
 
 export function FloorPage() {
   const { t } = useTranslation()
@@ -86,7 +29,24 @@ export function FloorPage() {
   const user = session.status === 'authenticated' ? session.user : null
   const mayManageRooms = user !== null && may(user, Permission.manageRooms, buildingId)
 
-  const { rooms, isPending, error } = useRoomsOfFloor(buildingId, floor, free)
+  const paging = usePagination({ resetKey: `${buildingId}|${floor}|${free ? '1' : ''}` })
+
+  const register = useListBuildingRooms<listBuildingRoomsResponse, ApiError>(
+    buildingId,
+    { floor, ...(free ? { free: true } : {}), ...paging.params },
+    {
+      query: {
+        enabled: Number.isInteger(buildingId) && Number.isInteger(floor),
+        retry: false,
+        placeholderData: keepPreviousData,
+      },
+    },
+  )
+
+  const page = register.data?.status === 200 ? register.data.data : null
+  const rooms = page?.data ?? []
+  const isPending = register.isPending
+  const error = register.isError ? register.error : null
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -149,6 +109,13 @@ export function FloorPage() {
           </li>
         ))}
       </ul>
+
+      <Pagination
+        page={paging.page}
+        lastPage={lastPageOf(page?.meta)}
+        onPageChange={paging.setPage}
+        disabled={register.isFetching}
+      />
     </div>
   )
 }
