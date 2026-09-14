@@ -146,8 +146,7 @@ final class BuildingPolicy
     }
 
     /**
-     * FR-09 and FR-12: publishing an announcement into this dormitory, and
-     * reading who has acknowledged one.
+     * FR-09: publishing an announcement into this dormitory.
      *
      * The warden, the manager beneath him and the administrator — the same
      * circle as the register work, because §1.1.4's revision 2 puts

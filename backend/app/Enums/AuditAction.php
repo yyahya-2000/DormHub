@@ -102,14 +102,14 @@ enum AuditAction: string
      * FR-17, third criterion: «the applicant is notified of the decision» — and
      * the case in which they are not.
      *
-     * The notice of a decision is an optional category (§2.7.1), so a resident
-     * who has switched it off, or who has withdrawn the consent it rests on,
-     * receives nothing. That silence is correct and it was also invisible: the
-     * message was dropped inside `User::notify()` and the log recorded the
-     * decision as though it had been delivered. A criterion phrased «the
-     * applicant is notified» cannot be audited against a log that says nothing
-     * about the times it was not. The entry names the reason, so «why did I
-     * hear nothing» has an answer that does not require reading the code.
+     * The notice of a decision rests on consent (§2.7.1), so a resident who
+     * has withdrawn that consent receives nothing. That silence is correct and
+     * it was also invisible: the message was dropped inside `User::notify()`
+     * and the log recorded the decision as though it had been delivered. A
+     * criterion phrased «the applicant is notified» cannot be audited against a
+     * log that says nothing about the times it was not. The entry names the
+     * reason, so «why did I hear nothing» has an answer that does not require
+     * reading the code.
      */
     case GuestRequestDecisionNotDelivered = 'guest_request.decision_not_delivered';
 
@@ -152,15 +152,14 @@ enum AuditAction: string
      * `maintenance_work_logs` with its actor, its moment and its comment, and
      * that table is append-only by the same migration device as this one. A
      * second copy of the same nine rows in `audit_logs` would bury the log in
-     * entries that say nothing the primary record does not — which is the
-     * argument that keeps `announcement_acks` out of it too.
+     * entries that say nothing the primary record does not.
      *
      * What is here is what the work log cannot answer. A commitment made to a
      * resident and a refusal given to one are decisions §3.9.6 counts; a
      * request that closed because nobody answered, and one a resident disputed
      * by reopening, are the two outcomes the module exists to make visible;
-     * and an export is a disclosure of a list, which is the same kind of event
-     * as reading the readers of an announcement.
+     * and an export is a disclosure of a list, which §3.9.6 counts for the
+     * same reason it counts `resident.card_viewed`.
      */
     case MaintenanceRequestAccepted = 'maintenance_request.accepted';
     case MaintenanceRequestRejected = 'maintenance_request.rejected';
@@ -173,26 +172,15 @@ enum AuditAction: string
     // written inside one is carried away by the rollback.
     case MaintenanceReopeningRefused = 'maintenance_request.reopening_refused';
 
-    // FR-09. What was announced, to which dormitory, by whom and until when.
-    // A mandatory announcement is the ground a disciplinary conversation later
-    // stands on (SN-11), and «the notice was posted on the ninth» has to be
-    // answerable from something other than the row a warden could edit.
+    // FR-09, and the only act of this module the log records. What was
+    // announced, to which dormitory, by whom and until when — «the notice was
+    // posted on the ninth» has to be answerable from something other than the
+    // row a warden could edit afterwards.
+    //
+    // Nothing else of the module is here, because nothing else of it is an
+    // act: reading the feed is reading one's own dormitory's notice board,
+    // and there is no acknowledgement to record since FR-12 left the MVP.
     case AnnouncementPublished = 'announcement.published';
-
-    // FR-12, and the one act of this module that is recorded here rather than
-    // in a table of its own.
-    //
-    // The acknowledgement itself is **not** in the audit log: the
-    // `announcement_acks` row already carries the person, the announcement and
-    // the moment, which is the whole of what FR-12 asks to be recorded, and a
-    // second copy of it per resident per notice would bury the log in rows
-    // that say nothing the primary record does not.
-    //
-    // Reading the readers is a different act. It discloses a named list of
-    // residents who have not complied with an instruction — personal data
-    // assembled for a purpose — and §3.9.6 counts such a reading among the
-    // events for the same reason it counts `resident.card_viewed`.
-    case AnnouncementReadersViewed = 'announcement.readers_viewed';
 
     /*
      |--------------------------------------------------------------------------

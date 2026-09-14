@@ -97,31 +97,18 @@ enum Permission: string
     case ViewVisitRegister = 'visit_register.view';
 
     /**
-     * Publishing an announcement, and reading who has acknowledged it
-     * (FR-09, FR-12).
-     *
-     * **One capability and not two, which is a decision rather than an
-     * oversight.** The obvious split — publish here, read the list of readers
-     * there — would produce two capabilities held by exactly the same three
-     * roles, because nothing in the requirements distinguishes them. The
-     * register of rooms is split into `ViewRooms` and `ManageRooms` for a
-     * reason this pair does not have: the duty officer needs the read and has
-     * no business with the write, so the two lists of holders genuinely
-     * differ. Here they would not, and a capability that never separates
-     * anybody is a line of code pretending to be a rule.
-     *
-     * The list of readers is the evidential half of the same act. FR-12 exists
-     * because SN-11 asks the warden to be able to show that a mandatory notice
-     * was delivered; the person who has to show it is the person who posted
-     * it.
+     * Publishing an announcement (FR-09).
      *
      * **The scope is the whole of the safety here.** A holder of this
-     * capability publishes into the dormitory their grant names and reads the
-     * readers of that dormitory. An announcement addressed to every building —
-     * `building_id` NULL — is the administrator's alone, whose grant names
-     * none, and the readers of such an announcement are narrowed to the
-     * caller's own building before a single name is returned. See
-     * `App\Policies\AnnouncementPolicy`.
+     * capability publishes into the dormitory their grant names, and into no
+     * other. An announcement addressed to every building — `building_id` NULL
+     * — is the administrator's alone, whose grant names none; the same absence
+     * of a building on his grant is what lets him publish into any single
+     * dormitory by naming it. See `App\Policies\AnnouncementPolicy`.
+     *
+     * The capability used to cover reading who had acknowledged a notice as
+     * well. FR-12 has left the MVP and so has that report; nothing else was
+     * ever folded into this one.
      */
     case PublishAnnouncements = 'announcements.publish';
 

@@ -10,7 +10,6 @@ use App\Exceptions\GuestQuotaExceededException;
 use App\Exceptions\IllegalTransitionException;
 use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\LoginLockedException;
-use App\Exceptions\MandatoryNotificationCategoryException;
 use App\Exceptions\NoAcceptedClaimException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
@@ -133,16 +132,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'message' => $exception->getMessage(),
             'bed_id' => $exception->bedId,
         ], 422));
-
-        /*
-         * FR-34, second criterion. An attempt to switch off a category that
-         * carries what the dormitory is obliged to tell the person. 422: the
-         * request was well-formed and the value in it is not one the settings
-         * admit, which is what a validation failure is.
-         */
-        $exceptions->render(fn (MandatoryNotificationCategoryException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ] + $exception->context(), 422));
 
         /*
          * FR-35, first criterion, at the point it bites: the operation
