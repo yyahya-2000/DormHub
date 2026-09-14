@@ -5,9 +5,15 @@ import { ApiError } from '@/api/http-client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   asCapacityExceeded,
+  asConsentRequired,
   asDeletionBlocked,
+  asEntryNotPermitted,
+  asIllegalTransition,
   asMandatoryCategory,
+  asOfficerMarkRequired,
+  asQuotaSpent,
   asResidencyConflict,
+  asVisitAlreadyClosed,
   fieldMessages,
   serverMessage,
 } from '@/lib/api-refusal'
@@ -41,6 +47,12 @@ export function RequestRefusal({
   const conflict = asResidencyConflict(error)
   const capacity = status === 422 ? asCapacityExceeded(error) : null
   const mandatory = asMandatoryCategory(error)
+  const entry = asEntryNotPermitted(error)
+  const quota = asQuotaSpent(error)
+  const officerMark = asOfficerMarkRequired(error)
+  const consentNeeded = asConsentRequired(error)
+  const transition = asIllegalTransition(error)
+  const visitClosed = asVisitAlreadyClosed(error)
   const fields = fieldMessages(error)
 
   let title = t('refusal.title')
@@ -127,6 +139,73 @@ export function RequestRefusal({
           })}
         </p>
       </>
+    )
+  } else if (entry !== null) {
+    /*
+     * §2.4.2's second scenario. The sentence the officer needs is not «422»:
+     * it is which rule refused the record, and whether the responsible
+     * officer's decision may set it aside. Both come from the body.
+     */
+    title = t('checkpoint.refusal.title')
+    body = (
+      <>
+        <p className="m-0">
+          {t(`checkpoint.reason.${entry.reason_code}`, {
+            defaultValue: entry.message,
+          })}
+        </p>
+        <p className="mt-2 mb-0">
+          {entry.override_available === true
+            ? t('checkpoint.refusal.overridable')
+            : t('checkpoint.refusal.final')}
+        </p>
+      </>
+    )
+  } else if (quota !== null) {
+    title = t('guestQueue.quotaTitle')
+    body = (
+      <p className="m-0">
+        {t(`guestQueue.quotaBody.${quota.quota_scope}`, {
+          limit: formatters.count(quota.quota_limit),
+          date: formatters.date(quota.visit_date),
+          defaultValue: quota.message,
+        })}
+      </p>
+    )
+  } else if (officerMark !== null) {
+    title = t('guestQueue.officerMarkTitle')
+    body = (
+      <>
+        <p className="m-0">{t('guestQueue.officerMarkBody')}</p>
+        <p className="mt-2 mb-0 text-steel">{t('guestQueue.officerMarkGround')}</p>
+      </>
+    )
+  } else if (consentNeeded !== null) {
+    title = t('checkpoint.consent.requiredTitle')
+    body = (
+      <p className="m-0">
+        {t('checkpoint.consent.requiredBody', { revision: consentNeeded.revision })}
+      </p>
+    )
+  } else if (visitClosed !== null) {
+    title = t('checkpoint.exit.alreadyTitle')
+    body = (
+      <p className="m-0">
+        {t('checkpoint.exit.alreadyBody', {
+          time: formatters.dateTime(visitClosed.checked_out_at),
+        })}
+      </p>
+    )
+  } else if (transition !== null) {
+    title = t('guestQueue.transitionTitle')
+    body = (
+      <p className="m-0">
+        {t('guestQueue.transitionBody', {
+          status: t(`guestStatus.${transition.status}`, {
+            defaultValue: transition.status ?? '',
+          }),
+        })}
+      </p>
     )
   } else if (fields.length > 0) {
     title = t('refusal.validationTitle')

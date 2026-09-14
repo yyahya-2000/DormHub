@@ -41,6 +41,11 @@ export const Permission = {
   viewPeople: 'people.view',
   viewResidentCard: 'resident_card.view',
   issueResidentAccount: 'resident_account.issue',
+  viewGuestRequests: 'guest_requests.view',
+  decideGuestRequests: 'guest_requests.decide',
+  operateCheckpoint: 'checkpoint.operate',
+  viewVisitRegister: 'visit_register.view',
+  viewGuestDocument: 'guest_document.view',
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -60,6 +65,9 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewPeople,
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
+    Permission.viewGuestRequests,
+    Permission.viewVisitRegister,
+    Permission.viewGuestDocument,
   ],
   warden: [
     Permission.viewBuilding,
@@ -69,12 +77,19 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewPeople,
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
+    Permission.viewGuestRequests,
+    Permission.viewVisitRegister,
+    Permission.viewGuestDocument,
   ],
   // The manager relieves the warden of the register work and of nothing else.
   // Over the housing domain the two sets are identical, and issuing an account
   // to an incoming resident (FR-42) is register work, so the manager carries it
   // too. Appointing staff is the one capability the warden keeps to himself,
   // and it is not a capability at all — see `GRANTABLE` below.
+  // The guest module is where the three register roles stop being the same
+  // set. The manager reads the queue, because a request names a room and the
+  // rooms are his work; he does not decide on one, does not export the
+  // register and does not unmask a document number.
   manager: [
     Permission.viewBuilding,
     Permission.viewRooms,
@@ -83,6 +98,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewPeople,
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
+    Permission.viewGuestRequests,
   ],
   // The duty officer approves guest requests, and for that he needs the room a
   // guest is bound for and the roll of the building. Not the resident card: it
@@ -91,8 +107,18 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
   // this capability from the duty officer's set, and the mirror follows —
   // otherwise the floor plan would ask him for a dozen cards it knows will be
   // refused, and each refusal is an `access.denied` line in the audit log.
-  duty_officer: [Permission.viewBuilding, Permission.viewRooms, Permission.viewPeople],
-  security: [Permission.viewBuilding],
+  duty_officer: [
+    Permission.viewBuilding,
+    Permission.viewRooms,
+    Permission.viewPeople,
+    Permission.viewGuestRequests,
+    Permission.decideGuestRequests,
+  ],
+  // The security officer works the post and nothing else: find the guest,
+  // compare the document, record the entry, record the exit. Not the queue of
+  // undecided requests — there is nothing at the desk to do with one — and not
+  // the register export, which §3.9.6 gives to the warden and the administrator.
+  security: [Permission.viewBuilding, Permission.operateCheckpoint],
   student: [],
 }
 
@@ -226,4 +252,68 @@ export function awaitsConsent(user: User): boolean {
  */
 export function showsBuildingRoll(user: User, buildingId: number): boolean {
   return may(user, Permission.viewPeople, buildingId)
+}
+
+/**
+ * The buildings a grant of this capability names. Empty when the account has
+ * none, which is what hides a whole section rather than emptying it. The
+ * administrator's grant names no building and so appears here as nothing: the
+ * screens that need one take it from the path instead.
+ */
+export function buildingsWith(user: User, permission: Permission): number[] {
+  const ids = (user.roles ?? [])
+    .filter((grant) => (CAPABILITIES[grant.role] ?? []).includes(permission))
+    .map((grant) => grant.building_id)
+    .filter((id): id is number => id !== null)
+  return [...new Set(ids)]
+}
+
+/**
+ * FR-16. The buildings this account may file a guest request for.
+ *
+ * The server decides this one against the residency register and not against a
+ * capability: «the right to invite a guest follows from living there». The
+ * mirror cannot read that register, so it asks the nearest question it can —
+ * does the account hold the resident role here — and is deliberately wrong in
+ * the visible direction. A resident whose departure date has passed still sees
+ * the screen, files the form, and is refused by the API with the reason on it
+ * (FR-05); a member of staff with no residency sees no tab at all.
+ */
+export function guestRequestBuildingsOf(user: User): number[] {
+  const ids = (user.roles ?? [])
+    .filter((grant) => grant.role === RoleCode.student)
+    .map((grant) => grant.building_id)
+    .filter((id): id is number => id !== null)
+  return [...new Set(ids)]
+}
+
+/** FR-17. The duty officer of this dormitory, and nobody else. */
+export function decidesGuestRequests(user: User, buildingId: number): boolean {
+  return may(user, Permission.decideGuestRequests, buildingId)
+}
+
+/** FR-17, FR-21. Who may read the queue of a dormitory: four roles, not one. */
+export function readsGuestRequests(user: User, buildingId: number): boolean {
+  return may(user, Permission.viewGuestRequests, buildingId)
+}
+
+/** FR-18, FR-19. The post of this dormitory. */
+export function operatesCheckpoint(user: User, buildingId: number): boolean {
+  return may(user, Permission.operateCheckpoint, buildingId)
+}
+
+/** FR-21 and §3.9.6: the administrator and the warden of the building concerned. */
+export function readsVisitRegister(user: User, buildingId: number): boolean {
+  return may(user, Permission.viewVisitRegister, buildingId)
+}
+
+/**
+ * NFR-06. Whether the unmasked document number may be asked for here.
+ *
+ * The circle is narrower than the queue's own readers and excludes the post:
+ * at the desk the document is in the officer's hand, and the last four
+ * characters are what a comparison needs.
+ */
+export function readsGuestDocument(user: User, buildingId: number): boolean {
+  return may(user, Permission.viewGuestDocument, buildingId)
 }

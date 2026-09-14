@@ -1,9 +1,15 @@
 import type {
   CapacityExceeded,
+  ConsentRequiredError,
   DeletionBlocked,
+  EntryNotPermittedError,
+  IllegalTransitionError,
   MandatoryCategory,
+  OfficerMarkRequiredError,
+  QuotaError,
   ResidencyConflict,
   ValidationError,
+  VisitAlreadyClosedError,
 } from '@/api/generated/model'
 import { ApiError } from '@/api/http-client'
 
@@ -97,6 +103,96 @@ export function asMandatoryCategory(error: unknown): MandatoryCategory | null {
   }
   return typeof body.category === 'string' && typeof body.category_label === 'string'
     ? (body as unknown as MandatoryCategory)
+    : null
+}
+
+/**
+ * FR-19 and §2.4.2, second scenario: the rules admit no entry as things stand.
+ *
+ * `reason_code` says which refusal it is and `override_available` whether the
+ * officer's decision may set it aside. Both are read out of the body and never
+ * worked out here — the card the officer reads and the rule the entry is
+ * refused by are the same call on the server, and a client that recomputed the
+ * verdict would be a second, disagreeing copy of it.
+ */
+export function asEntryNotPermitted(error: unknown): EntryNotPermittedError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 422) {
+    return null
+  }
+  return typeof body.reason_code === 'string'
+    ? (body as unknown as EntryNotPermittedError)
+    : null
+}
+
+/**
+ * FR-35 at the point it bites: no consent from the guest is on record, and the
+ * entry is therefore not written. 409 and not 403 — the officer's role covers
+ * the post perfectly well, and what stands in the way is a missing document.
+ *
+ * The body names the revision, and the revision is what the consent step then
+ * records. It is never a constant in the client: a record naming a wording the
+ * repository cannot produce would prove nothing (art. 9 part 3 of Federal Law
+ * No. 152-FZ).
+ */
+export function asConsentRequired(
+  error: unknown,
+): (ConsentRequiredError & { revision: string }) | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 409) {
+    return null
+  }
+  // The revision is optional in the schema and load bearing here: the consent
+  // step records the one the server named, so a body without it is not a
+  // refusal this screen can answer.
+  return typeof body.document === 'string' && typeof body.revision === 'string'
+    ? (body as unknown as ConsentRequiredError & { revision: string })
+    : null
+}
+
+/** §3.5.4: the request is no longer in the state the action asked for. */
+export function asIllegalTransition(error: unknown): IllegalTransitionError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 409) {
+    return null
+  }
+  return typeof body.attempted_status === 'string'
+    ? (body as unknown as IllegalTransitionError)
+    : null
+}
+
+/** FR-17: the daily ceiling of approved visits is spent, per resident or per building. */
+export function asQuotaSpent(error: unknown): QuotaError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 422) {
+    return null
+  }
+  return typeof body.quota_scope === 'string' ? (body as unknown as QuotaError) : null
+}
+
+/**
+ * FR-23, second criterion: a foreign document and an interval running past
+ * midnight, approved without the mark of the officer responsible for migration
+ * registration.
+ */
+export function asOfficerMarkRequired(error: unknown): OfficerMarkRequiredError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 422) {
+    return null
+  }
+  return body.required_field === 'responsible_officer_mark'
+    ? (body as unknown as OfficerMarkRequiredError)
+    : null
+}
+
+/** FR-21: the exit on this visit is already written, and is written once. */
+export function asVisitAlreadyClosed(error: unknown): VisitAlreadyClosedError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 409) {
+    return null
+  }
+  return typeof body.checked_out_at === 'string'
+    ? (body as unknown as VisitAlreadyClosedError)
     : null
 }
 
