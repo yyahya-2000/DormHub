@@ -4,26 +4,32 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
-use App\Models\Announcement;
 use App\Models\Building;
 use App\Models\User;
-use App\Services\AnnouncementQuery;
 
 /**
- * FR-09 and FR-11 over one announcement.
+ * FR-09 over one announcement: who may publish, and to which dormitory.
  *
  * The policy names no role (§3.3.3). It asks `BuildingPolicy` for a
  * capability, and `RoleCode::permissions()` says which roles carry it — so
  * «the warden and the manager of their own dormitory publish, the
  * administrator publishes everywhere» is stated once, in the capability map,
  * and not repeated in methods that could drift apart.
+ *
+ * **There is one method, and there used to be two** (acceptance of
+ * 15.09.2026). `view()` decided whether one announcement was inside a reader's
+ * audience, and nothing ever asked it: FR-11 is a feed and not a card, there
+ * is no `GET /announcements/{id}` in the contract or in `routes/api.php`, and
+ * the feed keeps the boundary by computing the audience from the token's own
+ * grants rather than by checking a row somebody named. An authorisation rule
+ * that is never reached is worse than no rule: it reads like a guarantee, it
+ * is covered by nothing, and the route that finally arrives inherits whatever
+ * it happens to say. Should a card ever be wanted, the question it asks is one
+ * line of `AnnouncementQuery`, written then and tested then.
  */
 final class AnnouncementPolicy
 {
-    public function __construct(
-        private readonly BuildingPolicy $buildings,
-        private readonly AnnouncementQuery $audience,
-    ) {}
+    public function __construct(private readonly BuildingPolicy $buildings) {}
 
     /**
      * FR-09: who may publish, and to which dormitory.
@@ -53,18 +59,5 @@ final class AnnouncementPolicy
         }
 
         return $this->buildings->publishAnnouncements($user, $building);
-    }
-
-    /**
-     * FR-11: the announcement is visible to its audience and to nobody else.
-     *
-     * Decided against the addressee column and the residency register rather
-     * than against a capability, because being in the audience is not a role —
-     * it is living in the dormitory the notice is addressed to, and FR-05
-     * closes that on the stated departure date.
-     */
-    public function view(User $user, Announcement $announcement): bool
-    {
-        return $this->audience->reaches($user, $announcement);
     }
 }

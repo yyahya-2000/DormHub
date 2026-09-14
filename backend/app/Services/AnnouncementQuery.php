@@ -89,22 +89,6 @@ final readonly class AnnouncementQuery
     }
 
     /**
-     * Whether this person is inside the audience of this announcement — the
-     * question `AnnouncementPolicy::view` asks.
-     */
-    public function reaches(User $reader, Announcement $announcement): bool
-    {
-        $buildingIds = $this->readableBuildingIdsFor($reader);
-
-        if ($buildingIds === null) {
-            return true;
-        }
-
-        return $announcement->addressesEveryBuilding()
-            || in_array((int) $announcement->building_id, $buildingIds, true);
-    }
-
-    /**
      * The people an announcement is to be delivered to (FR-09, FR-34).
      *
      * @return Collection<int, User>
