@@ -281,6 +281,70 @@ final class MaintenanceTriageTest extends TestCase
     }
 
     /**
+     * The acceptance finding of 15.09.2026: `assigned_to` took any identifier
+     * in the table.
+     *
+     * `exists:users,id` was the whole of the check, and identifiers are
+     * sequential — so «any account in the system» is a range starting at one,
+     * and the card the acceptance answers with carries the assignee's full
+     * name. A warden counting upwards read the staff of every other dormitory
+     * and could make a stranger responsible for a repair he would never hear
+     * about.
+     *
+     * 422 and not 403: the warden may triage this request perfectly well, and
+     * what the body got wrong is the account it named.
+     */
+    public function test_the_responsible_party_must_belong_to_the_dormitory_of_the_request(): void
+    {
+        $elsewhere = $this->dormitory('Block B');
+        $strangers = [
+            'the manager of another dormitory' => $this->staff(RoleCode::Manager, $elsewhere, 'manager-b@example.test'),
+            'a resident of this one' => $this->resident,
+            'a resident of another one' => $this->residentOf($elsewhere, 'resident-b@example.test', '101'),
+        ];
+
+        Sanctum::actingAs($this->warden);
+
+        foreach ($strangers as $who => $stranger) {
+            $this->postJson("/api/v1/maintenance-requests/{$this->request->id}/accept", [
+                'target_date' => '2026-09-18',
+                'assigned_to' => $stranger->getKey(),
+            ])
+                ->assertStatus(422, sprintf('%s was accepted as the responsible party.', $who))
+                ->assertJsonValidationErrors('assigned_to');
+        }
+
+        // Nothing was written: the request is still waiting to be triaged.
+        $this->assertSame(MaintenanceRequestStatus::Submitted, $this->request->fresh()?->status);
+        $this->assertNull($this->request->fresh()?->assigned_to);
+    }
+
+    /**
+     * The other side of the same rule. Every member of staff of this dormitory
+     * is nameable — the warden himself included, which is FR-37's «a dormitory
+     * whose warden does the work himself has nobody else to name».
+     */
+    public function test_any_member_of_staff_of_this_dormitory_may_be_made_responsible(): void
+    {
+        $officer = $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
+
+        Sanctum::actingAs($this->warden);
+
+        foreach ([$this->warden, $officer] as $assignee) {
+            $request = MaintenanceRequest::factory()
+                ->forBuilding($this->building)
+                ->from($this->resident)
+                ->inRoom($this->roomOf($this->resident))
+                ->create();
+
+            $this->postJson("/api/v1/maintenance-requests/{$request->id}/accept", [
+                'target_date' => '2026-09-18',
+                'assigned_to' => $assignee->getKey(),
+            ])->assertOk()->assertJsonPath('data.assigned_to', $assignee->getKey());
+        }
+    }
+
+    /**
      * The manager of the same building triages as the warden does: §1.1.4's
      * revision 2 puts the maintenance queue with the register work, and the
      * manager relieves the warden rather than replacing him.

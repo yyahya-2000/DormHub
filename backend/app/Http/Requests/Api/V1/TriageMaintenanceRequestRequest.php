@@ -7,6 +7,8 @@ namespace App\Http\Requests\Api\V1;
 use App\Enums\MaintenanceUrgency;
 use App\Models\MaintenanceRequest;
 use App\Models\User;
+use App\Rules\StaffOfThisDormitory;
+use App\Support\DormitoryClock;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Foundation\Http\FormRequest;
@@ -54,12 +56,36 @@ final class TriageMaintenanceRequestRequest extends FormRequest
                  * plan, and the resident is told a date the moment this
                  * succeeds.
                  */
-                'target_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
-                // FR-37 names a responsible party beside the date. Optional,
-                // because a dormitory whose warden does the work himself has
-                // nobody else to name, and a required field would be filled in
-                // with his own name on every row.
-                'assigned_to' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+                'target_date' => [
+                    'required',
+                    'date_format:Y-m-d',
+                    // The dormitory's today and not the server's (acceptance
+                    // of 15.09.2026): `after_or_equal:today` is resolved by
+                    // `strtotime()` in the server's zone, and the server ran
+                    // three hours behind the building.
+                    'after_or_equal:'.DormitoryClock::todayAsDate(),
+                ],
+                /*
+                 * FR-37 names a responsible party beside the date. Optional,
+                 * because a dormitory whose warden does the work himself has
+                 * nobody else to name, and a required field would be filled in
+                 * with his own name on every row.
+                 *
+                 * **`exists:users,id` was the whole of the check until the
+                 * acceptance of 15.09.2026**, which is to say the field took
+                 * any identifier in the table. The answer carries the
+                 * assignee's full name, so a warden who counted upwards read
+                 * the staff of every other dormitory out of a route that was
+                 * supposed to be about his own. `StaffOfThisDormitory` narrows
+                 * it to the people who could actually be sent to do the work.
+                 */
+                'assigned_to' => [
+                    'sometimes',
+                    'nullable',
+                    'integer',
+                    'exists:users,id',
+                    new StaffOfThisDormitory($this->dormitoryOfTheRequest()),
+                ],
                 'urgency' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', MaintenanceUrgency::values())],
                 'comment' => ['sometimes', 'nullable', 'string', 'max:1000'],
             ];
@@ -85,6 +111,21 @@ final class TriageMaintenanceRequestRequest extends FormRequest
             'target_date.required' => 'A request is accepted with a planned completion date, not without one.',
             'reason.required' => 'A request is refused with a stated reason, not without one.',
         ];
+    }
+
+    /**
+     * The dormitory the request being triaged belongs to, which is the scope
+     * every field of the acceptance is measured against.
+     *
+     * Read off the request row and never off the body: a building the client
+     * could name would be a building the client could get wrong, and the
+     * boundary of FR-07 would then rest on a value somebody sent.
+     */
+    private function dormitoryOfTheRequest(): int
+    {
+        $request = $this->route('maintenanceRequest');
+
+        return $request instanceof MaintenanceRequest ? (int) $request->building_id : 0;
     }
 
     public function isAcceptance(): bool
