@@ -25,8 +25,6 @@ class BuildingFactory extends Factory
             // between 08:00 and 23:00.
             'visiting_from' => '08:00:00',
             'visiting_to' => '23:00:00',
-            'curfew_at' => '23:00:00',
-            'is_active' => true,
         ];
     }
 }

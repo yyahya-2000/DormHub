@@ -37,14 +37,12 @@ final class UpdateBuildingRequest extends FormRequest
             'floors_count' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'visiting_from' => ['sometimes', 'date_format:H:i:s'],
             'visiting_to' => ['sometimes', 'date_format:H:i:s'],
-            'curfew_at' => ['sometimes', 'date_format:H:i:s'],
             // FR-16, first criterion: «the request is submitted no later than
             // the lead time **configured for the building**». The column has
             // always been read by the validator of a guest request; until it
             // appeared here there was no way to configure it, and a PATCH
             // carrying it answered 200 and saved nothing.
             'guest_lead_time_hours' => ['sometimes', 'integer', 'min:0', 'max:720'],
-            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -54,8 +52,8 @@ final class UpdateBuildingRequest extends FormRequest
     public function payload(): array
     {
         return $this->safe()->only([
-            'name', 'address', 'floors_count', 'visiting_from', 'visiting_to', 'curfew_at',
-            'guest_lead_time_hours', 'is_active',
+            'name', 'address', 'floors_count', 'visiting_from', 'visiting_to',
+            'guest_lead_time_hours',
         ]);
     }
 }

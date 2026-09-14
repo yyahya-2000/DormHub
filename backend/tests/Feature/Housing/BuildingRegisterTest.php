@@ -36,7 +36,7 @@ final class BuildingRegisterTest extends TestCase
         $this->building = Building::factory()->create(['name' => 'Block 1']);
     }
 
-    public function test_create_edit_and_archive_are_available_to_the_administrator_only(): void
+    public function test_create_edit_and_delete_are_available_to_the_administrator_only(): void
     {
         $administrator = $this->userWith(RoleCode::Administrator, null);
 
@@ -52,12 +52,10 @@ final class BuildingRegisterTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.floors_count', 14);
 
-        $this->postJson("/api/v1/buildings/{$created['id']}/archive")
-            ->assertOk()
-            ->assertJsonPath('data.is_active', false);
+        $this->deleteJson("/api/v1/buildings/{$created['id']}")->assertNoContent();
     }
 
-    public function test_a_warden_token_gets_403_on_create_edit_and_archive(): void
+    public function test_a_warden_token_gets_403_on_create_edit_and_delete(): void
     {
         $warden = $this->userWith(RoleCode::Warden, $this->building);
 
@@ -72,9 +70,6 @@ final class BuildingRegisterTest extends TestCase
         ])->assertStatus(403);
 
         $this->patchJson("/api/v1/buildings/{$this->building->id}", ['floors_count' => 4])
-            ->assertStatus(403);
-
-        $this->postJson("/api/v1/buildings/{$this->building->id}/archive")
             ->assertStatus(403);
 
         $this->deleteJson("/api/v1/buildings/{$this->building->id}")
@@ -97,7 +92,6 @@ final class BuildingRegisterTest extends TestCase
             $this->patchJson("/api/v1/buildings/{$this->building->id}", ['address' => 'Elsewhere'])
                 ->assertStatus(403);
 
-            $this->postJson("/api/v1/buildings/{$this->building->id}/archive")->assertStatus(403);
             $this->deleteJson("/api/v1/buildings/{$this->building->id}")->assertStatus(403);
         }
     }
@@ -160,11 +154,10 @@ final class BuildingRegisterTest extends TestCase
 
     public function test_creating_a_dormitory_answers_with_the_regime_settings_and_not_with_nulls(): void
     {
-        // The contract declares `is_active` a required boolean and the three
-        // time columns non-null, and the read of the same building returns
-        // them. The create used to answer null for all four, because the model
-        // did not repeat the migration's defaults and the response is built
-        // from the instance that was just saved.
+        // The contract declares the time columns non-null, and the read of the
+        // same building returns them. The create used to answer null for all of
+        // them, because the model did not repeat the migration's defaults and
+        // the response is built from the instance that was just saved.
         Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
 
         $created = $this->postJson('/api/v1/buildings', [
@@ -173,10 +166,8 @@ final class BuildingRegisterTest extends TestCase
             'floors_count' => 9,
         ])
             ->assertCreated()
-            ->assertJsonPath('data.is_active', true)
             ->assertJsonPath('data.visiting_from', '08:00:00')
             ->assertJsonPath('data.visiting_to', '23:00:00')
-            ->assertJsonPath('data.curfew_at', '23:00:00')
             ->json('data');
 
         // And the read of the same row agrees with the create, field for
@@ -251,7 +242,6 @@ final class BuildingRegisterTest extends TestCase
             'floors_count' => 5,
             'visiting_from' => '08:00:00',
             'visiting_to' => '02:00:00',
-            'curfew_at' => '02:00:00',
         ])
             ->assertCreated()
             ->assertJsonPath('data.visiting_to', '02:00:00')
@@ -376,9 +366,8 @@ final class BuildingRegisterTest extends TestCase
         ])->assertCreated()->json('data.id');
 
         $this->patchJson("/api/v1/buildings/{$id}", ['address' => '2 Beryozovaya Street, Zarechny'])->assertOk();
-        $this->postJson("/api/v1/buildings/{$id}/archive")->assertOk();
 
-        foreach ([AuditAction::BuildingCreated, AuditAction::BuildingUpdated, AuditAction::BuildingArchived] as $action) {
+        foreach ([AuditAction::BuildingCreated, AuditAction::BuildingUpdated] as $action) {
             $this->assertDatabaseHas('audit_logs', [
                 'user_id' => $administrator->id,
                 'action' => $action->value,

@@ -43,14 +43,12 @@ final class StoreBuildingRequest extends FormRequest
             'floors_count' => ['required', 'integer', 'min:1', 'max:100'],
             'visiting_from' => ['sometimes', 'date_format:H:i:s'],
             'visiting_to' => ['sometimes', 'date_format:H:i:s'],
-            'curfew_at' => ['sometimes', 'date_format:H:i:s'],
             // FR-16: the notice this dormitory wants before a guest arrives.
             // Zero — the column's default — means none, which is what the HSE
             // rules of internal order actually say; the cap is a month, past
             // which the setting stops being a notice period and becomes a
             // refusal to admit guests at all.
             'guest_lead_time_hours' => ['sometimes', 'integer', 'min:0', 'max:720'],
-            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -63,8 +61,8 @@ final class StoreBuildingRequest extends FormRequest
     public function payload(): array
     {
         return $this->safe()->only([
-            'name', 'address', 'floors_count', 'visiting_from', 'visiting_to', 'curfew_at',
-            'guest_lead_time_hours', 'is_active',
+            'name', 'address', 'floors_count', 'visiting_from', 'visiting_to',
+            'guest_lead_time_hours',
         ]);
     }
 }
