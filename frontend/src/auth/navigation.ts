@@ -49,6 +49,11 @@ export const Permission = {
   publishAnnouncements: 'announcements.publish',
   viewMaintenanceRequests: 'maintenance_requests.view',
   triageMaintenanceRequests: 'maintenance_requests.triage',
+  // The two staff capabilities of the lost-and-found module, and neither is
+  // its ordinary path: a find stays with the resident who picked it up and is
+  // settled between two residents without either of these being asked for.
+  holdLostFoundItems: 'lost_found.hold',
+  decideLostFoundDisputes: 'lost_found.decide_disputes',
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -92,6 +97,11 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.publishAnnouncements,
     Permission.viewMaintenanceRequests,
     Permission.triageMaintenanceRequests,
+    // §2.5.4's two exceptions to a peer-to-peer module: an object deposited
+    // with the administration for safekeeping, and a claim the two residents
+    // could not settle between them.
+    Permission.holdLostFoundItems,
+    Permission.decideLostFoundDisputes,
   ],
   // The manager relieves the warden of the register work and of nothing else.
   // Over the housing domain the two sets are identical, and issuing an account
@@ -116,6 +126,11 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     // relieving one: the defects are in the rooms, and the rooms are his work.
     Permission.viewMaintenanceRequests,
     Permission.triageMaintenanceRequests,
+    // The same two as the warden's: keeping an object somebody left at the
+    // desk, and settling a disagreement between two residents of the
+    // building, are both day-to-day work of the building.
+    Permission.holdLostFoundItems,
+    Permission.decideLostFoundDisputes,
   ],
   // The duty officer approves guest requests, and for that he needs the room a
   // guest is bound for and the roll of the building. Not the resident card: it
@@ -135,7 +150,17 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
   // compare the document, record the entry, record the exit. Not the queue of
   // undecided requests — there is nothing at the desk to do with one — and not
   // the register export, which §3.9.6 gives to the warden and the administrator.
-  security: [Permission.viewBuilding, Permission.operateCheckpoint],
+  // FR-24 names the officer beside the warden as a publisher of finds: an
+  // object picked up in a corridor at four in the morning is handed in at the
+  // desk, the only place in the dormitory staffed at that hour. Taking it in
+  // and handing it back are one job, so the post also answers the claims made
+  // against the entries it holds. It settles no disputes — that is the other
+  // capability, and it is not here.
+  security: [
+    Permission.viewBuilding,
+    Permission.operateCheckpoint,
+    Permission.holdLostFoundItems,
+  ],
   student: [],
 }
 
@@ -400,4 +425,68 @@ export function maintenanceBuildingsOf(user: User): number[] {
     .map((grant) => grant.building_id)
     .filter((id): id is number => id !== null)
   return [...new Set(ids)]
+}
+
+/**
+ * FR-24, FR-26. Keeping an object deposited with the administration of this
+ * dormitory, and answering the claims made against an entry it holds.
+ *
+ * The warden, the manager and the security post. It is the narrower of the
+ * module's two staff capabilities and the only one the post holds.
+ */
+export function holdsLostFoundItems(user: User, buildingId: number): boolean {
+  return may(user, Permission.holdLostFoundItems, buildingId)
+}
+
+/**
+ * FR-26. Deciding a claim the finder and the claimant could not settle.
+ *
+ * The warden and the manager, and neither the officer — who keeps objects and
+ * settles nothing — nor the administrator, who is outside a disagreement
+ * between two residents about one umbrella for the same reason they are
+ * outside a decision on a guest request.
+ */
+export function decidesLostFoundDisputes(user: User, buildingId: number): boolean {
+  return may(user, Permission.decideLostFoundDisputes, buildingId)
+}
+
+/**
+ * FR-24. The dormitories this account may publish a find or a loss into.
+ *
+ * Two different answers folded into one list, because the form is the same
+ * either way. A resident publishes where they live, and the mirror asks the
+ * nearest question it can — does the account hold the resident role here —
+ * being deliberately wrong in the visible direction, exactly as the guest and
+ * maintenance forms are: the server asks the residency register and answers
+ * 403 with the reason on it. A member of staff publishes where the safekeeping
+ * capability names, which is a capability and is read as one.
+ *
+ * The administrator appears here as nothing, and that is the server's answer
+ * too: they hold neither capability in any building and live in none, so they
+ * read every feed and publish into none of them.
+ */
+export function lostFoundBuildingsOf(user: User): number[] {
+  const ids = new Set<number>()
+  for (const grant of user.roles ?? []) {
+    if (grant.building_id === null) {
+      continue
+    }
+    const holds = (CAPABILITIES[grant.role] ?? []).includes(Permission.holdLostFoundItems)
+    if (grant.role === RoleCode.student || holds) {
+      ids.add(grant.building_id)
+    }
+  }
+  return [...ids]
+}
+
+/**
+ * §2.5.4's deposited path, as a question about the form rather than about the
+ * feed: may this account state that the administration is holding the object.
+ *
+ * A resident may publish and may not say that — the entry would be an
+ * assertion about the university — so the control is absent from their form
+ * rather than present and refused. The server refuses it anyway, with 403.
+ */
+export function depositsLostFoundItems(user: User, buildingId: number): boolean {
+  return holdsLostFoundItems(user, buildingId)
 }
