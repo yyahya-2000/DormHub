@@ -119,13 +119,23 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { MaintenanceQueuePageMeta } from './maintenanceQueuePageMeta';
-import type { MaintenanceQueueRow } from './maintenanceQueueRow';
+import type { Error } from './error';
 
 /**
- * FR-40. One page of a dormitory's queue, as rows of scalars.
+ * The object store would not take a photograph the request carried, so
+ * the request was refused and nothing was written.
+ *
+ * **The route used to answer 201 here** (acceptance of 15.09.2026), with
+ * the record created and the photographs missing from it. A refused write
+ * came back from the driver as a `false`, the store dropped the path and
+ * nobody noticed; a resident could not tell that answer from a submission
+ * they had forgotten to attach anything to. A photograph is evidence — the
+ * warden triages on it — so a submission that loses one is not a
+ * submission that succeeded.
+ *
+ * 503 and not 500 or 422: the body was well formed, the caller was
+ * entitled to send it, and the same call succeeds unchanged once the store
+ * is back. There is nothing to undo before retrying — no record was
+ * created.
  */
-export interface MaintenanceQueuePage {
-  data: MaintenanceQueueRow[];
-  meta: MaintenanceQueuePageMeta;
-}
+export type PhotographNotStoredResponse = Error;

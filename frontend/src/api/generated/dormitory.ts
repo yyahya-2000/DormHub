@@ -99,6 +99,17 @@
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
  *
+ * Dates and times are the dormitory's own. The application runs in the
+ * building's timezone — a setting, `APP_TIMEZONE`, standing at `Europe/Moscow`
+ * for this deployment — so `visit_date`, `happened_on` and `target_date` are
+ * the days a person in the building would name, and `planned_from` and
+ * `planned_to` are its wall-clock hours. Every `date-time` in a response
+ * carries an explicit offset. Until the acceptance of 15.09.2026 the server
+ * kept UTC while the dormitory kept Moscow time, and after nine in the evening
+ * the two disagreed about what day it was: a find picked up that evening was
+ * refused as «later than today» and a guest approved for that evening was
+ * turned away at the post as «for another day».
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -207,6 +218,7 @@ import type {
   MarkNotificationRead200,
   NoAcceptedClaimError,
   NotFoundResponse,
+  PhotographNotStoredResponse,
   PublishAnnouncement201,
   PublishLostFoundItem201,
   QuotaError,
@@ -5792,10 +5804,15 @@ export type fileMaintenanceRequestResponse422 = {
   status: 422
 }
 
+export type fileMaintenanceRequestResponse503 = {
+  data: PhotographNotStoredResponse
+  status: 503
+}
+
 export type fileMaintenanceRequestResponseSuccess = (fileMaintenanceRequestResponse201) & {
   headers: Headers;
 };
-export type fileMaintenanceRequestResponseError = (fileMaintenanceRequestResponse401 | fileMaintenanceRequestResponse403 | fileMaintenanceRequestResponse422) & {
+export type fileMaintenanceRequestResponseError = (fileMaintenanceRequestResponse401 | fileMaintenanceRequestResponse403 | fileMaintenanceRequestResponse422 | fileMaintenanceRequestResponse503) & {
   headers: Headers;
 };
 
@@ -5867,7 +5884,7 @@ if(maintenanceRequestInput.photos !== undefined) {
 
 export const getFileMaintenanceRequestMutationKey = () => ['fileMaintenanceRequest'] as const;
 
-export const getFileMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+export const getFileMaintenanceRequestMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext> => {
 
@@ -5896,13 +5913,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type FileMaintenanceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof fileMaintenanceRequest>>>
     export type FileMaintenanceRequestMutationBody = MaintenanceRequestInput
-    export type FileMaintenanceRequestMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse
+    export type FileMaintenanceRequestMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse
     export type FileMaintenanceRequestMutationVariables = {data: MaintenanceRequestInput}
 
     /**
  * @summary File a maintenance request
  */
-export const useFileMaintenanceRequest = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+export const useFileMaintenanceRequest = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fileMaintenanceRequest>>, TError,FileMaintenanceRequestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof fileMaintenanceRequest>>,
@@ -5912,6 +5929,173 @@ export const useFileMaintenanceRequest = <TError = UnauthenticatedResponse | Err
       > => {
       return useMutation(getFileMaintenanceRequestMutationOptions(options), queryClient);
     }
+
+export type showMaintenanceRequestPhotoResponse200ImageJpeg = {
+  data: Blob
+  status: 200
+}
+
+export type showMaintenanceRequestPhotoResponse200ImagePng = {
+  data: Blob
+  status: 200
+}
+
+export type showMaintenanceRequestPhotoResponse200ImageWebp = {
+  data: Blob
+  status: 200
+}
+
+export type showMaintenanceRequestPhotoResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showMaintenanceRequestPhotoResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showMaintenanceRequestPhotoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type showMaintenanceRequestPhotoResponseSuccess = (showMaintenanceRequestPhotoResponse200ImageJpeg | showMaintenanceRequestPhotoResponse200ImagePng | showMaintenanceRequestPhotoResponse200ImageWebp) & {
+  headers: Headers;
+};
+export type showMaintenanceRequestPhotoResponseError = (showMaintenanceRequestPhotoResponse401 | showMaintenanceRequestPhotoResponse403 | showMaintenanceRequestPhotoResponse404) & {
+  headers: Headers;
+};
+
+export type showMaintenanceRequestPhotoResponse = (showMaintenanceRequestPhotoResponseSuccess | showMaintenanceRequestPhotoResponseError)
+
+export const getShowMaintenanceRequestPhotoUrl = (maintenanceRequest: number,
+    index: number,) => {
+
+
+
+
+  return `/maintenance-requests/${maintenanceRequest}/photos/${index}`
+}
+
+/**
+ * FR-36's photographs, read back one at a time — **the route the schema of
+ * `MaintenanceRequest` has always described and that did not exist until
+ * the acceptance of 15.09.2026**. `photo_paths` carries paths and not URLs
+ * because a signed URL is stale by the time somebody scrolls to it; the
+ * client asks for a link when it is about to draw the image, and this is
+ * where it asks.
+ *
+ * **The answer is the image itself**, streamed, with the photograph's own
+ * content type. It is not a signed link, which is what an earlier reading
+ * of this schema had in mind: the object store is signed for under a name
+ * that exists only inside the deployment's own network, and SigV4 covers
+ * the Host header, so a link cannot be followed from a browser and cannot
+ * be rewritten for one either. Streaming works unchanged on every disk,
+ * and it keeps the photograph behind the same token as the record.
+ *
+ * The authorisation is `view` on the request itself: whoever may read the
+ * card may see the picture on it, and a request of another dormitory is
+ * 403. `index` is the position in `photo_paths`; a path in the URL would
+ * be a path a client could edit.
+ * @summary One photograph of a maintenance request
+ */
+export const showMaintenanceRequestPhoto = async (maintenanceRequest: number,
+    index: number, options?: Parameters<typeof apiFetch>[1]): Promise<showMaintenanceRequestPhotoResponse> => {
+
+  return apiFetch<showMaintenanceRequestPhotoResponse>(getShowMaintenanceRequestPhotoUrl(maintenanceRequest,index),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowMaintenanceRequestPhotoQueryKey = (maintenanceRequest: number,
+    index: number,) => {
+    return [
+    `/maintenance-requests/${maintenanceRequest}/photos/${index}`
+    ] as const;
+    }
+
+
+export const getShowMaintenanceRequestPhotoQueryOptions = <TData = Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(maintenanceRequest: number,
+    index: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowMaintenanceRequestPhotoQueryKey(maintenanceRequest,index);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>> = ({ signal }) => showMaintenanceRequestPhoto(maintenanceRequest,index, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: maintenanceRequest !== null && maintenanceRequest !== undefined && index !== null && index !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowMaintenanceRequestPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>>
+export type ShowMaintenanceRequestPhotoQueryError = UnauthenticatedResponse | ForbiddenResponse | Error
+
+
+export function useShowMaintenanceRequestPhoto<TData = Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ maintenanceRequest: number,
+    index: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceRequestPhoto<TData = Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ maintenanceRequest: number,
+    index: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>,
+          TError,
+          Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowMaintenanceRequestPhoto<TData = Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ maintenanceRequest: number,
+    index: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One photograph of a maintenance request
+ */
+
+export function useShowMaintenanceRequestPhoto<TData = Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ maintenanceRequest: number,
+    index: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showMaintenanceRequestPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowMaintenanceRequestPhotoQueryOptions(maintenanceRequest,index,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export type showMaintenanceRequestResponse200 = {
   data: ShowMaintenanceRequest200
@@ -7260,10 +7444,15 @@ export type publishLostFoundItemResponse422 = {
   status: 422
 }
 
+export type publishLostFoundItemResponse503 = {
+  data: PhotographNotStoredResponse
+  status: 503
+}
+
 export type publishLostFoundItemResponseSuccess = (publishLostFoundItemResponse201) & {
   headers: Headers;
 };
-export type publishLostFoundItemResponseError = (publishLostFoundItemResponse401 | publishLostFoundItemResponse403 | publishLostFoundItemResponse422) & {
+export type publishLostFoundItemResponseError = (publishLostFoundItemResponse401 | publishLostFoundItemResponse403 | publishLostFoundItemResponse422 | publishLostFoundItemResponse503) & {
   headers: Headers;
 };
 
@@ -7353,7 +7542,7 @@ if(lostFoundItemInput.photo !== undefined) {
 
 export const getPublishLostFoundItemMutationKey = () => ['publishLostFoundItem'] as const;
 
-export const getPublishLostFoundItemMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+export const getPublishLostFoundItemMutationOptions = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext> => {
 
@@ -7382,13 +7571,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PublishLostFoundItemMutationResult = NonNullable<Awaited<ReturnType<typeof publishLostFoundItem>>>
     export type PublishLostFoundItemMutationBody = LostFoundItemInput
-    export type PublishLostFoundItemMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse
+    export type PublishLostFoundItemMutationError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse
     export type PublishLostFoundItemMutationVariables = {data: LostFoundItemInput}
 
     /**
  * @summary Publish a find
  */
-export const usePublishLostFoundItem = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse,
+export const usePublishLostFoundItem = <TError = UnauthenticatedResponse | Error | ValidationFailedResponse | PhotographNotStoredResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishLostFoundItem>>, TError,PublishLostFoundItemMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof publishLostFoundItem>>,
@@ -7398,6 +7587,166 @@ export const usePublishLostFoundItem = <TError = UnauthenticatedResponse | Error
       > => {
       return useMutation(getPublishLostFoundItemMutationOptions(options), queryClient);
     }
+
+export type showLostFoundItemPhotoResponse200ImageJpeg = {
+  data: Blob
+  status: 200
+}
+
+export type showLostFoundItemPhotoResponse200ImagePng = {
+  data: Blob
+  status: 200
+}
+
+export type showLostFoundItemPhotoResponse200ImageWebp = {
+  data: Blob
+  status: 200
+}
+
+export type showLostFoundItemPhotoResponse401 = {
+  data: UnauthenticatedResponse
+  status: 401
+}
+
+export type showLostFoundItemPhotoResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type showLostFoundItemPhotoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type showLostFoundItemPhotoResponseSuccess = (showLostFoundItemPhotoResponse200ImageJpeg | showLostFoundItemPhotoResponse200ImagePng | showLostFoundItemPhotoResponse200ImageWebp) & {
+  headers: Headers;
+};
+export type showLostFoundItemPhotoResponseError = (showLostFoundItemPhotoResponse401 | showLostFoundItemPhotoResponse403 | showLostFoundItemPhotoResponse404) & {
+  headers: Headers;
+};
+
+export type showLostFoundItemPhotoResponse = (showLostFoundItemPhotoResponseSuccess | showLostFoundItemPhotoResponseError)
+
+export const getShowLostFoundItemPhotoUrl = (lostFoundItem: number,) => {
+
+
+
+
+  return `/lost-found/${lostFoundItem}/photo`
+}
+
+/**
+ * FR-24's photograph, read back — **the route the schema of
+ * `LostFoundItem` has always described and that did not exist until the
+ * acceptance of 15.09.2026**. `photo_path` carries a path and not a URL
+ * because a signed URL is stale by the time somebody scrolls to it; the
+ * client asks for a link when it is about to draw the image, and this is
+ * where it asks.
+ *
+ * **The answer is the image itself**, streamed, as it is for a maintenance
+ * request's photographs and for the same reason: a presigned link cannot
+ * be followed from a browser on a deployment whose object store is signed
+ * for under an internal name.
+ *
+ * No index, unlike the maintenance module's: FR-24 says «the photograph»
+ * in the singular and the column holds one path. An entry published
+ * without one is 404 rather than an empty answer a client would have to
+ * tell apart from a link.
+ *
+ * The authorisation is `view` on the entry — FR-25's own question, so a
+ * find of another dormitory is 403. The picture carries no more than the
+ * card does, and the card has never said who published it.
+ * @summary The photograph of one find
+ */
+export const showLostFoundItemPhoto = async (lostFoundItem: number, options?: Parameters<typeof apiFetch>[1]): Promise<showLostFoundItemPhotoResponse> => {
+
+  return apiFetch<showLostFoundItemPhotoResponse>(getShowLostFoundItemPhotoUrl(lostFoundItem),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getShowLostFoundItemPhotoQueryKey = (lostFoundItem: number,) => {
+    return [
+    `/lost-found/${lostFoundItem}/photo`
+    ] as const;
+    }
+
+
+export const getShowLostFoundItemPhotoQueryOptions = <TData = Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getShowLostFoundItemPhotoQueryKey(lostFoundItem);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof showLostFoundItemPhoto>>> = ({ signal }) => showLostFoundItemPhoto(lostFoundItem, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: lostFoundItem !== null && lostFoundItem !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ShowLostFoundItemPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof showLostFoundItemPhoto>>>
+export type ShowLostFoundItemPhotoQueryError = UnauthenticatedResponse | ForbiddenResponse | Error
+
+
+export function useShowLostFoundItemPhoto<TData = Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ lostFoundItem: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showLostFoundItemPhoto>>,
+          TError,
+          Awaited<ReturnType<typeof showLostFoundItemPhoto>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowLostFoundItemPhoto<TData = Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof showLostFoundItemPhoto>>,
+          TError,
+          Awaited<ReturnType<typeof showLostFoundItemPhoto>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useShowLostFoundItemPhoto<TData = Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The photograph of one find
+ */
+
+export function useShowLostFoundItemPhoto<TData = Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError = UnauthenticatedResponse | ForbiddenResponse | Error>(
+ lostFoundItem: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showLostFoundItemPhoto>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getShowLostFoundItemPhotoQueryOptions(lostFoundItem,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export type showLostFoundItemResponse200 = {
   data: ShowLostFoundItem200
@@ -8328,6 +8677,13 @@ export const getDecideLostFoundClaimUrl = (lostFoundClaim: number,) => {
  * the security officer, who keeps objects and settles nothing; not the
  * administrator, for the reason they are outside `guest-requests/approve`;
  * not the person whose refusal is under review; not the claimant.
+ *
+ * The last of those was asserted here and enforced nowhere until the
+ * acceptance of 15.09.2026: a manager could claim a find, wait to be
+ * refused, refer his own refusal and uphold it, leaving
+ * `claimant_id == decided_by` on the row. A claimant asking for this now
+ * gets 403 — the claim is perfectly decidable, by somebody who is not a
+ * party to it.
  *
  * **Only a referred claim.** A claim nobody referred is 409, not 403: the
  * caller holds the capability perfectly well and what is missing is the

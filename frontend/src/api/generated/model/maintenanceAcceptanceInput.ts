@@ -99,6 +99,17 @@
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
  *
+ * Dates and times are the dormitory's own. The application runs in the
+ * building's timezone — a setting, `APP_TIMEZONE`, standing at `Europe/Moscow`
+ * for this deployment — so `visit_date`, `happened_on` and `target_date` are
+ * the days a person in the building would name, and `planned_from` and
+ * `planned_to` are its wall-clock hours. Every `date-time` in a response
+ * carries an explicit offset. Until the acceptance of 15.09.2026 the server
+ * kept UTC while the dormitory kept Moscow time, and after nine in the evening
+ * the two disagreed about what day it was: a find picked up that evening was
+ * refused as «later than today» and a guest approved for that evening was
+ * turned away at the post as «for another day».
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -113,7 +124,7 @@ import type { MaintenanceUrgency } from './maintenanceUrgency';
 export interface MaintenanceAcceptanceInput {
   /** The planned completion date, and mandatory: FR-37 makes acceptance without one impossible. A date in the past is refused — the resident is told this date the moment the acceptance succeeds. */
   target_date: string;
-  /** The responsible party FR-37 names beside the date. Optional. */
+  /** The responsible party FR-37 names beside the date. Optional, and **restricted to the staff of the dormitory the request belongs to** — the warden himself, the manager, the duty officer, the security officer. A resident, or a member of staff of another dormitory, is 422 naming this field. Until the acceptance of 15.09.2026 any identifier in the users table was admitted, and the answer carries the assignee's full name, so counting upwards read the staff of every other building. The administrator is outside it too: he reads every queue and promises no dates. */
   assigned_to?: number;
   urgency?: MaintenanceUrgency;
   /** @maxLength 1000 */

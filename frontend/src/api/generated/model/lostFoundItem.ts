@@ -99,6 +99,17 @@
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
  *
+ * Dates and times are the dormitory's own. The application runs in the
+ * building's timezone — a setting, `APP_TIMEZONE`, standing at `Europe/Moscow`
+ * for this deployment — so `visit_date`, `happened_on` and `target_date` are
+ * the days a person in the building would name, and `planned_from` and
+ * `planned_to` are its wall-clock hours. Every `date-time` in a response
+ * carries an explicit offset. Until the acceptance of 15.09.2026 the server
+ * kept UTC while the dormitory kept Moscow time, and after nine in the evening
+ * the two disagreed about what day it was: a find picked up that evening was
+ * refused as «later than today» and a guest approved for that evening was
+ * turned away at the post as «for another day».
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -129,10 +140,10 @@ import type { LostFoundItemStatus } from './lostFoundItemStatus';
  * Civil Code art. 228 cl. 1 runs from the second and never from
  * `created_at`. FR-27 counts it and is outside the MVP.
  *
- * `photo_path` is a path in the object store and not a URL: a signed URL
- * expires, so one embedded in a list is stale by the time somebody
- * scrolls to it. The path is meaningless without the store's credentials,
- * which is what makes it safe to serialise.
+ * `photo_path` is a path in the object store and not a URL. The path is
+ * meaningless without the store's credentials, which is what makes it
+ * safe to serialise; the image itself is read from
+ * `GET /lost-found/{id}/photo` when the client is about to show it.
  *
  * `claim_count` says how many claims the entry carries and never what any
  * of them says. `can_claim` is the three facts a claim would be refused on

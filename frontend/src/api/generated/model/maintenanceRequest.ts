@@ -99,6 +99,17 @@
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
  *
+ * Dates and times are the dormitory's own. The application runs in the
+ * building's timezone — a setting, `APP_TIMEZONE`, standing at `Europe/Moscow`
+ * for this deployment — so `visit_date`, `happened_on` and `target_date` are
+ * the days a person in the building would name, and `planned_from` and
+ * `planned_to` are its wall-clock hours. Every `date-time` in a response
+ * carries an explicit offset. Until the acceptance of 15.09.2026 the server
+ * kept UTC while the dormitory kept Moscow time, and after nine in the evening
+ * the two disagreed about what day it was: a find picked up that evening was
+ * refused as «later than today» and a guest approved for that evening was
+ * turned away at the post as «for another day».
+ *
  * The system records facts about people's movement and does not restrict it.
  * A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
  * a barrier: the ground for refusing a person entry to a dormitory is the
@@ -124,10 +135,11 @@ import type { MaintenanceWorkLogEntry } from './maintenanceWorkLogEntry';
  * configuration, so moving either changes what the client reads on the
  * next request.
  *
- * `photo_paths` carries paths and not URLs. A signed URL expires, so one
- * embedded in a list is stale by the time somebody scrolls to it; the
- * client asks for a link when it is about to show the image, and a path
- * is meaningless without the object store's credentials.
+ * `photo_paths` carries paths and not URLs. A path is meaningless without
+ * the object store's credentials, which is what makes it safe to
+ * serialise; the image itself is read from
+ * `GET /maintenance-requests/{id}/photos/{index}`, one at a time, when
+ * the client is about to show it.
  *
  * `work_log` is where the reason for a refusal and the comment on every
  * move actually live (§3.4.1, decision 6). There is deliberately no
