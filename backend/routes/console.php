@@ -64,3 +64,29 @@ Schedule::command('guests:sweep-overdue-visits')
 Schedule::command('guests:expire-stale-requests')
     ->cron('5,20,35,50 * * * *')
     ->withoutOverlapping();
+
+/*
+ * FR-39, second criterion. The confirmation window is measured in days, so a
+ * quarter-hourly pass — the shape the guest module's two sweeps take — would
+ * buy nothing and cost a full scan of the completed requests of every
+ * dormitory ninety-six times a day. The guest sweeps run that often because
+ * `BUILDING.curfew_at` is an hour of the day and the schedule must know none;
+ * nothing here is measured against an hour.
+ *
+ * Twenty past midnight, behind the two jobs already there, so that the nightly
+ * work does not contend for the same connection.
+ */
+Schedule::command('maintenance:auto-close-confirmed-work')
+    ->dailyAt('00:20')
+    ->withoutOverlapping();
+
+/*
+ * FR-40, fourth criterion, and §3.5.2's nightly digest. Half past midnight,
+ * behind the closure above and deliberately after it: a request closed by that
+ * pass is no longer open, so it must not appear in the same night's list of
+ * overdue work. Run the other way round, the warden would be told to chase a
+ * request the system closed five minutes later.
+ */
+Schedule::command('maintenance:scan-overdue')
+    ->dailyAt('00:30')
+    ->withoutOverlapping();
