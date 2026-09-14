@@ -106,6 +106,50 @@ export function NotificationMessage({ notification }: { notification: Notificati
     if (comment !== null) {
       details.push(t('notifications.comment', { comment }))
     }
+  } else if (notification.type === NotificationType.lostFoundClaimFiled) {
+    /*
+     * Two messages in one class, told apart by `referred`. Somebody claims an
+     * entry you are holding — or a refusal you already gave was not accepted
+     * and the warden is now being asked. The marks travel with both, because
+     * they are the whole of what the reader has to judge.
+     */
+    const title = textOf(payload, 'item_title')
+    const referred = flagOf(payload, 'referred') === true
+    headline =
+      title === null
+        ? t('notifications.lostFoundClaimed')
+        : t(referred ? 'notifications.lostFoundReferred' : 'notifications.lostFoundClaim', {
+            title,
+          })
+    const marks = textOf(payload, 'marks')
+    if (marks !== null) {
+      details.push(t('notifications.lostFoundMarks', { marks }))
+    }
+  } else if (notification.type === NotificationType.lostFoundClaimDecided) {
+    const title = textOf(payload, 'item_title') ?? t('notifications.lostFoundUnnamed')
+    const status = textOf(payload, 'status')
+    const byStaff = flagOf(payload, 'decided_by_staff') === true
+    headline =
+      status === 'accepted'
+        ? t(byStaff ? 'notifications.lostFoundUpheld' : 'notifications.lostFoundAccepted', {
+            title,
+          })
+        : status === 'declined'
+          ? t(
+              byStaff ? 'notifications.lostFoundNotUpheld' : 'notifications.lostFoundDeclined',
+              { title },
+            )
+          : t('notifications.lostFoundDecided', { title })
+    // §2.4.4's handover point: the one piece of location this module publishes,
+    // and the only thing in the message the claimant has to act on.
+    const handover = textOf(payload, 'handover_point')
+    if (handover !== null) {
+      details.push(t('notifications.lostFoundHandover', { place: handover }))
+    }
+    const note = textOf(payload, 'note')
+    if (note !== null) {
+      details.push(t('notifications.comment', { comment: note }))
+    }
   } else if (notification.type === NotificationType.documentAwaitingSignature) {
     const title = textOf(payload, 'title')
     headline =

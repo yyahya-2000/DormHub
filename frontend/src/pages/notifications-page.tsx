@@ -16,7 +16,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAccountRefresh } from '@/lib/account-cache'
 import { useFormatters } from '@/lib/format'
-import { categoryOf, isUnread } from '@/lib/notifications'
+import { ClaimReferral } from '@/components/lost-found/claim-referral'
+import { categoryKeyOf, isUnread } from '@/lib/notifications'
+import { NotificationType } from '@/lib/notifications'
 import { cn } from '@/lib/utils'
 
 /**
@@ -196,7 +198,10 @@ function NotificationRow({ notification }: { notification: Notification }) {
   const markRead = useMarkNotificationRead<ApiError>()
 
   const unread = isUnread(notification)
-  const category = categoryOf(notification)
+  const category = categoryKeyOf(notification)
+  const lostFound =
+    notification.type === NotificationType.lostFoundClaimFiled ||
+    notification.type === NotificationType.lostFoundClaimDecided
 
   return (
     <li
@@ -212,12 +217,22 @@ function NotificationRow({ notification }: { notification: Notification }) {
         <span className="label-caps">
           {category === null
             ? t('notifications.noCategory')
-            : t(`notificationCategory.${category}.label`)}
+            : t(`notificationCategory.${category}.label`, {
+                defaultValue: t('notifications.noCategory'),
+              })}
         </span>
         <span className="text-steel">{formatters.dateTime(notification.created_at)}</span>
       </div>
 
       <NotificationMessage notification={notification} />
+
+      {/*
+        FR-26's offer, and the one action in this list that is not «mark read».
+        A claimant cannot read the claims on an entry, so the message is the
+        only place the decision on their own claim reaches them — and the only
+        place from which they can put a refusal to the warden.
+      */}
+      {lostFound ? <ClaimReferral notification={notification} /> : null}
 
       <div className="flex flex-wrap items-center gap-3">
         {unread ? (

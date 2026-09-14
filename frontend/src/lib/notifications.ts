@@ -13,7 +13,7 @@ import { NotificationCategory } from '@/api/generated/model'
  * it is missing or of another type. A message whose body is not what this
  * build expects is rendered short rather than rendered wrong.
  *
- * The four classes named here are the ones the API sends today. `account_issued`
+ * The classes named here are the ones the API sends today. `account_issued`
  * is deliberately absent: it carries the one-time credential of FR-42, goes out
  * by mail only and leaves no row behind, so the personal account never has one
  * to draw. The settings screen still lists the category, because the switch is
@@ -26,6 +26,17 @@ export const NotificationType = {
   guestVisitOverdue: 'GuestVisitOverdue',
   maintenanceStatusChanged: 'MaintenanceRequestStatusChanged',
   documentAwaitingSignature: 'DocumentAwaitingSignature',
+  /*
+   * The two of the lost-and-found module, and between them they carry the whole
+   * of the module the screens cannot show. A claimant never reads the claims on
+   * an entry — the marks are what makes a claim checkable, and a list of them
+   * readable by the corridor would tell the next claimant what to write — so
+   * the decision on their own claim reaches them here and nowhere else, and
+   * FR-26's offer of a referral rides on it. The holder and, on a referral, the
+   * warden are told the same way that something is waiting for them.
+   */
+  lostFoundClaimFiled: 'LostFoundClaimFiled',
+  lostFoundClaimDecided: 'LostFoundClaimDecided',
 } as const
 
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType]
@@ -43,6 +54,24 @@ export function categoryOf(notification: Notification): NotificationCategory | n
     return null
   }
   return CATEGORIES.includes(value) ? value : null
+}
+
+/**
+ * The word the API used for the category, whether or not this build's contract
+ * has caught up with it.
+ *
+ * `categoryOf` above answers «which of the categories I know is this», and is
+ * the right question wherever the answer decides something. This one answers
+ * «what did the server call it», and is the right question for a caption: the
+ * description of `NotificationCategory` is a closed enumeration that a new
+ * occasion adds to, and a message of a category added since the client was
+ * generated is still a message the dormitory decided to send. Captioning it
+ * «no category» would hide that; looking the word up in the locale files, with
+ * the reader's own «no category» underneath, shows it either way.
+ */
+export function categoryKeyOf(notification: Notification): string | null {
+  const value = notification.category
+  return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
 export function textOf(payload: NotificationPayload, key: string): string | null {
