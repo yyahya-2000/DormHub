@@ -9,32 +9,27 @@ namespace App\Enums;
  *
  * FR-34 names four occasions — a decision on a request, an overdue visit, a
  * change in the state of a maintenance request, a document awaiting signature
- * — and three of the four belong to increments that are not written yet. That
- * is the reason this enumeration exists at all rather than the dispatch simply
- * naming notification classes: **the category is the unit the delivery rule is
- * written against**, so a later increment adds a case here and a notification
- * class that returns it, and no line of the dispatch changes.
+ * — and the module has since added two more. The enumeration exists so that
+ * neither the dispatch nor the personal account has to name a notification
+ * class: a message says which category it is, the stored row carries the word,
+ * and the client draws the icon and the caption from it.
  *
- * **Mandatory and optional, and why the line falls where it does.** FR-34's
- * second criterion lets a person switch off the categories that are not
- * mandatory, which only means anything if the two sets are separated by a
- * stated principle rather than by taste. The principle here is the legal
- * ground the message rests on, the same one §2.7.1 applies to the data itself.
+ * **There is no longer a switch, and therefore no mandatory half.** The
+ * per-category settings screen the second criterion asked for is withdrawn
+ * from the MVP: the categories used to be split into those a person could turn
+ * off and those they could not, and once nothing can be turned off the two
+ * halves say the same thing. Every category is delivered.
  *
- * A message the service cannot be delivered without is mandatory: it rests on
- * the accommodation contract or on the rules of internal order, not on
- * consent, and switching it off would not be a preference but a refusal of the
- * service. The one-time credential is of that kind — without it the account
- * cannot be used at all. So is the overdue visit: clause 2.2 of the rules puts
- * the guest in the dormitory only while the resident who invited them is
- * present, and the resident is the person answerable for the departure. So is
- * a document awaiting signature, which is a legal act with a deadline.
- *
- * A message that only saves a person from opening the application is optional:
- * the decision on their own request and the movement of their own maintenance
- * request are both visible on screen the moment they ask. Those rest on
- * consent (§2.7.1), and consent may be withdrawn — which is why
- * `App\Models\User::notify()` silences exactly this set when it is.
+ * **What survives the switch is the legal ground**, and it is a different
+ * question with a different consequence. Some of these messages are owed under
+ * the accommodation contract or the rules of internal order — the overdue
+ * visit of clause 2.2, a document with a signing deadline — and the dormitory
+ * sends them whatever anybody consents to. The rest are conveniences whose
+ * only ground is the resident's consent (§2.7.1), and consent may be
+ * withdrawn: `restsOnConsent()` marks those, and `App\Models\User::notify()`
+ * stops them from the moment the consent of FR-35 is gone. That is this
+ * application's answer to the question FR-35's fourth criterion leaves open,
+ * «and then what», and it is the only gate on the dispatch that remains.
  */
 enum NotificationCategory: string
 {
@@ -51,41 +46,14 @@ enum NotificationCategory: string
     case DocumentSignature = 'document_signature';
 
     /**
-     * FR-09. A routine announcement has been published to this dormitory.
+     * FR-09. Every announcement, and there is only one category for them now.
      *
-     * Optional, by the principle stated above: the feed of FR-11 is on screen
-     * and the message only saves the resident from opening it. A film evening
-     * rests on nothing but convenience, and a resident who would rather read
-     * the feed themselves may say so.
+     * The enumeration used to carry a second, unsilenceable announcement
+     * category for the notices FR-12 required a resident to acknowledge. The
+     * acknowledgement has been withdrawn from the MVP, so there is nothing
+     * left for that category to classify and it is gone.
      */
     case Announcement = 'announcement';
-
-    /**
-     * FR-09 and FR-12. An announcement the resident is required to acknowledge.
-     *
-     * **Two categories for one kind of object, and this is where the line of
-     * the class docblock actually falls.** The category is the unit a delivery
-     * rule is written against, so «sometimes mandatory» is not a thing one
-     * category can be; the choice was either to make every announcement
-     * optional or to split the enumeration along the column that already
-     * exists, `ANNOUNCEMENT.is_mandatory`. It is split, and the ground is the
-     * same one the whole enumeration is drawn on.
-     *
-     * A mandatory announcement rests on the rules of internal order and not on
-     * consent. Clause 4.2.7 of the HSE rules obliges the resident to comply
-     * with the lawful instructions of the administration, and a fire drill, an
-     * evacuation, a water shutoff or a change to the regime is such an
-     * instruction; the dormitory does not ask permission to issue one. FR-12
-     * then makes the delivery evidential — SN-11 wants «I was not told» to be
-     * a checkable statement — and a switch that could silence the message
-     * would hollow out the record it is supposed to support: the warden would
-     * hold a list of people who had not acknowledged a notice they were never
-     * sent.
-     *
-     * The optional case above keeps the resident's control over everything
-     * that is not an instruction, which is most of the feed.
-     */
-    case MandatoryAnnouncement = 'mandatory_announcement';
 
     /**
      * FR-26. Something has happened to a claim on a find: one has arrived, one
@@ -94,17 +62,8 @@ enum NotificationCategory: string
      *
      * **One category for the whole exchange, and that is the decision here.**
      * The obvious split — «a claim arrived» to the holder, «your claim was
-     * answered» to the claimant — would produce two switches held by the same
-     * people for the same conversation, and a resident who silenced one half
-     * would be left holding an object nobody would ever come for, or waiting
-     * at a handover point nobody named. The two messages are two ends of one
-     * exchange and they go on or off together.
-     *
-     * Optional, by the principle stated above: every one of these movements is
-     * on the person's own screen the moment they open the entry, and nothing
-     * in the rules of internal order obliges anybody to answer a claim at all
-     * — §2.5.4's module rests on the residents' willingness rather than on a
-     * duty. The message only saves them from looking.
+     * answered» to the claimant — would produce two labels on one conversation
+     * for the same people, and the two messages are two ends of one exchange.
      *
      * **This is the one category whose messages name another resident**, and
      * the composition is narrow on purpose (§3.5.3): the claimant learns where
@@ -116,67 +75,28 @@ enum NotificationCategory: string
     case LostFoundClaim = 'lost_found_claim';
 
     /**
-     * Whether the category may not be switched off.
+     * Whether the only ground for sending this is the person's consent, so
+     * that withdrawing it has to stop the message.
      *
-     * @see self for the ground the line is drawn on.
-     */
-    public function isMandatory(): bool
-    {
-        return match ($this) {
-            self::VisitOverdue, self::DocumentSignature,
-            self::MandatoryAnnouncement => true,
-            self::RequestDecision, self::MaintenanceStatus, self::Announcement,
-            self::LostFoundClaim => false,
-        };
-    }
-
-    /**
-     * The mirror of the question above, asked the way §2.7.1 asks it: an
-     * optional message is one whose only ground is the person's consent, so
-     * withdrawing that consent has to stop it.
+     * The line is the one §2.7.1 draws over the data itself. A message the
+     * service cannot be delivered without does not rest on consent: the
+     * overdue visit is clause 2.2 of the rules of internal order making the
+     * inviting resident answerable for the departure, and a document awaiting
+     * signature is a legal act with a deadline. Both are owed under the
+     * accommodation contract or the rules, and silencing them would not be a
+     * choice about convenience but a refusal of the service.
+     *
+     * The rest only save a person from opening the application — the decision
+     * on their own request, the movement of their own maintenance request, the
+     * feed of FR-11, a claim on a find they hold. Those rest on consent, and
+     * consent may be withdrawn.
      */
     public function restsOnConsent(): bool
     {
-        return ! $this->isMandatory();
-    }
-
-    public function label(): string
-    {
         return match ($this) {
-            self::RequestDecision => 'Decision on a guest request',
-            self::VisitOverdue => 'Guest overdue at the checkpoint',
-            self::MaintenanceStatus => 'Maintenance request status',
-            self::DocumentSignature => 'Document awaiting signature',
-            self::Announcement => 'Announcements of the dormitory',
-            self::MandatoryAnnouncement => 'Announcements requiring acknowledgement',
-            self::LostFoundClaim => 'Claims on a lost or found item',
+            self::VisitOverdue, self::DocumentSignature => false,
+            self::RequestDecision, self::MaintenanceStatus, self::Announcement,
+            self::LostFoundClaim => true,
         };
-    }
-
-    /**
-     * What a person reads next to the switch, so that the choice is informed.
-     */
-    public function description(): string
-    {
-        return match ($this) {
-            self::RequestDecision => 'Your guest request has been approved or refused.',
-            self::VisitOverdue => 'A guest you invited has not left by the hour the rules of internal order set.',
-            self::MaintenanceStatus => 'A maintenance request you filed has moved to another state.',
-            self::DocumentSignature => 'A document is waiting for your signature.',
-            self::Announcement => 'The warden has published an announcement for your dormitory.',
-            self::MandatoryAnnouncement => 'An announcement you are required to acknowledge, such as a change to the regime or a planned shutoff.',
-            self::LostFoundClaim => 'Somebody has claimed something you found, or a claim of yours has been answered.',
-        };
-    }
-
-    /**
-     * @return list<self>
-     */
-    public static function optional(): array
-    {
-        return array_values(array_filter(
-            self::cases(),
-            static fn (self $category): bool => ! $category->isMandatory(),
-        ));
     }
 }

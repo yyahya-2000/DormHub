@@ -17,8 +17,9 @@ use Illuminate\Notifications\Messages\MailMessage;
  * written, its enum's `->value` is what arrives here, and the class does not
  * change.
  *
- * Optional: the reporter sees the same movement on the request itself, so a
- * person who would rather not be told each time may switch it off.
+ * The category rests on consent: the reporter sees the same movement on the
+ * request itself, so the message is a convenience rather than something the
+ * dormitory owes them.
  */
 final class MaintenanceRequestStatusChanged extends EventNotification
 {

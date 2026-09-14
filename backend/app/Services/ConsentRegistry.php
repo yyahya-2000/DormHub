@@ -50,9 +50,9 @@ use RuntimeException;
  * For a resident that means: the housing register, the resident card, the
  * accommodation history and the notifications the dormitory is obliged to send
  * all continue, because their ground is the accommodation contract (art. 6
- * part 1 cl. 5) and not consent. What stops is the optional half — the
- * notification categories `NotificationCategory::restsOnConsent()` marks, which
- * `User::notify()` silences from the moment the consent is withdrawn. A
+ * part 1 cl. 5) and not consent. What stops are the notification categories
+ * `NotificationCategory::restsOnConsent()` marks, which `User::notify()`
+ * silences from the moment the consent is withdrawn. A
  * resident who withdraws is then pending again, so the next sign-in offers the
  * text once more; they are not shut out of the application, and this is the
  * substantive point: art. 9 part 1 requires consent to be **free**, and a

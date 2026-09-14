@@ -27,9 +27,9 @@ use Illuminate\Notifications\Messages\MailMessage;
  *
  * The category is `maintenance_status`, the same one, because FR-34 names one
  * occasion for this module — «a change in the state of a maintenance request»
- * — and the category is the unit a delivery rule is written against. A warden
- * who has switched it off has switched off the whole module's traffic, which
- * is what they meant.
+ * — and the category is the unit the personal account labels a message by. The
+ * digest and the movement belong under one label because they are one module's
+ * traffic.
  */
 final class MaintenanceOverdueDigest extends EventNotification
 {

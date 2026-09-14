@@ -21,9 +21,8 @@ use Illuminate\Notifications\Messages\MailMessage;
  * for the same reason.
  *
  * The category is the same one (`maintenance_status`), because the category is
- * the unit a delivery rule is written against and FR-34 has one occasion here,
- * not two: «a change in the state of a maintenance request». A warden who has
- * switched that off has switched off both messages, which is what they meant.
+ * the unit the personal account labels a message by and FR-34 has one occasion
+ * here, not two: «a change in the state of a maintenance request».
  *
  * The recipient is the staff who triage, not the resident who filed it — a
  * message telling somebody what they have just done is an echo, not a

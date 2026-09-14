@@ -13,15 +13,15 @@ use Illuminate\Support\Collection;
  * person.
  *
  * It looks thin because the rule it enforces lives one level down, on the
- * model: `App\Models\User::notify()` is the gate that consults the person's
- * settings and the consent behind them. This class exists for the shape most
- * callers of the later increments have — «tell the duty officers on shift»,
- * «tell the warden and the security post» — and it exists instead of
+ * model: `App\Models\User::notify()` is the gate that asks whether the ground
+ * for writing to this person still stands. This class exists for the shape
+ * most callers of the later increments have — «tell the duty officers on
+ * shift», «tell the warden and the security post» — and it exists instead of
  * `Notification::send($recipients, $notification)`, which is the facade's
  * fan-out and goes **around** the model's `notify()` straight to the channel
- * dispatcher. A recipient reached that way would receive a category they had
- * switched off, and the criterion would be false for exactly the routes nobody
- * remembered to check.
+ * dispatcher. A recipient reached that way would be written to on a consent
+ * they had withdrawn, and FR-35's fourth criterion would be false for exactly
+ * the routes nobody remembered to check.
  *
  * So: one road in, and it is this one.
  */

@@ -12,7 +12,6 @@ use App\Enums\Permission;
 use App\Enums\RoleCode;
 use App\Enums\UserStatus;
 use App\Services\ConsentRegistry;
-use App\Services\NotificationPreferences;
 use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -103,17 +102,6 @@ class User extends Authenticatable
     }
 
     /**
-     * FR-34. The categories this person has decided about. A category they
-     * have never touched has no row here and is on by default.
-     *
-     * @return HasMany<NotificationPreference, $this>
-     */
-    public function notificationPreferences(): HasMany
-    {
-        return $this->hasMany(NotificationPreference::class);
-    }
-
-    /**
      * FR-35. Every act of consent this person has performed, newest first,
      * withdrawn ones included — the history is the evidence and is never
      * pruned (see the migration).
@@ -145,8 +133,8 @@ class User extends Authenticatable
     /**
      * The one road a notification takes to this person, and the gate on it.
      *
-     * FR-34's second criterion and FR-35's fourth meet here, and it is the
-     * model rather than a service so that no caller can go around them:
+     * FR-35's fourth criterion is what the gate now enforces, and it is the
+     * model rather than a service so that no caller can go around it:
      * `$user->notify(...)`, a queued job, a console command and the existing
      * `ResidentAccountIssuer` all pass through this method unchanged.
      * `App\Services\Notifier` fans out to several people by calling it, and
@@ -154,9 +142,8 @@ class User extends Authenticatable
      * this reason — it dispatches to channels directly and would step over the
      * gate.
      *
-     * Two questions are asked, in this order, and neither of them names a
-     * notification class: that is what lets a later increment add a category
-     * without touching this method.
+     * The question asked does not name a notification class: that is what lets
+     * a later increment add a category without touching this method.
      *
      * @param  mixed  $instance
      */
@@ -176,8 +163,8 @@ class User extends Authenticatable
      * `notifyNow()` sends outside the queue and is what a console command or a
      * test reaches for. It is overridden for one reason: the claim above —
      * that this is the only road — has to be true, and a second entrance that
-     * skipped the settings would make the criterion hold everywhere except
-     * where somebody used the other method.
+     * skipped the gate would make the criterion hold everywhere except where
+     * somebody used the other method.
      *
      * @param  mixed  $instance
      * @param  array<int, string>|null  $channels
@@ -195,27 +182,20 @@ class User extends Authenticatable
     /**
      * Whether this person is to be told about events of this category.
      *
-     * A mandatory category is not asked about at all — it rests on the
-     * accommodation contract or on the rules of internal order, and there is no
-     * switch and no consent for it to depend on.
+     * One question, and it is about the legal ground rather than about a
+     * preference. The per-category switch of FR-34's second criterion is
+     * withdrawn from the MVP, so nothing a person sets stops a message any
+     * more; what stops one is the ground for it being gone.
      *
-     * An optional one has to clear two things. The switch, which the person
-     * sets themselves (FR-34). And the consent it rests on: an optional
-     * message is processing of personal data whose only ground is consent
-     * (§2.7.1), so when the resident withdraws that consent the ground is gone
-     * and the message stops — which is this application's answer to the
-     * question FR-35's fourth criterion leaves open, «and then what».
+     * A category that rests on consent is processing of personal data whose
+     * only ground is that consent (§2.7.1), so when the resident withdraws it
+     * the message stops — this application's answer to the question FR-35's
+     * fourth criterion leaves open, «and then what». A category that does not
+     * rest on consent rests on the accommodation contract or on the rules of
+     * internal order, and there is nothing for it to depend on.
      */
     public function receivesNotificationsOf(NotificationCategory $category): bool
     {
-        if ($category->isMandatory()) {
-            return true;
-        }
-
-        if (! app(NotificationPreferences::class)->enabledFor($this, $category)) {
-            return false;
-        }
-
         return ! $category->restsOnConsent()
             || $this->hasConsentedTo(ConsentDocument::ResidentPersonalData);
     }

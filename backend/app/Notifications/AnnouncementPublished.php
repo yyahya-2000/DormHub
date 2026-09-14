@@ -10,18 +10,13 @@ use Illuminate\Notifications\Messages\MailMessage;
 /**
  * FR-09 reaching the resident: the warden has published an announcement.
  *
- * **The category is chosen per message, and this is the one notification in
- * the system that does that.** `NotificationCategory` is a closed set of
- * delivery rules, and the rule for an announcement genuinely differs by the
- * announcement: an instruction the resident must acknowledge rests on clause
- * 4.2.7 of the rules of internal order and cannot be switched off, while a
- * notice about a film evening rests on nothing but convenience and can. Both
- * kinds are the same object with the same fields, so one class returns one of
- * two categories rather than two classes duplicating a body.
- *
- * Nothing in the dispatch had to learn about this. `User::notify()` asks the
- * message what category it is and answers from the enumeration, which is what
- * the extension point was for.
+ * **One category for every announcement, and it rests on consent.** The
+ * message only saves the resident from opening the feed of FR-11, which is on
+ * screen either way, so a resident who withdraws the consent of FR-35 stops
+ * receiving it. There used to be a second category for the announcements a
+ * resident was required to acknowledge; the acknowledgement is gone from the
+ * MVP and the category went with it, because a label nothing can be
+ * classified under is a label for nothing.
  *
  * The message carries identifiers and a title rather than the body. The body
  * of an announcement can be long, the feed is one tap away, and a copy of it
@@ -34,30 +29,22 @@ final class AnnouncementPublished extends EventNotification
         public readonly int $announcementId,
         public readonly string $title,
         public readonly string $category,
-        public readonly bool $mandatory,
         public readonly ?string $buildingName = null,
     ) {}
 
     public function category(): NotificationCategory
     {
-        return $this->mandatory
-            ? NotificationCategory::MandatoryAnnouncement
-            : NotificationCategory::Announcement;
+        return NotificationCategory::Announcement;
     }
 
     public function toMail(object $notifiable): MailMessage
     {
-        $message = (new MailMessage)
-            ->subject($this->mandatory
-                ? 'Announcement requiring acknowledgement: '.$this->title
-                : 'Announcement: '.$this->title)
+        return (new MailMessage)
+            ->subject('Announcement: '.$this->title)
             ->line($this->buildingName !== null
                 ? sprintf('A new announcement for %s: %s.', $this->buildingName, $this->title)
-                : sprintf('A new announcement for every dormitory: %s.', $this->title));
-
-        return $this->mandatory
-            ? $message->line('Open the announcement in the application and confirm that you have read it.')
-            : $message->line('You can read it in the announcements feed.');
+                : sprintf('A new announcement for every dormitory: %s.', $this->title))
+            ->line('You can read it in the announcements feed.');
     }
 
     /**
@@ -73,7 +60,6 @@ final class AnnouncementPublished extends EventNotification
             'announcement_id' => $this->announcementId,
             'title' => $this->title,
             'announcement_category' => $this->category,
-            'is_mandatory' => $this->mandatory,
             'building_name' => $this->buildingName,
         ];
     }

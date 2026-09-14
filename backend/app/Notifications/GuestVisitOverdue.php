@@ -12,13 +12,14 @@ use Illuminate\Notifications\Messages\MailMessage;
  * FR-34, second occasion: a guest is still recorded inside the dormitory after
  * the hour by which they were to have left (FR-20).
  *
- * **Mandatory, and the ground is not politeness.** Clause 2.2 of the rules of
+ * **Owed, and the ground is not politeness.** Clause 2.2 of the rules of
  * internal order admits a guest between 08:00 and 23:00 and only in the
  * presence of the resident who invited them; the resident is the person
  * answerable for the departure, and the security post is the place that can
- * act on it. A notice of that kind is not a convenience the recipient may
- * decline — it is the dormitory discharging an obligation it has under its own
- * rules, so `NotificationCategory::VisitOverdue` carries no switch.
+ * act on it. A notice of that kind is not a convenience resting on anybody's
+ * agreement — it is the dormitory discharging an obligation it has under its
+ * own rules, so `NotificationCategory::VisitOverdue` rests on no consent and a
+ * withdrawal does not stop it.
  *
  * Raised by the scheduled sweep of §3.3.4 rather than by a request, which is
  * the other half of why it is queued: a cron entry has no user waiting on it,

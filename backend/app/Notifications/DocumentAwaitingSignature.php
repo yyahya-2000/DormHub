@@ -11,9 +11,10 @@ use Illuminate\Notifications\Messages\MailMessage;
 /**
  * FR-34, fourth occasion: a document is waiting for the person to sign it.
  *
- * Mandatory. A document awaiting signature is a legal act with a consequence
- * for the person who does not perform it, and a deadline that passes while the
- * notice was switched off is the operator's problem and not the resident's.
+ * It rests on no consent. A document awaiting signature is a legal act with a
+ * consequence for the person who does not perform it, and a deadline that
+ * passes because a withdrawal silenced the notice is the operator's problem
+ * and not the resident's.
  * The same reasoning makes the consent text of FR-35 one of the documents this
  * message can name — see `App\Services\ConsentRegistry`, which is where the
  * first caller will sit.

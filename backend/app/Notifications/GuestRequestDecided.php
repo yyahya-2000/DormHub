@@ -13,7 +13,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  *
  * **Why the class is here before the guest requests are.** FR-34 belongs to
  * increment 0 and its occasions belong to increments 1 and 3. The requirement
- * is met by the mechanism — a category, a queued message, a switch — and the
+ * is met by the mechanism — a category and a queued message — and the
  * mechanism cannot be demonstrated against an occasion that does not exist. So
  * the message exists and the thing that raises it does not yet: the
  * constructor takes the decision as plain values rather than a
@@ -21,9 +21,9 @@ use Illuminate\Notifications\Messages\MailMessage;
  * from `GuestRequestService::approve()` the day that service is written, with
  * no change here.
  *
- * The category is optional (see `NotificationCategory`): a resident who would
- * rather look at the screen may switch it off, and it stops when the consent
- * it rests on is withdrawn.
+ * The category rests on consent (see `NotificationCategory`): the decision is
+ * on the resident's own screen either way, so the message is a convenience and
+ * it stops when the consent behind it is withdrawn.
  */
 final class GuestRequestDecided extends EventNotification
 {
