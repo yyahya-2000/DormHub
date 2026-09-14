@@ -15,7 +15,6 @@ use App\Http\Controllers\Api\V1\LostFoundController;
 use App\Http\Controllers\Api\V1\MaintenanceQueueController;
 use App\Http\Controllers\Api\V1\MaintenanceRequestController;
 use App\Http\Controllers\Api\V1\NotificationController;
-use App\Http\Controllers\Api\V1\NotificationSettingController;
 use App\Http\Controllers\Api\V1\ResidencyController;
 use App\Http\Controllers\Api\V1\ResidentAccountController;
 use App\Http\Controllers\Api\V1\ResidentCardController;
@@ -39,7 +38,7 @@ use Illuminate\Support\Facades\Route;
 | resident card (FR-06). The third follows revision 2 of the role model: the
 | warden appoints the staff of his own building (FR-41), and he or the manager
 | beneath him issues an account to an incoming resident (FR-42). The fourth is
-| the personal account itself: notifications and their switches (FR-34), and
+| the personal account itself: the notifications of FR-34, and
 | consent to the processing of personal data (FR-35).
 |
 | The fifth is the guest module of increment 1: the request (FR-16), the duty
@@ -47,10 +46,11 @@ use Illuminate\Support\Facades\Route;
 | the departure deadline (FR-20, which has no route — it is a scheduled sweep)
 | and the visitor register (FR-21).
 |
-| The sixth is the announcement module of increment 2: publication (FR-09), the
-| feed (FR-11) and the acknowledgement of reading (FR-12). FR-10, pinning an
-| important announcement, is Could priority and outside the MVP — there is no
-| route for it and no column behind one.
+| The sixth is the announcement module of increment 2: publication (FR-09) and
+| the feed (FR-11). FR-10, pinning an important announcement, is Could priority
+| and outside the MVP — there is no route for it and no column behind one, and
+| FR-12, the acknowledgement of reading, has been withdrawn from the MVP
+| together with the table it rested on.
 |
 | The seventh is the maintenance module of increment 3: the resident files a
 | defect (FR-36), the warden triages it (FR-37), the request moves along the
@@ -186,22 +186,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('audit-logs.index');
 
     /*
-     * FR-34. The personal account's own messages, and the switches that decide
-     * which of them arrive at all. Every route below is scoped to the account
-     * the token names: there is no parameter through which one person could
-     * ask about another's, which is why none of them carries a policy.
+     * FR-34. The personal account's own messages: one page of them, and the
+     * mark that turns an unread message into a read one. Both routes are
+     * scoped to the account the token names — there is no parameter through
+     * which one person could ask about another's, which is why neither carries
+     * a policy.
      */
     Route::get('notifications', [NotificationController::class, 'index'])
         ->name('notifications.index');
 
     Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])
         ->name('notifications.read');
-
-    Route::get('notification-settings', [NotificationSettingController::class, 'index'])
-        ->name('notification-settings.index');
-
-    Route::put('notification-settings', [NotificationSettingController::class, 'update'])
-        ->name('notification-settings.update');
 
     /*
      * FR-35. Consent, on routes of its own.
@@ -231,10 +226,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     /*
      |--------------------------------------------------------------------------
-     | Announcements (increment 2): FR-09, FR-11, FR-12
+     | Announcements (increment 2): FR-09, FR-11
      |--------------------------------------------------------------------------
      |
-     | Four routes, and three arrangements in them are decisions rather than
+     | Three routes, and two arrangements in them are decisions rather than
      | defaults.
      |
      | **The feed carries no building parameter.** The audience is computed from
@@ -250,41 +245,33 @@ Route::middleware('auth:sanctum')->group(function (): void {
      | the feed already makes; a second route would be a second query with the
      | same chance of disagreeing with the first.
      |
-     | **The readers report is a sub-resource of the announcement.** It returns
-     | a named list of residents who have not complied with an instruction, and
-     | §4.6.1 calls it the natural place for a horizontal leak. It carries a
-     | policy of its own, the list is narrowed to the caller's own dormitory,
-     | and both halves are tested.
+     | FR-12 — the acknowledgement and the report on who has read — has been
+     | withdrawn from the MVP, and its two routes with it.
      */
 
     /*
      * FR-11. The caller's own feed: addressed to their dormitory or to every
-     * dormitory, published, not yet expired, newest first, unread marked.
+     * dormitory, published, not yet expired, newest first.
      */
     Route::get('announcements', [AnnouncementController::class, 'index'])
         ->name('announcements.index');
 
     /*
      * FR-09. The warden or the manager of their own dormitory; the
-     * administrator, who alone may leave `building_id` out and address all of
-     * them.
+     * administrator, who picks any dormitory by `building_id` and alone may
+     * leave it out to address all of them.
      */
     Route::post('announcements', [AnnouncementController::class, 'store'])
         ->name('announcements.store');
 
     /*
-     * FR-12. Idempotent: a repeat returns the acknowledgement already on
-     * record rather than writing a second one.
+     * The categories the publishing form offers before it lets the author type
+     * one of their own, shaped as `GET /citizenships` is. The column itself is
+     * a free label, so this is a catalogue and not the set of admissible
+     * values.
      */
-    Route::post('announcements/{announcement}/ack', [AnnouncementController::class, 'acknowledge'])
-        ->name('announcements.ack');
-
-    /*
-     * FR-12, second criterion. The acknowledged share and the two named lists,
-     * within the caller's own building.
-     */
-    Route::get('announcements/{announcement}/readers', [AnnouncementController::class, 'readers'])
-        ->name('announcements.readers');
+    Route::get('announcement-categories', [AnnouncementController::class, 'categories'])
+        ->name('announcement-categories.index');
 
     /*
      |--------------------------------------------------------------------------
