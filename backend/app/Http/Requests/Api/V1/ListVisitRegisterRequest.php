@@ -10,20 +10,19 @@ use Carbon\CarbonInterface;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * FR-21, first criterion: «the register exports over an arbitrary period».
+ * FR-21, first criterion: the register over an arbitrary period.
  *
- * *Arbitrary* is taken literally — any two dates, in either order of
- * magnitude, as long as the first is not after the second. What is not
- * arbitrary is the page: the register of a dormitory over an academic year is
- * tens of thousands of rows, and a client that asked for all of them at once
- * would get a timeout rather than an answer, so the page size is
- * configuration and the response says how many rows the period holds.
+ * *Arbitrary* is taken literally — any two dates, as long as the first is not
+ * after the second. What is not arbitrary is the page: the register of a
+ * dormitory over an academic year is tens of thousands of rows, and a client
+ * that asked for all of them at once would get a timeout rather than an
+ * answer.
  *
  * The default period is the current month, which is what somebody opening the
  * screen without thinking about it wants, and is short enough that the default
  * can never be the expensive query.
  */
-final class ExportVisitRegisterRequest extends FormRequest
+final class ListVisitRegisterRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -41,8 +40,8 @@ final class ExportVisitRegisterRequest extends FormRequest
         return [
             'from' => ['sometimes', 'date_format:Y-m-d'],
             'until' => ['sometimes', 'date_format:Y-m-d', 'after_or_equal:from'],
-            'format' => ['sometimes', 'string', 'in:json,csv'],
             'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.config('dormitory.guests.max_page_size')],
         ];
     }
 
@@ -65,24 +64,17 @@ final class ExportVisitRegisterRequest extends FormRequest
     }
 
     /**
-     * Named `exportFormat` and not `format`, which is the obvious name and is
-     * taken: `Illuminate\Http\Request::format()` already exists, answers the
-     * content type the caller will accept, and has a signature of its own.
-     * Overriding it produced a fatal at class load — a form request that could
-     * not be constructed, reported by PHPUnit as a process that ended without
-     * saying why.
+     * The page size asked for, capped — a list endpoint whose page size the
+     * caller sets without a ceiling is a way to ask the database for the whole
+     * table in one query.
      */
-    public function exportFormat(): string
+    public function perPage(): int
     {
-        $format = $this->query('format');
+        $asked = $this->query('per_page');
+        $max = (int) config('dormitory.guests.max_page_size');
 
-        return $format === 'csv' ? 'csv' : 'json';
-    }
-
-    public function page(): int
-    {
-        $page = $this->query('page');
-
-        return is_numeric($page) ? max(1, (int) $page) : 1;
+        return is_numeric($asked)
+            ? max(1, min($max, (int) $asked))
+            : (int) config('dormitory.guests.page_size');
     }
 }

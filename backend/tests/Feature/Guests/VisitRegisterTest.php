@@ -27,13 +27,14 @@ use Tests\TestCase;
  * FR-21, «Visitor register»: the journal of clause 2.1.2 of the HSE rules of
  * internal order with the pen removed.
  *
- * The clause makes the security service write down six things about every
- * outsider admitted — the guest, the time of arrival, the time of departure,
- * the premises, whom they are visiting, and the details of the document — and
- * those six are what the first test below asserts, one at a time. The seventh
- * column, the operator, is not in the clause: a paper journal is written in
- * somebody's handwriting on a numbered page, and an electronic one has to say
- * in words what the page said by existing.
+ * The clause makes the security service write down who the guest is, when
+ * they came, when they left, which premises they went to and whom they were
+ * visiting, and those five are what the first test below asserts, one at a
+ * time. The details of the document are the one thing the clause asks for that
+ * the register no longer keeps. The last column, the operator, is not in the
+ * clause: a paper journal is written in somebody's handwriting on a numbered
+ * page, and an electronic one has to say in words what the page said by
+ * existing.
  */
 final class VisitRegisterTest extends TestCase
 {
@@ -69,10 +70,10 @@ final class VisitRegisterTest extends TestCase
     }
 
     /**
-     * Third criterion: «the register holds guest, document data, inviting
-     * resident, room, entry and exit time, operator».
+     * Third criterion: «the register holds guest, inviting resident, room,
+     * entry and exit time, operator».
      */
-    public function test_the_register_holds_the_six_fields_of_clause_2_1_2_and_the_operator(): void
+    public function test_the_register_holds_the_fields_of_clause_2_1_2_and_the_operator(): void
     {
         $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
 
@@ -87,25 +88,27 @@ final class VisitRegisterTest extends TestCase
 
         // 1. The guest.
         $this->assertSame('Ostap Verigin', $row['guest_full_name']);
-        // 2. The details of the document — the type, and the number masked.
-        $this->assertStringContainsString('Internal passport', $row['guest_document']);
-        $this->assertStringContainsString('•', $row['guest_document']);
-        // 3. Whom the guest is visiting.
+        // 2. Whom the guest is visiting.
         $this->assertSame($this->resident->full_name, $row['inviting_resident']);
-        // 4. The premises.
+        // 3. The premises.
         $this->assertSame('305', $row['room']);
-        // 5 and 6. The time of arrival and the time of departure.
+        // 4 and 5. The time of arrival and the time of departure.
         $this->assertSame('2026-09-10 13:15', CarbonImmutable::parse($row['checked_in_at'])->format('Y-m-d H:i'));
         $this->assertSame('2026-09-10 16:40', CarbonImmutable::parse($row['checked_out_at'])->format('Y-m-d H:i'));
-        // 7. The operator, which the clause does not ask for and an electronic
+        // 6. The officer, which the clause does not ask for and an electronic
         // register cannot do without.
-        $this->assertSame($this->guard->full_name, $row['operator']);
+        $this->assertSame($this->guard->full_name, $row['recorded_by']);
+        $this->assertSame($this->guard->full_name, $row['closed_by']);
+
+        // The document went with the columns that held it.
+        $this->assertArrayNotHasKey('guest_document', $row);
+        $this->assertArrayNotHasKey('guest_doc_type', $row);
     }
 
     /**
-     * First criterion: «the register exports over an arbitrary period».
+     * First criterion: «the register is read over an arbitrary period».
      */
-    public function test_the_register_exports_over_an_arbitrary_period(): void
+    public function test_the_register_is_read_over_an_arbitrary_period(): void
     {
         $this->visitOn('2026-09-02', '10:00:00', '12:00:00', 'Guest of September the second');
         $this->visitOn('2026-09-10', '10:00:00', '12:00:00', 'Guest of September the tenth');
@@ -132,46 +135,59 @@ final class VisitRegisterTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
-    public function test_the_register_exports_as_csv_with_the_seven_columns_named(): void
-    {
-        $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
-
-        Sanctum::actingAs($this->warden);
-
-        $response = $this->get(
-            "/api/v1/buildings/{$this->building->id}/visit-register?from=2026-09-01&until=2026-09-30&format=csv"
-        )->assertOk();
-
-        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
-
-        $csv = (string) $response->getContent();
-
-        $this->assertStringContainsString('Guest,Document,Visiting,Premises,Entered,Left,"Recorded by"', $csv);
-        $this->assertStringContainsString('Ostap Verigin', $csv);
-        $this->assertStringContainsString('305', $csv);
-        $this->assertStringContainsString($this->guard->full_name, $csv);
-    }
-
     /**
      * §3.9.6: «it is itself an audited action».
      */
-    public function test_the_export_is_itself_recorded(): void
+    public function test_reading_the_register_is_itself_recorded(): void
     {
         $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
 
         Sanctum::actingAs($this->warden);
 
-        $this->get(
-            "/api/v1/buildings/{$this->building->id}/visit-register?from=2026-09-01&until=2026-09-30&format=csv"
+        $this->getJson(
+            "/api/v1/buildings/{$this->building->id}/visit-register?from=2026-09-01&until=2026-09-30"
         )->assertOk();
 
         $entry = AuditLog::query()
-            ->where('action', AuditAction::VisitRegisterExported->value)
+            ->where('action', AuditAction::VisitRegisterViewed->value)
             ->sole();
 
         $this->assertSame($this->warden->getKey(), $entry->user_id);
         $this->assertSame('2026-09-01', $entry->payload['from']);
         $this->assertSame('2026-09-30', $entry->payload['until']);
+    }
+
+    /**
+     * The page is the caller's, within a ceiling the caller cannot raise.
+     */
+    public function test_the_register_is_paginated_and_the_page_size_is_capped(): void
+    {
+        foreach (range(1, 3) as $day) {
+            $this->visitOn(sprintf('2026-09-%02d', $day), '10:00:00', '12:00:00', 'Guest '.$day);
+        }
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson(
+            "/api/v1/buildings/{$this->building->id}/visit-register?from=2026-09-01&until=2026-09-30&per_page=2"
+        )
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 2)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.total', 3);
+
+        $this->getJson(
+            "/api/v1/buildings/{$this->building->id}/visit-register?from=2026-09-01&until=2026-09-30&per_page=2&page=2"
+        )
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.current_page', 2);
+
+        $this->getJson(
+            "/api/v1/buildings/{$this->building->id}/visit-register?per_page=5000"
+        )->assertStatus(422);
     }
 
     /**
