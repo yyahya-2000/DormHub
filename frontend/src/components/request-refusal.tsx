@@ -5,6 +5,7 @@ import { ApiError } from '@/api/http-client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   asCapacityExceeded,
+  asConfirmationWindowClosed,
   asConsentRequired,
   asDeletionBlocked,
   asEntryNotPermitted,
@@ -32,12 +33,27 @@ import { cn } from '@/lib/utils'
  * refused residency hands back the record in the way (FR-03). The figures come
  * from the body; none of them is computed here.
  */
+/**
+ * Which vocabulary a state code in a refusal is read in.
+ *
+ * `IllegalTransitionError` is one schema serving two state machines, and its
+ * `status` field is typed against the guest one because the guest module was
+ * written first. The codes overlap — `rejected`, `completed` and `in_progress`
+ * exist in both and do not mean the same thing — so the body alone cannot say
+ * which machine refused. The screen that made the call can, and does: a
+ * maintenance screen passes `maintenance` and the code is translated from that
+ * namespace. Nothing is decided by this; it chooses a noun.
+ */
+export type StatusVocabulary = 'guest' | 'maintenance'
+
 export function RequestRefusal({
   error,
   className,
+  vocabulary = 'guest',
 }: {
   error: unknown
   className?: string
+  vocabulary?: StatusVocabulary
 }) {
   const { t } = useTranslation()
   const formatters = useFormatters()
@@ -52,6 +68,7 @@ export function RequestRefusal({
   const officerMark = asOfficerMarkRequired(error)
   const consentNeeded = asConsentRequired(error)
   const transition = asIllegalTransition(error)
+  const windowClosed = asConfirmationWindowClosed(error)
   const visitClosed = asVisitAlreadyClosed(error)
   const fields = fieldMessages(error)
 
@@ -196,12 +213,36 @@ export function RequestRefusal({
         })}
       </p>
     )
+  } else if (windowClosed !== null) {
+    /*
+     * FR-39. Read before the illegal transition because it is the more specific
+     * of the two 409s this route can answer with, and the only one that tells
+     * the resident why the same button would have worked a day earlier.
+     */
+    title = t('maintenance.windowClosedTitle')
+    body = (
+      <>
+        <p className="m-0">
+          {t('maintenance.windowClosedBody', {
+            count: windowClosed.confirmation_window_days ?? 0,
+          })}
+        </p>
+        {windowClosed.window_closed_on !== null &&
+        windowClosed.window_closed_on !== undefined ? (
+          <p className="mt-2 mb-0">
+            {t('maintenance.windowClosedOn', {
+              date: formatters.date(windowClosed.window_closed_on),
+            })}
+          </p>
+        ) : null}
+      </>
+    )
   } else if (transition !== null) {
     title = t('guestQueue.transitionTitle')
     body = (
       <p className="m-0">
         {t('guestQueue.transitionBody', {
-          status: t(`guestStatus.${transition.status}`, {
+          status: t(`${vocabulary === 'maintenance' ? 'maintenanceStatus' : 'guestStatus'}.${transition.status}`, {
             defaultValue: transition.status ?? '',
           }),
         })}

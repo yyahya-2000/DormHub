@@ -1,5 +1,6 @@
 import type {
   CapacityExceeded,
+  ConfirmationWindowClosedError,
   ConsentRequiredError,
   DeletionBlocked,
   EntryNotPermittedError,
@@ -158,6 +159,30 @@ export function asIllegalTransition(error: unknown): IllegalTransitionError | nu
   }
   return typeof body.attempted_status === 'string'
     ? (body as unknown as IllegalTransitionError)
+    : null
+}
+
+/**
+ * FR-39, and the one refusal of the maintenance module a transition table
+ * cannot express: the request is still `completed`, `completed → accepted` is a
+ * move the table admits, and what has run out is the clock rather than the
+ * state.
+ *
+ * It shares 409 with the illegal transition and is told apart by its shape —
+ * a confirmation window and the day it closed, and no `attempted_status`. The
+ * order matters where both are read, because the window is the more specific
+ * answer and the only one that tells the resident why the same button worked
+ * yesterday.
+ */
+export function asConfirmationWindowClosed(
+  error: unknown,
+): ConfirmationWindowClosedError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 409) {
+    return null
+  }
+  return typeof body.confirmation_window_days === 'number'
+    ? (body as unknown as ConfirmationWindowClosedError)
     : null
 }
 
