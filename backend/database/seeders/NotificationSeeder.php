@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
-use App\Models\NotificationPreference;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\DocumentAwaitingSignature;
@@ -17,22 +15,17 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 /**
- * FR-34 on the development stand: messages to read and a switch that has been
- * moved.
+ * FR-34 on the development stand: messages to read.
  *
  * **The rows are written, not sent.** The notifications table is filled
  * directly rather than by dispatching the notifications, for two reasons. A
  * dispatch would go through the queue and through a mail transport, and a
  * seeder that needs a worker running is a seeder that fails half the time. And
- * the point of seeding here is the *state* of the personal account — read and
- * unread, four categories, one of them muted — not the delivery, which the
- * tests cover on the path that matters.
+ * the point of seeding here is the *state* of the personal account — four
+ * categories, one of them already read and the rest not — not the delivery,
+ * which the tests cover on the path that matters.
  *
  * Every name, request number and comment below is invented (C-05).
- *
- * The last resident of the list has the maintenance-status category switched
- * off, so that the settings screen has a switch in each position and the
- * consequence of the switch is visible: they have no message of that category.
  */
 class NotificationSeeder extends Seeder
 {
@@ -44,22 +37,12 @@ class NotificationSeeder extends Seeder
             return;
         }
 
-        $muted = $residents[count($residents) - 1];
-
-        NotificationPreference::query()->updateOrCreate(
-            [
-                'user_id' => $muted->getKey(),
-                'category' => NotificationCategory::MaintenanceStatus->value,
-            ],
-            ['enabled' => false],
-        );
-
         foreach ($residents as $index => $resident) {
             if ($resident->notifications()->exists()) {
                 continue;
             }
 
-            foreach ($this->messagesFor($index, $resident->is($muted)) as $position => [$notification, $readAfterDays]) {
+            foreach ($this->messagesFor($index) as $position => [$notification, $readAfterDays]) {
                 $sentAt = now()->subDays(10 - $position);
 
                 $resident->notifications()->create([
@@ -75,13 +58,13 @@ class NotificationSeeder extends Seeder
     }
 
     /**
-     * One message of each category, minus the one this person switched off.
+     * One message of each of the categories the personal account can draw.
      *
      * @return list<array{0: object, 1: int|null}>
      */
-    private function messagesFor(int $index, bool $maintenanceMuted): array
+    private function messagesFor(int $index): array
     {
-        $messages = [
+        return [
             [new GuestRequestDecided(
                 requestId: 1000 + $index,
                 guestName: ['Yuliana Beketova', 'Prokhor Ovsyannikov', 'Rimma Khoroshilova'][$index % 3],
@@ -100,18 +83,13 @@ class NotificationSeeder extends Seeder
                 title: 'Accommodation agreement, annexe 2',
                 dueAt: now()->addDays(14),
             ), null],
-        ];
-
-        if (! $maintenanceMuted) {
-            $messages[] = [new MaintenanceRequestStatusChanged(
+            [new MaintenanceRequestStatusChanged(
                 requestId: 3000 + $index,
                 fromStatus: 'assigned',
                 toStatus: 'done',
                 comment: 'The tap in the kitchen was replaced.',
-            ), null];
-        }
-
-        return $messages;
+            ), null],
+        ];
     }
 
     /**
