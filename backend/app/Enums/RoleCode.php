@@ -114,6 +114,17 @@ enum RoleCode: string
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
                 Permission::ViewGuestDocument,
+                /*
+                 * The maintenance queue read and not triaged, which is the
+                 * same shape as the guest queue above and rests on the same
+                 * argument. FR-40 names the campus directorate (S4) among the
+                 * people the queue is for, and a directorate that cannot see
+                 * the backlog of its dormitories cannot act on it. Accepting a
+                 * request, however, means promising a date and committing the
+                 * building's own labour, and that is the warden's promise to
+                 * make.
+                 */
+                Permission::ViewMaintenanceRequests,
             ],
             self::Warden => [
                 Permission::ViewBuilding,
@@ -127,6 +138,8 @@ enum RoleCode: string
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
                 Permission::ViewGuestDocument,
+                Permission::ViewMaintenanceRequests,
+                Permission::TriageMaintenanceRequests,
             ],
             /*
              * The manager reads the guest queue, because a request names a
@@ -143,6 +156,15 @@ enum RoleCode: string
                 Permission::IssueResidentAccount,
                 Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
+                /*
+                 * The maintenance queue in full. §1.1.4's revision 2 lists it
+                 * among the register work that moves to the manager, and this
+                 * is the one module where the manager is the intended reader
+                 * rather than the relieving one: the defects are in the rooms,
+                 * and the rooms are his.
+                 */
+                Permission::ViewMaintenanceRequests,
+                Permission::TriageMaintenanceRequests,
             ],
             /*
              * The duty officer approves guest requests, and for that they need

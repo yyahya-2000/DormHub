@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use App\Contracts\TransitionableStatus;
+
 /**
  * The states of a guest request, as §3.5.4 draws them.
  *
@@ -23,7 +25,7 @@ namespace App\Enums;
  * acceptance check both name the stored value `in_progress`. The value is what
  * a client reads, so the value wins and the label is kept in `label()`.
  */
-enum GuestRequestStatus: string
+enum GuestRequestStatus: string implements TransitionableStatus
 {
     /** Submitted, waiting for the duty officer. The only state in the queue. */
     case PendingReview = 'pending_review';

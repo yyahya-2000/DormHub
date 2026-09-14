@@ -144,6 +144,38 @@ enum AuditAction: string
     // for it in full is a separate act and is recorded as one.
     case GuestDocumentNumberViewed = 'guest_request.document_viewed';
 
+    /*
+     * FR-37 … FR-40. The maintenance module, and a deliberately short list.
+     *
+     * **Not every transition is here, and that is the point of there being two
+     * logs.** §3.4.1's sixth decision puts every status change into
+     * `maintenance_work_logs` with its actor, its moment and its comment, and
+     * that table is append-only by the same migration device as this one. A
+     * second copy of the same nine rows in `audit_logs` would bury the log in
+     * entries that say nothing the primary record does not — which is the
+     * argument that keeps `announcement_acks` out of it too.
+     *
+     * What is here is what the work log cannot answer. A commitment made to a
+     * resident and a refusal given to one are decisions §3.9.6 counts; a
+     * request that closed because nobody answered, and one a resident disputed
+     * by reopening, are the two outcomes the module exists to make visible;
+     * and an export is a disclosure of a list, which is the same kind of event
+     * as reading the readers of an announcement.
+     */
+    case MaintenanceRequestAccepted = 'maintenance_request.accepted';
+    case MaintenanceRequestRejected = 'maintenance_request.rejected';
+    case MaintenanceRequestReopened = 'maintenance_request.reopened';
+    case MaintenanceRequestAutoClosed = 'maintenance_request.auto_closed';
+    case MaintenanceRequestOverdue = 'maintenance_request.overdue';
+
+    // FR-39, the refusal. A reopening offered after the confirmation window
+    // has run out, recorded outside the transaction it refuses — a refusal
+    // written inside one is carried away by the rollback.
+    case MaintenanceReopeningRefused = 'maintenance_request.reopening_refused';
+
+    // FR-40, third criterion: the queue exported over a period.
+    case MaintenanceQueueExported = 'maintenance_queue.exported';
+
     // FR-09. What was announced, to which dormitory, by whom and until when.
     // A mandatory announcement is the ground a disciplinary conversation later
     // stands on (SN-11), and «the notice was posted on the ninth» has to be

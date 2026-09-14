@@ -126,6 +126,36 @@ enum Permission: string
     case PublishAnnouncements = 'announcements.publish';
 
     /**
+     * The maintenance queue of the dormitory, read (FR-40).
+     *
+     * Split from the triage below for the reason `ViewRooms` is split from
+     * `ManageRooms`: the two lists of holders genuinely differ. The
+     * administrator reads every dormitory's queue — FR-40 names the campus
+     * directorate among its stakeholders and a directorate that cannot see the
+     * backlog cannot act on it — and triages none of them, because a planned
+     * completion date is a promise made by the person who will keep it.
+     */
+    case ViewMaintenanceRequests = 'maintenance_requests.view';
+
+    /**
+     * Accepting, refusing and working a maintenance request (FR-37, FR-38).
+     *
+     * **The warden and the manager of the building, and nobody else.** The
+     * duty officer is outside it although they decide on guest requests: the
+     * two decisions have nothing in common but the word. A guest request is
+     * shift work at a post on a particular evening; a maintenance request
+     * commits the dormitory's own labour and a date, which is the register
+     * work §1.1.4's revision 2 puts with the manager beneath the warden.
+     *
+     * The resident is outside it too, and that separation is the point of the
+     * module rather than a detail of it (§3.5.2): the person who does the work
+     * moves the request as far as «completed», and the person who reported the
+     * defect is the only one who can take it further. A status set by whoever
+     * did the work proves nothing.
+     */
+    case TriageMaintenanceRequests = 'maintenance_requests.triage';
+
+    /**
      * Reading a guest's document number in full (NFR-06, §3.4.2).
      *
      * The column is stored encrypted and shown masked everywhere, so this is
