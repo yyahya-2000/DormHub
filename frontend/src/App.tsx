@@ -7,9 +7,12 @@ import { AuditLogPage } from '@/pages/audit-log-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
+import { CheckpointPage } from '@/pages/checkpoint-page'
 import { ConsentHistoryPage } from '@/pages/consent-history-page'
 import { ConsentPage } from '@/pages/consent-page'
 import { FloorPlanPage } from '@/pages/floor-plan-page'
+import { GuestQueuePage } from '@/pages/guest-queue-page'
+import { GuestRequestsPage } from '@/pages/guest-requests-page'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { NotificationSettingsPage } from '@/pages/notification-settings-page'
@@ -18,6 +21,7 @@ import { ResidentAccountPage } from '@/pages/resident-account-page'
 import { ResidentCardPage } from '@/pages/resident-card-page'
 import { RoomsPage } from '@/pages/rooms-page'
 import { SetPasswordPage } from '@/pages/set-password-page'
+import { VisitRegisterPage } from '@/pages/visit-register-page'
 
 /**
  * Two zones: what an anonymous browser may reach, and everything behind a
@@ -61,6 +65,24 @@ export default function App() {
                 path="buildings/:buildingId/accounts"
                 element={<ResidentAccountPage />}
               />
+              {/*
+                The guest module. Two of the three screens are addressed by
+                building, because the queue and the register belong to one
+                dormitory and the capability is held in one. The third is not:
+                the post terminal takes its building from the officer's own
+                grant, so that nothing on a screen facing a lobby depends on
+                what is in the address bar.
+              */}
+              <Route
+                path="buildings/:buildingId/guest-requests"
+                element={<GuestQueuePage />}
+              />
+              <Route
+                path="buildings/:buildingId/visit-register"
+                element={<VisitRegisterPage />}
+              />
+              <Route path="guests" element={<GuestRequestsPage />} />
+              <Route path="checkpoint" element={<CheckpointPage />} />
               <Route path="residents/:residentId" element={<ResidentCardPage />} />
               {/*
                 The personal account. Neither route takes a parameter naming a

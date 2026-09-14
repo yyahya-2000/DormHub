@@ -1,7 +1,14 @@
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import { appointsStaff, issuesResidentAccounts, may, Permission } from '@/auth/navigation'
+import {
+  appointsStaff,
+  issuesResidentAccounts,
+  may,
+  Permission,
+  readsGuestRequests,
+  readsVisitRegister,
+} from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +33,8 @@ export function BuildingTabs({ buildingId }: { buildingId: number }) {
   const readsRooms = user !== null && may(user, Permission.viewRooms, buildingId)
   const appoints = user !== null && appointsStaff(user, buildingId)
   const issuesAccounts = user !== null && issuesResidentAccounts(user, buildingId)
+  const readsGuests = user !== null && readsGuestRequests(user, buildingId)
+  const readsRegister = user !== null && readsVisitRegister(user, buildingId)
 
   const views = [
     { to: `/buildings/${buildingId}`, label: t('building.views.card'), end: true },
@@ -33,6 +42,29 @@ export function BuildingTabs({ buildingId }: { buildingId: number }) {
       ? [
           { to: `/buildings/${buildingId}/rooms`, label: t('building.views.rooms'), end: false },
           { to: `/buildings/${buildingId}/plan`, label: t('building.views.plan'), end: false },
+        ]
+      : []),
+    // Four roles read the queue of a dormitory and two export its register, and
+    // the difference between those two sets is the whole reason the guest
+    // module split the capabilities apart: the manager reads the queue because a
+    // request names a room, and §3.9.6 keeps the register to the warden and the
+    // administrator.
+    ...(readsGuests
+      ? [
+          {
+            to: `/buildings/${buildingId}/guest-requests`,
+            label: t('building.views.guestRequests'),
+            end: false,
+          },
+        ]
+      : []),
+    ...(readsRegister
+      ? [
+          {
+            to: `/buildings/${buildingId}/visit-register`,
+            label: t('building.views.visitRegister'),
+            end: false,
+          },
         ]
       : []),
     ...(appoints

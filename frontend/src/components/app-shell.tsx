@@ -1,7 +1,14 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import { awaitsConsent, buildingsOf, showsAuditLink } from '@/auth/navigation'
+import {
+  awaitsConsent,
+  buildingsOf,
+  buildingsWith,
+  guestRequestBuildingsOf,
+  Permission,
+  showsAuditLink,
+} from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Button } from '@/components/ui/button'
@@ -57,6 +64,31 @@ export function AppShell() {
       label: t('app.section.building'),
     })
   }
+  /*
+   * The guest module, drawn from the grants and not from a role name.
+   *
+   * The post gets a tab of its own because the terminal is a workplace and not
+   * a view of a building: an officer signs in, presses it, and stays there for
+   * a shift. The duty officer's queue is a tab too, and that is the register of
+   * stakeholders taken literally — the decision has to be a few seconds from
+   * sign-in on a telephone, and three taps through the building card is not
+   * that. A resident who lives somewhere gets the form.
+   */
+  const posts = buildingsWith(user, Permission.operateCheckpoint)
+  if (posts.length > 0) {
+    tabs.push({ to: '/checkpoint', label: t('app.section.checkpoint') })
+  }
+  const decidesIn = buildingsWith(user, Permission.decideGuestRequests)
+  if (decidesIn[0] !== undefined) {
+    tabs.push({
+      to: `/buildings/${decidesIn[0]}/guest-requests`,
+      label: t('app.section.guestQueue'),
+    })
+  }
+  if (guestRequestBuildingsOf(user).length > 0) {
+    tabs.push({ to: '/guests', label: t('app.section.guests') })
+  }
+
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
   // The personal account is nobody's privilege: the routes behind these two
   // are scoped to the token and take no parameter naming anyone else.
