@@ -25,10 +25,11 @@ info:
     is in this increment too and has no route at all: it is a quarter-hourly
     sweep that reads the deadline frozen on each visit.
 
-    The sixth is the announcement module of increment 2: FR-09 (publication),
-    FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
-    an important announcement, is Could priority and outside the MVP — there is
-    no route for it and no column behind one.
+    The sixth is the announcement module of increment 2: FR-09 (publication) and
+    FR-11 (the feed). FR-10, pinning an important announcement, is Could
+    priority and outside the MVP — there is no route for it and no column behind
+    one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+    MVP together with the table it rested on.
 
     The seventh is the maintenance module of increment 3: FR-36 (the resident
     files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -112,10 +113,11 @@ info:
     sector's.
 
     An announcement is addressed by `building_id`, and a null one means every
-    dormitory. That single column is the audience: the feed filters on it, the
-    fan-out reads it, and there is no recipient list that could disagree with
-    it. Leaving it out is the administrator's right and nobody else's — a warden
-    who could would be addressing dormitories his grant does not name. The
+    dormitory. That single column is the whole of the audience: the feed filters
+    on it, the fan-out reads it, and there is no second field and no recipient
+    list that could disagree with it. The administrator names a dormitory or
+    leaves the field out; leaving it out is his right and nobody else's — a
+    warden who could would be addressing dormitories his grant does not name. The
     validity period is the same kind of thing: `expires_at` is a comparison the
     feed makes and not a status anybody sets, so an announcement leaves the feed
     for the archive by itself and no job has to run for it to happen.
@@ -160,9 +162,10 @@ tags:
       as art. 9 part 1 of Federal Law No. 152-FZ requires.
   - name: Announcements
     description: >-
-      FR-09, FR-11 and FR-12. The warden or the manager of a dormitory
-      publishes; the administrator addresses all of them. The resident reads a
-      feed with the unread marked, and acknowledges the notices that require it.
+      FR-09 and FR-11. The warden or the manager of a dormitory publishes; the
+      administrator publishes into any of them or into all of them at once. The
+      resident reads a feed of their own dormitory, newest first, filterable by
+      category.
   - name: Guest requests
     description: >-
       FR-16, FR-17 and FR-23. The resident invites; the duty officer of that
@@ -801,11 +804,11 @@ paths:
         and not merely in the interface.
 
         The card carries the name, the citizenship, the contact, the current
-        place, the whole residency history and the open obligations.
-        `current_bed` and `open_obligations` are read as «resident today», not as
-        «no departure date written»: somebody leaving at the end of December has
-        a current place until the end of December. Reading the card is recorded in
-        the audit log, because it carries personal data.
+        place, the whole residency history and the guest visits of this person
+        that ran past their deadline. `current_bed` is read as «resident today»,
+        not as «no departure date written»: somebody leaving at the end of
+        December has a current place until the end of December. Reading the card
+        is recorded in the audit log, because it carries personal data.
       operationId: showResidentCard
       parameters:
         - $ref: '#/components/parameters/ResidentId'
@@ -1203,19 +1206,24 @@ paths:
         `payload` is the body of the message and its shape depends on the
         category — each notification decides its own in `toDatabase()`. `category`
         is lifted out of it into a field of its own, because that is what a
-        client groups and filters by.
+        client draws the icon and the caption from.
 
         The field is called `payload` and not `data` on purpose: a resource
         whose top-level object carried a key called `data` would be taken by the
         framework to have wrapped itself, and this one route would answer
         without the `data` envelope every other route in this document has.
+
+        **There is no filter.** The route used to take an `unread` parameter and
+        it is gone with the settings screen: a person with a dozen messages does
+        not sort them, they read down the page. Unread is a colour on the row,
+        and `POST /notifications/{notification}/read` clears it.
+
+        `meta.unread_count` is the number behind the badge in the menu, which is
+        drawn on every screen and is a different question from «what is on this
+        page». It is one count over the rows this listing already scopes itself
+        to, answered in the same request.
       operationId: listNotifications
       parameters:
-        - name: unread
-          in: query
-          required: false
-          description: Return only the messages that have not been marked read.
-          schema: { type: boolean, default: false }
         - name: page
           in: query
           required: false
@@ -1236,7 +1244,7 @@ paths:
                   links:
                     $ref: '#/components/schemas/PaginationLinks'
                   meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                    $ref: '#/components/schemas/NotificationsMeta'
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
@@ -1269,89 +1277,6 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /notification-settings:
-    get:
-      tags: [Notifications]
-      summary: Which categories of notification reach this person
-      description: |
-        FR-34, second criterion. Every category is listed, including the ones
-        nobody has decided about — those come back `enabled: true`, which is the
-        default.
-
-        `mandatory` says whether the switch may be moved at all. It is in the
-        answer rather than left to the client to keep a list of its own: which
-        categories are mandatory is a matter of the legal ground the message
-        rests on, the server decides it, and a client that duplicated the
-        decision would eventually draw a switch the server refuses to move.
-      operationId: listNotificationSettings
-      responses:
-        '200':
-          description: Every category, with its state for this person.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NotificationSetting'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-    put:
-      tags: [Notifications]
-      summary: Switch notification categories on or off
-      description: |
-        FR-34, second criterion: «the user can disable non-mandatory
-        categories».
-
-        The map may be partial — the screen sends what it changed, and a request
-        carrying one category must not switch the rest back on. The answer is
-        the whole state all the same, so the client redraws from one response
-        and cannot end up showing a switch the server did not accept.
-
-        A mandatory category is refused with 422 rather than ignored. Ignoring
-        it would answer «saved» and go on sending, and the person would be left
-        believing they had switched something off.
-
-        Turning a category on does not by itself guarantee delivery: the
-        categories that rest on consent stop when the consent of FR-35 is
-        withdrawn, whatever the switch says.
-      operationId: updateNotificationSettings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationSettingsInput'
-      responses:
-        '200':
-          description: The settings as they now stand, in full.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NotificationSetting'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '422':
-          description: |
-            Either the payload failed validation — an unknown category among the
-            keys, or a value that is not a boolean — or it asked for a mandatory
-            category to be switched off, which is the `MandatoryCategory` shape.
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/ValidationError'
-                  - $ref: '#/components/schemas/MandatoryCategory'
 
   /consents/pending:
     get:
@@ -1478,8 +1403,8 @@ paths:
         **What it does not do.** For a resident it closes nothing: the housing
         register, the resident card and the notifications the dormitory is
         obliged to send all rest on the accommodation contract (art. 6 part 1
-        cl. 5) and continue. What stops is the optional half of FR-34's
-        categories, which have no other ground. The person becomes pending
+        cl. 5) and continue. What stops are the categories of FR-34 that have
+        no other ground than the consent. The person becomes pending
         again and is offered the text at the next sign-in; they are not locked
         out, because consent that could only be withheld at the price of the
         service would not be free.
@@ -1566,7 +1491,7 @@ paths:
       description: |
         FR-11. The announcements addressed to the dormitories this account is
         attached to, plus those addressed to every dormitory, published and not
-        yet expired, newest first, with the unread marked.
+        yet expired, newest first.
 
         **The route carries no building parameter, and that is the boundary.**
         The audience is computed from the grants of the token, so there is no
@@ -1574,10 +1499,6 @@ paths:
         boundary of FR-07 is the absence of a parameter here rather than a check
         somebody has to remember. FR-05 applies on top of it: a resident whose
         departure date has passed stops seeing that dormitory's feed.
-
-        `is_unread` is computed per reader by a left join against the
-        acknowledgements, so one resident acknowledging a notice does not mark
-        it read for the rest of the dormitory.
 
         `archived=true` returns the other side of the `expires_at` comparison —
         the announcements that have left the feed. Nothing moves them there;
@@ -1587,9 +1508,11 @@ paths:
         - name: category
           in: query
           required: false
-          description: Return only the announcements of one category. An unknown value is 422, not an empty feed.
-          schema:
-            $ref: '#/components/schemas/AnnouncementCategory'
+          description: >-
+            Return only the announcements stored under this exact label. The
+            category is a free string, so a label nobody has posted under is an
+            empty page rather than a 422.
+          schema: { type: string, maxLength: 32 }
         - name: archived
           in: query
           required: false
@@ -1627,25 +1550,31 @@ paths:
         FR-09. The warden or the manager of the dormitory named, and the
         administrator.
 
-        **Omitting `building_id` addresses every dormitory, and it is the
-        administrator's alone.** A null building is an audience and not a
-        missing field (§3.4.2); a warden permitted to leave it out would be
-        addressing buildings his grant does not name, which is FR-07's boundary
-        crossed by an omission rather than by a leak. A warden who tries gets
-        403.
+        **`building_id` is the whole of the addressee: an identifier, or null
+        for every dormitory.** There is no separate «all buildings» flag and
+        there must not be one — two fields could disagree, and the
+        disagreement would be a notice addressed to nobody. The administrator
+        picks a dormitory by naming it or addresses all of them by leaving the
+        field out; a null building is an audience and not a missing field
+        (§3.4.2), and a warden permitted to leave it out would be addressing
+        buildings his grant does not name. A warden who tries gets 403.
+
+        `category` is a free label of at most 32 characters, trimmed. The
+        client offers the catalogue of `GET /announcement-categories` first and
+        lets the author type something else; the server stores what it is
+        given.
 
         `published_at` is not accepted. Publication happens now — a settable
-        date would let a notice be back-dated, and FR-12's evidence is that the
-        resident was told on a day they can check.
+        date would let a notice be back-dated, and the audit record of the
+        publication would then carry a date the author chose.
 
         `expires_at` is the validity period of FR-09 and may be omitted, in
         which case the announcement does not expire. An expiry already past is
         422: it would produce a notice in no feed and in no archive.
 
-        The fan-out to the audience is queued. A resident who has switched the
-        routine announcement category off receives nothing; one who has
-        switched it off still receives an announcement marked
-        `is_mandatory`, because that category cannot be switched off (FR-34).
+        The fan-out to the audience is queued and passes through the
+        notification gate, so a resident who has withdrawn the consent the
+        `announcement` category rests on receives nothing (FR-34, FR-35).
       operationId: publishAnnouncement
       requestBody:
         required: true
@@ -1674,97 +1603,46 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
-  /announcements/{announcement}/ack:
-    post:
-      tags: [Announcements]
-      summary: Acknowledge an announcement
-      description: |
-        FR-12, first criterion: the fact and the time of the acknowledgement are
-        recorded, as a row carrying the reader and the moment.
-
-        **Idempotent, and 200 on the first call as on the twentieth.** A repeat
-        returns the acknowledgement already on record rather than writing a
-        second one — `UNIQUE (announcement_id, user_id)` in the database, not a
-        check in a service — and the moment stored stays the first reading. A
-        status that told the first call from a repeat would invite a client to
-        treat the repeat as an error, which is the opposite of what idempotence
-        is for.
-
-        Only the audience may acknowledge: a row asserting that somebody read a
-        notice they could not see would be worse than no row. Any announcement
-        may be acknowledged, not only a mandatory one — the same row is what
-        clears the unread mark of FR-11.
-
-        The announcement comes back carrying the mark, so a client that
-        acknowledges from the feed redraws one row rather than reloading.
-      operationId: acknowledgeAnnouncement
-      parameters:
-        - $ref: '#/components/parameters/AnnouncementId'
-      responses:
-        '200':
-          description: The announcement, with `acknowledged_at` set.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Announcement'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /announcements/{announcement}/readers:
+  /announcement-categories:
     get:
       tags: [Announcements]
-      summary: Who has acknowledged an announcement, and who has not
+      summary: The catalogue of announcement categories
       description: |
-        FR-12, second criterion: the acknowledged share and a named list of
-        those who have not read, **within the caller's own dormitory**.
+        The headings the publishing form offers before it lets the author type
+        one of their own, with the name to show beside each.
 
-        The route returns personal data assembled for a purpose — residents who
-        have not complied with an instruction — and it is guarded twice over.
+        **A catalogue and not a closed list.** `announcements.category` is a
+        free string of at most 32 characters and nothing validates against
+        these five; they exist so that five wardens announcing a water shutoff
+        agree on the heading without being forced to. `max_length` is the bound
+        the form should enforce, and it is the width of the column.
 
-        The caller must hold the publishing capability in the dormitory the
-        announcement names; a warden of another building gets 403 and the
-        refusal is in the audit log as `access.denied`. And for an announcement
-        addressed to every dormitory, where a building-scoped warden
-        legitimately may look, the names returned are narrowed to his own
-        building — `building_ids` in the response says which dormitories the
-        figures are about. The administrator, whose grant names none, sees them
-        all.
-
-        The audience is the residents of those dormitories by the register, less
-        those the register says have moved out (FR-05): a warden is not handed
-        the name of somebody who failed to read a notice they could not see.
-
-        Reading this list is itself an event of the audit log
-        (`announcement.readers_viewed`). The acknowledgements are not: the row
-        already carries who and when.
-      operationId: showAnnouncementReaders
-      parameters:
-        - $ref: '#/components/parameters/AnnouncementId'
+        The shape is `GET /citizenships`'s, deliberately: both answer «what may
+        this field hold», and a client that reads one should not have to learn
+        a second shape for the other.
+      operationId: listAnnouncementCategories
       responses:
         '200':
-          description: The share and the two lists.
+          description: The suggested headings, in the order to draw them.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, max_length]
                 properties:
                   data:
-                    $ref: '#/components/schemas/AnnouncementReaders'
+                    type: array
+                    items:
+                      type: object
+                      required: [value, label]
+                      properties:
+                        value: { $ref: '#/components/schemas/AnnouncementCategory' }
+                        label: { type: string }
+                  max_length:
+                    type: integer
+                    description: The longest category the column and the form request accept.
         '401':
           $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /guest-requests:
     get:
@@ -3641,11 +3519,6 @@ components:
       description: The document whose consent is being withdrawn.
       schema:
         $ref: '#/components/schemas/ConsentDocument'
-    AnnouncementId:
-      name: announcement
-      in: path
-      required: true
-      schema: { type: integer, format: int64, minimum: 1 }
     GuestRequestId:
       name: guestRequest
       in: path
@@ -3796,7 +3669,6 @@ components:
         - maintenance_request.overdue
         - maintenance_request.reopening_refused
         - announcement.published
-        - announcement.readers_viewed
         - lost_found_item.published
         - lost_found_claim.filed
         - lost_found_claim.accepted
@@ -4154,7 +4026,7 @@ components:
         FR-06. `citizenship` is nullable by design: a staff account was not
         created through the resident route and may have none, and the card
         renders what is known rather than a default that looks like a fact.
-      required: [id, full_name, contact, residency_history, open_obligations]
+      required: [id, full_name, contact, residency_history, overdue_guest_visits]
       properties:
         id: { type: integer, format: int64 }
         full_name: { type: string }
@@ -4184,25 +4056,38 @@ components:
           description: Every residency, newest first. Nothing is removed on move-out.
           items:
             $ref: '#/components/schemas/Residency'
-        open_obligations:
+        overdue_guest_visits:
           type: array
           description: |
-            What the resident still owes the dormitory. The MVP register knows one
-            kind: an accommodation contract that has not been terminated.
-            Obligations arising from the inventory handover belong to entities
-            outside this iteration and are not represented here.
+            FR-20, third criterion: «the fact is visible on the inviting
+            resident's card». Every visit of a guest this person invited that
+            was still open when its deadline passed.
+
+            A key of its own rather than an entry among the residency rows: a
+            residency is what the register says the person holds, and an overdue
+            visit is something that happened — clause 2.2 of the rules of
+            internal order makes the inviting resident answerable for the
+            departure, and clause 3.4 of the Model Rules says the same. Folding
+            the two together would have made «holds a place» and «has never been
+            late» one statement.
+
+            The entry stays after the guest has left: the mark is
+            `reported_overdue_at`, so a visit since closed as `closed_late`
+            still appears. The card records that a deadline was passed, not
+            whether somebody is at this moment still inside.
           items:
             type: object
-            required: [kind, residency_id, contract_number]
+            required: [guest_visit_id, guest_request_id, status]
             properties:
-              kind:
-                type: string
-                enum: [accommodation_contract]
-              residency_id: { type: integer, format: int64 }
-              contract_number: { type: string }
-              since: { type: [string, 'null'], format: date }
-              placement:
-                $ref: '#/components/schemas/Placement'
+              guest_visit_id: { type: integer, format: int64 }
+              guest_request_id: { type: integer, format: int64 }
+              guest_full_name: { type: [string, 'null'] }
+              due_at: { type: [string, 'null'], format: date-time }
+              checked_in_at: { type: [string, 'null'], format: date-time }
+              checked_out_at: { type: [string, 'null'], format: date-time }
+              reported_overdue_at: { type: [string, 'null'], format: date-time }
+              status:
+                $ref: '#/components/schemas/GuestVisitStatus'
 
     StaffAppointmentInput:
       type: object
@@ -4407,40 +4292,56 @@ components:
     NotificationCategory:
       type: string
       description: |
-        FR-34's occasions, as the categories delivery is decided against.
+        FR-34's occasions, as the label a message is drawn under. It is what the
+        client picks an icon and a caption by; nothing about delivery is decided
+        from it on the client's side.
 
         `request_decision` is a decision on a guest request, `visit_overdue` a
         guest still recorded inside after the hour clause 2.2 of the rules of
         internal order sets, `maintenance_status` a movement of a maintenance
         request, and `document_signature` a document waiting to be signed.
 
-        `announcement` and `mandatory_announcement` are FR-09 reaching the
-        resident. They are two categories for one kind of object because the
-        delivery rule genuinely differs by the announcement: a notice the
-        resident is required to acknowledge (FR-12) rests on clause 4.2.7 of the
-        rules of internal order and cannot be switched off, while a routine one
-        rests on nothing but convenience and can.
+        `announcement` is FR-09 reaching the resident: the feed is on screen
+        either way and the message only saves the person from opening it.
 
-        `lost_found_claim` is the whole of FR-26's exchange in one category:
+        `lost_found_claim` is the whole of FR-26's exchange under one label:
         somebody has claimed a find, a claim has been accepted with a handover
         point, one has been declined, one has been referred to the warden, or
-        the warden has decided it. The obvious split — one category towards the
-        holder and another towards the claimant — would have put two switches
-        on the same conversation, and a resident who silenced one half would be
-        left holding an object nobody came for. Optional, and the one category
-        whose messages name another resident: no telephone number, no address
-        and no e-mail travels in either direction.
+        the warden has decided it. The two directions are two ends of one
+        exchange and share a label. It is the one category whose messages name
+        another resident: no telephone number, no address and no e-mail travels
+        in either direction.
 
-        Three of them are mandatory and cannot be switched off — see
-        `NotificationSetting.mandatory` for the ground the line is drawn on.
+        There is no per-category switch. Four of these rest on the resident's
+        consent (§2.7.1) and stop when the consent of FR-35 is withdrawn;
+        `visit_overdue` and `document_signature` are owed under the
+        accommodation contract and the rules of internal order and are sent
+        whatever anybody has agreed to.
       enum:
         - request_decision
         - visit_overdue
         - maintenance_status
         - document_signature
         - announcement
-        - mandatory_announcement
         - lost_found_claim
+
+    NotificationsMeta:
+      description: >-
+        The page envelope every listing in this document has, plus the one
+        figure the personal account needs on every screen rather than on this
+        one.
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          required: [unread_count]
+          properties:
+            unread_count:
+              type: integer
+              minimum: 0
+              description: >-
+                How many of this person's messages are unread, counted over the
+                whole table and not over this page. It is what the badge in the
+                menu shows.
 
     Notification:
       type: object
@@ -4467,63 +4368,6 @@ components:
           type: [string, 'null']
           format: date-time
         created_at: { type: string, format: date-time }
-
-    NotificationSetting:
-      type: object
-      required: [category, label, description, enabled, mandatory]
-      properties:
-        category:
-          $ref: '#/components/schemas/NotificationCategory'
-        label: { type: string }
-        description:
-          type: string
-          description: What the person reads beside the switch, so the choice is informed.
-        enabled:
-          type: boolean
-          description: >-
-            Whether messages of this category are to reach this person. True for
-            a category nobody has decided about, which is the default.
-        mandatory:
-          type: boolean
-          description: |
-            Whether the switch may be moved at all.
-
-            The line is drawn by the ground the message rests on. A mandatory
-            category carries what the accommodation contract or the rules of
-            internal order oblige the dormitory to tell the person — a guest
-            overdue at the post, a document with a deadline — and declining it
-            would be
-            a refusal of the service rather than a preference. The rest are
-            conveniences whose only ground is consent, and they stop when the
-            consent of FR-35 is withdrawn even while this flag says `enabled`.
-
-    NotificationSettingsInput:
-      type: object
-      required: [categories]
-      properties:
-        categories:
-          type: object
-          minProperties: 1
-          description: >-
-            A map of category to whether it is to be received. May be partial:
-            the screen sends what it changed, and the categories left out keep
-            the state they had.
-          additionalProperties:
-            type: boolean
-          propertyNames:
-            $ref: '#/components/schemas/NotificationCategory'
-
-    MandatoryCategory:
-      type: object
-      required: [message, category, category_label]
-      description: >-
-        The refusal of an attempt to switch off a category that carries what the
-        dormitory is obliged to tell the person.
-      properties:
-        message: { type: string }
-        category:
-          $ref: '#/components/schemas/NotificationCategory'
-        category_label: { type: string }
 
     ConsentDocument:
       type: string
@@ -4630,14 +4474,19 @@ components:
     AnnouncementCategory:
       type: string
       description: |
-        What an announcement is about (FR-09, FR-11), and the closed list the
-        feed's filter is drawn from.
+        The five headings the publishing form suggests (FR-09, FR-11).
 
-        The category is **not** the mandatory flag: the subject of a notice and
-        the obligation to read it vary independently, which is why the ER model
-        of §3.4.3 carries `category` and `is_mandatory` as two columns. A water
-        shutoff is `utilities` and is normally mandatory; a film evening is
-        `events` and never is.
+        **A catalogue and not a constraint.** The column is a free string of at
+        most 32 characters: any value outside this list is accepted and stored
+        as it stands, so a client must render an unknown category rather than
+        treat it as an error. The list is served with its display names at
+        `GET /announcement-categories`.
+
+        It was a closed enumeration with a CHECK constraint behind it. Closing
+        the list kept two wardens from writing «Ремонт» and «ремонт» and getting
+        two headings, and it also forced every subject the five did not foresee
+        into `general` — a residual heading collecting half the feed is a filter
+        that filters nothing.
       enum:
         - house_rules
         - utilities
@@ -4647,7 +4496,7 @@ components:
 
     Announcement:
       type: object
-      required: [id, author_id, title, body, category, is_mandatory, published_at, is_unread]
+      required: [id, author_id, title, body, category, category_label, published_at]
       properties:
         id: { type: integer, format: int64 }
         building_id:
@@ -4668,14 +4517,18 @@ components:
         title: { type: string, maxLength: 255 }
         body: { type: string }
         category:
-          $ref: '#/components/schemas/AnnouncementCategory'
-        category_label: { type: string }
-        is_mandatory:
-          type: boolean
+          type: string
+          maxLength: 32
           description: >-
-            FR-12 turns on this flag: the reader is asked to acknowledge, the
-            notification cannot be switched off, and the readers report is
-            meaningful.
+            The heading as it was stored. Often one of
+            `AnnouncementCategory`'s, but any label up to 32 characters is
+            admissible.
+        category_label:
+          type: string
+          description: >-
+            What to show beside the notice: the catalogue's name when the value
+            is one of its five, and the value itself when the author typed
+            their own.
         published_at: { type: string, format: date-time }
         expires_at:
           type: [string, 'null']
@@ -4684,15 +4537,6 @@ components:
             The validity period of FR-09. Null means the announcement does not
             expire; otherwise this is the moment it leaves the feed for the
             archive, by comparison and not by anybody moving it.
-        acknowledged_at:
-          type: [string, 'null']
-          format: date-time
-          description: When this reader acknowledged it, null if they have not.
-        is_unread:
-          type: boolean
-          description: >-
-            FR-11's mark, computed per reader by a left join against the
-            acknowledgements.
         created_at: { type: string, format: date-time }
 
     AnnouncementInput:
@@ -4703,76 +4547,26 @@ components:
           type: [integer, 'null']
           format: int64
           description: >-
-            The dormitory addressed. Omit it, or send null, to address every
-            dormitory — the administrator's right and nobody else's.
+            The dormitory addressed, and the only field that says so. Omit it,
+            or send null, to address every dormitory — the administrator's
+            right and nobody else's. He addresses one dormitory by naming its
+            identifier here.
         title: { type: string, maxLength: 255 }
         body: { type: string, maxLength: 20000 }
         category:
-          $ref: '#/components/schemas/AnnouncementCategory'
-        is_mandatory:
-          type: boolean
-          default: false
+          type: string
+          minLength: 1
+          maxLength: 32
           description: >-
-            Whether the reader is required to acknowledge the notice (FR-12).
-            A mandatory announcement is also delivered as a notification the
-            resident cannot switch off.
+            The heading, trimmed of surrounding space. The form draws
+            `GET /announcement-categories` as suggestions and admits anything
+            else up to 32 characters; the value is stored as it is given.
         expires_at:
           type: [string, 'null']
           format: date-time
           description: >-
             When the announcement leaves the feed. Must be in the future; omit
             for an announcement that does not expire.
-
-    AnnouncementReader:
-      type: object
-      required: [user_id, full_name]
-      properties:
-        user_id: { type: integer, format: int64 }
-        full_name: { type: string }
-        acknowledged_at:
-          type: string
-          format: date-time
-          description: Present on the acknowledged list only.
-
-    AnnouncementReaders:
-      type: object
-      required: [announcement_id, audience_size, acknowledged_count, acknowledged_share, acknowledged, not_acknowledged]
-      properties:
-        announcement_id: { type: integer, format: int64 }
-        title: { type: string }
-        is_mandatory: { type: boolean }
-        building_ids:
-          type: array
-          description: >-
-            The dormitories the figures below are about. For an announcement
-            addressed to every dormitory this is the caller's own scope and not
-            the whole register; for the administrator it is empty, meaning all
-            of them.
-          items: { type: integer, format: int64 }
-        audience_size:
-          type: integer
-          description: >-
-            The residents of those dormitories by the register, less those it
-            says have moved out (FR-05).
-        acknowledged_count: { type: integer }
-        acknowledged_share:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 1
-          description: >-
-            The acknowledged fraction of the audience. An empty audience gives
-            1, not 0: a share of zero over zero people would put a red figure in
-            front of a warden with nobody to chase.
-        acknowledged:
-          type: array
-          items:
-            $ref: '#/components/schemas/AnnouncementReader'
-        not_acknowledged:
-          type: array
-          description: FR-12's named list, which is why the acknowledgement is a row and not a counter.
-          items:
-            $ref: '#/components/schemas/AnnouncementReader'
 
     GuestRequestStatus:
       type: string
