@@ -105,6 +105,17 @@ info:
     feed makes and not a status anybody sets, so an announcement leaves the feed
     for the archive by itself and no job has to run for it to happen.
 
+    Dates and times are the dormitory's own. The application runs in the
+    building's timezone — a setting, `APP_TIMEZONE`, standing at `Europe/Moscow`
+    for this deployment — so `visit_date`, `happened_on` and `target_date` are
+    the days a person in the building would name, and `planned_from` and
+    `planned_to` are its wall-clock hours. Every `date-time` in a response
+    carries an explicit offset. Until the acceptance of 15.09.2026 the server
+    kept UTC while the dormitory kept Moscow time, and after nine in the evening
+    the two disagreed about what day it was: a find picked up that evening was
+    refused as «later than today» and a guest approved for that evening was
+    turned away at the post as «for another day».
+
     The system records facts about people's movement and does not restrict it.
     A refusal at the checkpoint is a refusal to *record* an entry as lawful, not
     a barrier: the ground for refusing a person entry to a dormitory is the
@@ -1345,7 +1356,11 @@ paths:
         - name: archived
           in: query
           required: false
-          description: Return the expired announcements instead of the current ones.
+          description: >-
+            Return the expired announcements instead of the current ones. Sent
+            as a query string, so `true`, `false`, `1` and `0` are all read —
+            which is what a generated client produces from a boolean. Anything
+            else is 422 naming the field.
           schema: { type: boolean, default: false }
         - name: page
           in: query
@@ -2190,6 +2205,63 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/PhotographNotStored'
+
+  /maintenance-requests/{maintenanceRequest}/photos/{index}:
+    get:
+      tags: [Maintenance]
+      summary: One photograph of a maintenance request
+      description: |
+        FR-36's photographs, read back one at a time — **the route the schema of
+        `MaintenanceRequest` has always described and that did not exist until
+        the acceptance of 15.09.2026**. `photo_paths` carries paths and not URLs
+        because a signed URL is stale by the time somebody scrolls to it; the
+        client asks for a link when it is about to draw the image, and this is
+        where it asks.
+
+        **The answer is the image itself**, streamed, with the photograph's own
+        content type. It is not a signed link, which is what an earlier reading
+        of this schema had in mind: the object store is signed for under a name
+        that exists only inside the deployment's own network, and SigV4 covers
+        the Host header, so a link cannot be followed from a browser and cannot
+        be rewritten for one either. Streaming works unchanged on every disk,
+        and it keeps the photograph behind the same token as the record.
+
+        The authorisation is `view` on the request itself: whoever may read the
+        card may see the picture on it, and a request of another dormitory is
+        403. `index` is the position in `photo_paths`; a path in the URL would
+        be a path a client could edit.
+      operationId: showMaintenanceRequestPhoto
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+        - name: index
+          in: path
+          required: true
+          description: Position of the photograph in `photo_paths`, counted from zero.
+          schema: { type: integer, minimum: 0, maximum: 2 }
+      responses:
+        '200':
+          description: The photograph, streamed with its own content type.
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: >-
+            No such request, no photograph under that index, or a path on the
+            record with no object behind it in the store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /maintenance-requests/{maintenanceRequest}:
     get:
@@ -2784,6 +2856,59 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/PhotographNotStored'
+
+  /lost-found/{lostFoundItem}/photo:
+    get:
+      tags: [Lost and found]
+      summary: The photograph of one find
+      description: |
+        FR-24's photograph, read back — **the route the schema of
+        `LostFoundItem` has always described and that did not exist until the
+        acceptance of 15.09.2026**. `photo_path` carries a path and not a URL
+        because a signed URL is stale by the time somebody scrolls to it; the
+        client asks for a link when it is about to draw the image, and this is
+        where it asks.
+
+        **The answer is the image itself**, streamed, as it is for a maintenance
+        request's photographs and for the same reason: a presigned link cannot
+        be followed from a browser on a deployment whose object store is signed
+        for under an internal name.
+
+        No index, unlike the maintenance module's: FR-24 says «the photograph»
+        in the singular and the column holds one path. An entry published
+        without one is 404 rather than an empty answer a client would have to
+        tell apart from a link.
+
+        The authorisation is `view` on the entry — FR-25's own question, so a
+        find of another dormitory is 403. The picture carries no more than the
+        card does, and the card has never said who published it.
+      operationId: showLostFoundItemPhoto
+      parameters:
+        - $ref: '#/components/parameters/LostFoundItemId'
+      responses:
+        '200':
+          description: The photograph, streamed with its own content type.
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: >-
+            No such entry, no photograph on it, or a path on the record with no
+            object behind it in the store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /lost-found/{lostFoundItem}:
     get:
@@ -2973,7 +3098,14 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The claim has already been answered.
+          description: >-
+            The claim has already been answered, or **the entry has been
+            closed** — the object went home on somebody else's claim while this
+            page was open. The second of those used to answer 200 (acceptance
+            of 15.09.2026), and the claimant was told where to collect an
+            umbrella that had left the building two days earlier. The body then
+            names the entry's states (`resolved`, `claimed`) rather than the
+            claim's, because what has moved on is the find.
           content:
             application/json:
               schema:
@@ -3032,7 +3164,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The claim has already been answered.
+          description: >-
+            The claim has already been answered, or the entry has been closed —
+            an entry that has gone home admits no decision on any claim against
+            it, in either direction. The body then names the entry's states
+            rather than the claim's.
           content:
             application/json:
               schema:
@@ -3120,6 +3256,13 @@ paths:
         administrator, for the reason they are outside `guest-requests/approve`;
         not the person whose refusal is under review; not the claimant.
 
+        The last of those was asserted here and enforced nowhere until the
+        acceptance of 15.09.2026: a manager could claim a find, wait to be
+        refused, refer his own refusal and uphold it, leaving
+        `claimant_id == decided_by` on the row. A claimant asking for this now
+        gets 403 — the claim is perfectly decidable, by somebody who is not a
+        party to it.
+
         **Only a referred claim.** A claim nobody referred is 409, not 403: the
         caller holds the capability perfectly well and what is missing is the
         referral that would have put the decision in their hands. There is no
@@ -3168,7 +3311,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The claim was never referred, or it has already been decided.
+          description: >-
+            The claim was never referred, it has already been decided, or the
+            entry has been closed.
           content:
             application/json:
               schema:
@@ -3359,6 +3504,27 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ValidationError'
+    PhotographNotStored:
+      description: |
+        The object store would not take a photograph the request carried, so
+        the request was refused and nothing was written.
+
+        **The route used to answer 201 here** (acceptance of 15.09.2026), with
+        the record created and the photographs missing from it. A refused write
+        came back from the driver as a `false`, the store dropped the path and
+        nobody noticed; a resident could not tell that answer from a submission
+        they had forgotten to attach anything to. A photograph is evidence — the
+        warden triages on it — so a submission that loses one is not a
+        submission that succeeded.
+
+        503 and not 500 or 422: the body was well formed, the caller was
+        entitled to send it, and the same call succeeds unchanged once the store
+        is back. There is nothing to undo before retrying — no record was
+        created.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
 
   schemas:
 
@@ -4639,10 +4805,11 @@ components:
         configuration, so moving either changes what the client reads on the
         next request.
 
-        `photo_paths` carries paths and not URLs. A signed URL expires, so one
-        embedded in a list is stale by the time somebody scrolls to it; the
-        client asks for a link when it is about to show the image, and a path
-        is meaningless without the object store's credentials.
+        `photo_paths` carries paths and not URLs. A path is meaningless without
+        the object store's credentials, which is what makes it safe to
+        serialise; the image itself is read from
+        `GET /maintenance-requests/{id}/photos/{index}`, one at a time, when
+        the client is about to show it.
 
         `work_log` is where the reason for a refusal and the comment on every
         move actually live (§3.4.1, decision 6). There is deliberately no
@@ -4799,7 +4966,16 @@ components:
         assigned_to:
           type: integer
           format: int64
-          description: The responsible party FR-37 names beside the date. Optional.
+          description: >-
+            The responsible party FR-37 names beside the date. Optional, and
+            **restricted to the staff of the dormitory the request belongs
+            to** — the warden himself, the manager, the duty officer, the
+            security officer. A resident, or a member of staff of another
+            dormitory, is 422 naming this field. Until the acceptance of
+            15.09.2026 any identifier in the users table was admitted, and the
+            answer carries the assignee's full name, so counting upwards read
+            the staff of every other building. The administrator is outside it
+            too: he reads every queue and promises no dates.
         urgency:
           $ref: '#/components/schemas/MaintenanceUrgency'
         comment: { type: string, maxLength: 1000 }
@@ -4974,10 +5150,10 @@ components:
         Civil Code art. 228 cl. 1 runs from the second and never from
         `created_at`. FR-27 counts it and is outside the MVP.
 
-        `photo_path` is a path in the object store and not a URL: a signed URL
-        expires, so one embedded in a list is stale by the time somebody
-        scrolls to it. The path is meaningless without the store's credentials,
-        which is what makes it safe to serialise.
+        `photo_path` is a path in the object store and not a URL. The path is
+        meaningless without the store's credentials, which is what makes it
+        safe to serialise; the image itself is read from
+        `GET /lost-found/{id}/photo` when the client is about to show it.
 
         `claim_count` says how many claims the entry carries and never what any
         of them says. `can_claim` is the three facts a claim would be refused on
