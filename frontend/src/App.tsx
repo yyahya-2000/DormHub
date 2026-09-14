@@ -10,8 +10,6 @@ import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
 import { ChangePasswordPage } from '@/pages/change-password-page'
 import { CheckpointPage } from '@/pages/checkpoint-page'
-import { ConsentHistoryPage } from '@/pages/consent-history-page'
-import { ConsentPage } from '@/pages/consent-page'
 import { FloorPage } from '@/pages/floor-page'
 import { GuestQueuePage } from '@/pages/guest-queue-page'
 import { GuestRequestsPage } from '@/pages/guest-requests-page'
@@ -53,21 +51,11 @@ export default function App() {
             {/*
               FR-42's second half, and it is behind the token because the route
               is: the password being replaced is checked against the signed-in
-              account's own hash. Outside the frame for the same reason as the
-              consent below — an account that still owes a password change is
-              sent here and has nothing else to do.
+              account's own hash. It is outside the frame of the application
+              because an account that still owes a password change is sent here
+              and has nothing else to do.
             */}
             <Route path="password" element={<ChangePasswordPage />} />
-            {/*
-              The consent of FR-35 is behind the token and outside the frame of
-              the application, and both halves of that are deliberate. Behind
-              the token, because a consent belongs to an account. Outside the
-              frame, because art. 9 part 1 of Federal Law No. 152-FZ has consent
-              «executed separately from other documents» — a row of section tabs
-              above the text would put the document among the screens of a
-              system instead of leaving it a document being signed.
-            */}
-            <Route path="consent" element={<ConsentPage />} />
             <Route element={<AppShell />}>
               <Route index element={<BuildingRegisterPage />} />
               <Route path="buildings" element={<BuildingRegisterPage />} />
@@ -153,13 +141,12 @@ export default function App() {
               />
               <Route path="residents/:residentId" element={<ResidentCardPage />} />
               {/*
-                The personal account. Neither route takes a parameter naming a
-                person: both are scoped to the account the token belongs to, so
+                The personal account. The route takes no parameter naming a
+                person: it is scoped to the account the token belongs to, so
                 there is no capability to ask about and no tab to hide —
                 everyone who can sign in has one.
               */}
               <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="consents" element={<ConsentHistoryPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Route>
