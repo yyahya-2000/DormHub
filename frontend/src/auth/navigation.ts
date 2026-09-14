@@ -46,6 +46,9 @@ export const Permission = {
   operateCheckpoint: 'checkpoint.operate',
   viewVisitRegister: 'visit_register.view',
   viewGuestDocument: 'guest_document.view',
+  publishAnnouncements: 'announcements.publish',
+  viewMaintenanceRequests: 'maintenance_requests.view',
+  triageMaintenanceRequests: 'maintenance_requests.triage',
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -68,6 +71,12 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewGuestRequests,
     Permission.viewVisitRegister,
     Permission.viewGuestDocument,
+    Permission.publishAnnouncements,
+    // FR-40 names the campus directorate among the readers of a queue, and a
+    // directorate that cannot see the backlog cannot act on it. Reading only:
+    // accepting a request promises a date and commits a building's own labour,
+    // and that promise is the warden's to make.
+    Permission.viewMaintenanceRequests,
   ],
   warden: [
     Permission.viewBuilding,
@@ -80,6 +89,9 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewGuestRequests,
     Permission.viewVisitRegister,
     Permission.viewGuestDocument,
+    Permission.publishAnnouncements,
+    Permission.viewMaintenanceRequests,
+    Permission.triageMaintenanceRequests,
   ],
   // The manager relieves the warden of the register work and of nothing else.
   // Over the housing domain the two sets are identical, and issuing an account
@@ -99,6 +111,11 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
     Permission.viewGuestRequests,
+    Permission.publishAnnouncements,
+    // The one module where the manager is the intended reader rather than the
+    // relieving one: the defects are in the rooms, and the rooms are his work.
+    Permission.viewMaintenanceRequests,
+    Permission.triageMaintenanceRequests,
   ],
   // The duty officer approves guest requests, and for that he needs the room a
   // guest is bound for and the roll of the building. Not the resident card: it
@@ -316,4 +333,71 @@ export function readsVisitRegister(user: User, buildingId: number): boolean {
  */
 export function readsGuestDocument(user: User, buildingId: number): boolean {
   return may(user, Permission.viewGuestDocument, buildingId)
+}
+
+/**
+ * FR-09. Whether this account may publish into the dormitory named.
+ *
+ * The three register roles carry it and the two post-facing ones do not, which
+ * is the server's own map. The question is asked per building because a warden
+ * publishes where his grant names and nowhere else.
+ */
+export function publishesAnnouncements(user: User, buildingId: number): boolean {
+  return may(user, Permission.publishAnnouncements, buildingId)
+}
+
+/** The dormitories this account may publish into. Empty hides the screen. */
+export function announcementBuildingsOf(user: User): number[] {
+  return buildingsWith(user, Permission.publishAnnouncements)
+}
+
+/**
+ * FR-09 and §3.4.2. Whether «every dormitory» may be chosen as the addressee.
+ *
+ * A null building is an audience and not a missing field, and it belongs to the
+ * administrator alone — a warden permitted to leave the field empty would be
+ * addressing buildings his grant does not name. The option is therefore absent
+ * from the form rather than present and refused; the server refuses it anyway,
+ * with 403, for a client that sends it regardless.
+ */
+export function addressesEveryBuilding(user: User): boolean {
+  return isSystemAdministrator(user)
+}
+
+/**
+ * FR-40. Who reads the queue of a dormitory: the warden, the manager and the
+ * administrator, the last of whom reads every one of them.
+ */
+export function readsMaintenanceQueue(user: User, buildingId: number): boolean {
+  return may(user, Permission.viewMaintenanceRequests, buildingId)
+}
+
+/**
+ * FR-37 and FR-38. Who moves a request: the warden and the manager of this
+ * dormitory. Not the duty officer, who decides on guest requests and has
+ * nothing to do with these; not the administrator, who reads every queue and
+ * promises no dates; and never the resident who filed it, whose two buttons are
+ * `confirm` and `reopen` and are a matter of identity rather than of capability.
+ */
+export function triagesMaintenance(user: User, buildingId: number): boolean {
+  return may(user, Permission.triageMaintenanceRequests, buildingId)
+}
+
+/**
+ * FR-36. The dormitories this account may file a maintenance request for.
+ *
+ * Decided the same way as the guest form's, and deliberately wrong in the same
+ * visible direction: the server asks the residency register — «a resident
+ * without an active residency record cannot file», answered with 403 — and the
+ * mirror cannot read that register, so it asks whether the account holds the
+ * resident role here. A resident whose departure date has passed still sees the
+ * screen and is refused with the reason on it; a member of staff who lives
+ * nowhere sees no tab.
+ */
+export function maintenanceBuildingsOf(user: User): number[] {
+  const ids = (user.roles ?? [])
+    .filter((grant) => grant.role === RoleCode.student)
+    .map((grant) => grant.building_id)
+    .filter((id): id is number => id !== null)
+  return [...new Set(ids)]
 }
