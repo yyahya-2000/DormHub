@@ -6,10 +6,8 @@ import { useQueryClient } from '@tanstack/react-query'
  *
  * The counterpart of `housing-cache.ts`, and it names a different set of paths
  * because a write here moves different answers. Marking a message read changes
- * the list and the unread counter in the title bar. Giving or withdrawing a
- * consent changes the history, the list of texts still pending, the settings
- * screen — an optional category stops when the consent it rests on is
- * withdrawn, whatever its switch says — and `GET /auth/me`, which is where
+ * the list it was read in. Giving or withdrawing a consent changes the history,
+ * the list of texts still pending, and `GET /auth/me`, which is where
  * `consent_required` comes from.
  *
  * `/auth/me` is on the list, and that is the one difference from the housing
@@ -18,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
  * `consent_required`, and a withdrawal that left it stale would hide the offer
  * to consent again.
  */
-const ACCOUNT_PATHS = ['/notifications', '/notification-settings', '/consents', '/auth/me']
+const ACCOUNT_PATHS = ['/notifications', '/consents', '/auth/me']
 
 export function useAccountRefresh(): () => void {
   const queryClient = useQueryClient()

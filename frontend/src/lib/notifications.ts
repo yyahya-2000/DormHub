@@ -13,11 +13,9 @@ import { NotificationCategory } from '@/api/generated/model'
  * it is missing or of another type. A message whose body is not what this
  * build expects is rendered short rather than rendered wrong.
  *
- * The classes named here are the ones the API sends today. `account_issued`
- * is deliberately absent: it carries the one-time credential of FR-42, goes out
- * by mail only and leaves no row behind, so the personal account never has one
- * to draw. The settings screen still lists the category, because the switch is
- * a question about delivery and not about this table.
+ * The classes named here are the ones the API sends today. The one-time
+ * credential of FR-42 is deliberately absent: it goes out by mail only and
+ * leaves no row behind, so the personal account never has one to draw.
  */
 
 /** The message classes this build knows how to put into words. */

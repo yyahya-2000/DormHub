@@ -10,8 +10,18 @@ import {
   textOf,
 } from '@/lib/notifications'
 
+/** A message put into words: one line to head the row, and the rest of it. */
+export type NotificationText = {
+  headline: string
+  details: string[]
+}
+
 /**
- * One message of the personal account, put into a sentence.
+ * One message of the personal account, put into sentences.
+ *
+ * The two halves are handed back separately because the list shows them at
+ * different moments: the headline is what a folded row carries, the details
+ * are what unfolding it reveals.
  *
  * The API sends a class name and an open body, never a rendered string, and
  * that is the right division: a message composed on the server would arrive in
@@ -34,7 +44,7 @@ import {
  * strikes: the server's own word, in the server's own language, is a worse
  * screen than the translated one and a better screen than nothing.
  */
-export function NotificationMessage({ notification }: { notification: Notification }) {
+export function useNotificationMessage(notification: Notification): NotificationText {
   const { t } = useTranslation()
   const formatters = useFormatters()
 
@@ -166,14 +176,5 @@ export function NotificationMessage({ notification }: { notification: Notificati
     }
   }
 
-  return (
-    <div className="grid min-w-0 gap-1">
-      <p className="m-0 font-medium break-words text-ink">{headline}</p>
-      {details.map((line) => (
-        <p key={line} className="m-0 break-words text-steel">
-          {line}
-        </p>
-      ))}
-    </div>
-  )
+  return { headline, details }
 }
