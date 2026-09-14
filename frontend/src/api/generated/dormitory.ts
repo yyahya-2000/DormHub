@@ -8,9 +8,7 @@
  * (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
  * resident card). The third follows revision 2 of the role model: FR-41 (staff
  * appointment inside a building) and FR-42 (issuing a resident account). The
- * fourth is the personal account: FR-34 (notifications and the switches that
- * decide which of them arrive) and FR-35 (consent to the processing of
- * personal data).
+ * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
  * built around: FR-16 (the request), FR-17 (the duty officer's decision),
@@ -82,21 +80,6 @@
  * residents holding one place over overlapping periods is refused by a partial
  * unique index in the database, and the refusal carries the conflicting record.
  *
- * Consent to the processing of personal data has routes of its own, and that
- * is the requirement rather than an arrangement. Art. 9 part 1 of Federal Law
- * No. 152-FZ has consent «executed separately from other documents», so no
- * other request in this document carries a field that records one: not the
- * sign-in, not the first password, not the account form. `POST /consents`
- * names exactly one document and one text revision, and it is the only way a
- * consent record comes into being.
- *
- * A guest's consent is taken at the security post and not at submission. The
- * request is filed by the resident while the personal data belong to the
- * guest, so `POST /checkpoint/guest-consent` is a route of its own and
- * `POST /checkpoint/check-in` answers 409 until it has been called. The record
- * names the guest request as its subject and carries no account, because a
- * guest has none.
- *
  * The visiting regime is a property of each dormitory and never a constant.
  * `visiting_from`, `visiting_to` and `guest_lead_time_hours` sit
  * on the BUILDING row, and they are what the submission validator, the card at
@@ -164,8 +147,6 @@ import type {
   CompleteMaintenanceWork200,
   ConfirmMaintenanceWork200,
   ConfirmationWindowClosedError,
-  ConsentInput,
-  ConsentRequiredError,
   CorrectGuestVisit201,
   CorrectGuestVisitBody,
   CreateBed201,
@@ -181,9 +162,7 @@ import type {
   Error,
   FileMaintenanceRequest201,
   ForbiddenResponse,
-  GiveConsent201,
   GuestApprovalInput,
-  GuestConsentInput,
   GuestRejectionInput,
   GuestRequestInput,
   IllegalTransitionError,
@@ -201,7 +180,6 @@ import type {
   ListBuildingUsersParams,
   ListBuildings200,
   ListCitizenships200,
-  ListConsents200,
   ListGuestRequests200,
   ListGuestRequestsParams,
   ListLostFound200,
@@ -211,7 +189,6 @@ import type {
   ListMyMaintenanceRequestsParams,
   ListNotifications200,
   ListNotificationsParams,
-  ListPendingConsents200,
   ListVisitRegister200,
   ListVisitRegisterParams,
   Login200,
@@ -233,7 +210,6 @@ import type {
   PublishAnnouncement201,
   PublishLostFoundItem201,
   QuotaError,
-  RecordGuestConsent201,
   ReferLostFoundClaim200,
   RejectGuestRequest200,
   RejectMaintenanceRequest200,
@@ -263,8 +239,7 @@ import type {
   ValidationFailedResponse,
   VerifyGuestAtCheckpoint200,
   VerifyGuestAtCheckpoint404,
-  VisitAlreadyClosedError,
-  WithdrawConsent200
+  VisitAlreadyClosedError
 } from './model';
 
 import { apiFetch } from '../http-client';
@@ -1056,9 +1031,12 @@ export const getListBuildingRoomsUrl = (building: number,
  *
  * The administrator, and the warden, manager or duty officer **of this
  * building**. A resident does not read the occupancy of the whole dormitory.
- * The list is paged, and both filters are applied by the database rather
- * than by the client: `free=1` narrows it to the rooms holding a place
- * somebody could move into today, and `q` matches part of a room number.
+ * The list is paged, and all three filters are applied by the database
+ * rather than by the client: `free=1` narrows it to the rooms holding a
+ * place somebody could move into today, `q` matches part of a room
+ * number, and `floor` keeps one storey. `floor` is what the floor card of
+ * FR-02 reads a storey with — without it the card had to page through the
+ * whole register and discard everything on the other floors.
  * @summary The register of rooms and places of one dormitory
  */
 export const listBuildingRooms = async (building: number,
@@ -3573,521 +3551,6 @@ export const useMarkNotificationRead = <TError = UnauthenticatedResponse | NotFo
       return useMutation(getMarkNotificationReadMutationOptions(options), queryClient);
     }
 
-export type listPendingConsentsResponse200 = {
-  data: ListPendingConsents200
-  status: 200
-}
-
-export type listPendingConsentsResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type listPendingConsentsResponseSuccess = (listPendingConsentsResponse200) & {
-  headers: Headers;
-};
-export type listPendingConsentsResponseError = (listPendingConsentsResponse401) & {
-  headers: Headers;
-};
-
-export type listPendingConsentsResponse = (listPendingConsentsResponseSuccess | listPendingConsentsResponseError)
-
-export const getListPendingConsentsUrl = () => {
-
-
-
-
-  return `/consents/pending`
-}
-
-/**
- * FR-35, first criterion, the «displayed» half. The wording comes with it:
- * art. 9 part 1 of Federal Law No. 152-FZ requires consent to be informed,
- * and a title with a checkbox beside it is not that.
- *
- * A consent given against a text that has since been superseded counts as
- * pending — the person agreed to a wording, and the wording has changed.
- * Nothing in the code says so; it falls out of comparing the revision on
- * the record with the revision in force.
- *
- * The list is empty when nothing is outstanding. Nothing blocks the
- * session while it is not: consent has to be free (art. 9 part 1), and a
- * system that locked the account until it was given would be extracting
- * consent rather than receiving it.
- * @summary The consent texts this person has not yet decided on
- */
-export const listPendingConsents = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listPendingConsentsResponse> => {
-
-  return apiFetch<listPendingConsentsResponse>(getListPendingConsentsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListPendingConsentsQueryKey = () => {
-    return [
-    `/consents/pending`
-    ] as const;
-    }
-
-
-export const getListPendingConsentsQueryOptions = <TData = Awaited<ReturnType<typeof listPendingConsents>>, TError = UnauthenticatedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListPendingConsentsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPendingConsents>>> = ({ signal }) => listPendingConsents({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListPendingConsentsQueryResult = NonNullable<Awaited<ReturnType<typeof listPendingConsents>>>
-export type ListPendingConsentsQueryError = UnauthenticatedResponse
-
-
-export function useListPendingConsents<TData = Awaited<ReturnType<typeof listPendingConsents>>, TError = UnauthenticatedResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listPendingConsents>>,
-          TError,
-          Awaited<ReturnType<typeof listPendingConsents>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPendingConsents<TData = Awaited<ReturnType<typeof listPendingConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listPendingConsents>>,
-          TError,
-          Awaited<ReturnType<typeof listPendingConsents>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPendingConsents<TData = Awaited<ReturnType<typeof listPendingConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary The consent texts this person has not yet decided on
- */
-
-export function useListPendingConsents<TData = Awaited<ReturnType<typeof listPendingConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPendingConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListPendingConsentsQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export type listConsentsResponse200 = {
-  data: ListConsents200
-  status: 200
-}
-
-export type listConsentsResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type listConsentsResponseSuccess = (listConsentsResponse200) & {
-  headers: Headers;
-};
-export type listConsentsResponseError = (listConsentsResponse401) & {
-  headers: Headers;
-};
-
-export type listConsentsResponse = (listConsentsResponseSuccess | listConsentsResponseError)
-
-export const getListConsentsUrl = () => {
-
-
-
-
-  return `/consents`
-}
-
-/**
- * Given, withdrawn, given again — newest first, withdrawn rows included.
- * They are the history of a legal act and are never pruned: art. 9 part 3
- * of Federal Law No. 152-FZ puts on the operator the burden of proving
- * that consent was given, and the proof has to survive the withdrawal.
- * @summary This person's history of consent
- */
-export const listConsents = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listConsentsResponse> => {
-
-  return apiFetch<listConsentsResponse>(getListConsentsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListConsentsQueryKey = () => {
-    return [
-    `/consents`
-    ] as const;
-    }
-
-
-export const getListConsentsQueryOptions = <TData = Awaited<ReturnType<typeof listConsents>>, TError = UnauthenticatedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListConsentsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listConsents>>> = ({ signal }) => listConsents({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListConsentsQueryResult = NonNullable<Awaited<ReturnType<typeof listConsents>>>
-export type ListConsentsQueryError = UnauthenticatedResponse
-
-
-export function useListConsents<TData = Awaited<ReturnType<typeof listConsents>>, TError = UnauthenticatedResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listConsents>>,
-          TError,
-          Awaited<ReturnType<typeof listConsents>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListConsents<TData = Awaited<ReturnType<typeof listConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listConsents>>,
-          TError,
-          Awaited<ReturnType<typeof listConsents>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListConsents<TData = Awaited<ReturnType<typeof listConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary This person's history of consent
- */
-
-export function useListConsents<TData = Awaited<ReturnType<typeof listConsents>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListConsentsQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export type giveConsentResponse201 = {
-  data: GiveConsent201
-  status: 201
-}
-
-export type giveConsentResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type giveConsentResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type giveConsentResponseSuccess = (giveConsentResponse201) & {
-  headers: Headers;
-};
-export type giveConsentResponseError = (giveConsentResponse401 | giveConsentResponse422) & {
-  headers: Headers;
-};
-
-export type giveConsentResponse = (giveConsentResponseSuccess | giveConsentResponseError)
-
-export const getGiveConsentUrl = () => {
-
-
-
-
-  return `/consents`
-}
-
-/**
- * FR-35, first criterion, the «recorded» half, and the second criterion in
- * its entirety.
- *
- * One document per request, named explicitly. There is no «accept all»,
- * no array, and no other route in this document that records a consent as
- * a by-product — art. 9 part 1 has consent «executed separately from other
- * documents», which is a rule about the act and not about the layout of a
- * page.
- *
- * `revision` is the text the person actually read, and it is checked
- * against the revision in force. A client that held the screen open while
- * the operator published a new text is sent back for the current one: a
- * record naming a wording this person never saw would prove nothing.
- *
- * Consenting again to the revision already in force answers with the
- * standing record rather than writing a second one. Consenting to a new
- * revision supersedes the old, which is marked withdrawn on the same day.
- *
- * `guest_personal_data` is refused here: the guest's consent is taken at
- * the security post, in person, before the entry is recorded.
- * @summary Give consent to one document
- */
-export const giveConsent = async (consentInput: ConsentInput, options?: Parameters<typeof apiFetch>[1]): Promise<giveConsentResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<giveConsentResponse>(getGiveConsentUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(consentInput)
-  }
-);}
-
-
-
-
-
-export const getGiveConsentMutationKey = () => ['giveConsent'] as const;
-
-export const getGiveConsentMutationOptions = <TError = UnauthenticatedResponse | ValidationFailedResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof giveConsent>>, TError,GiveConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof giveConsent>>, TError,GiveConsentMutationVariables, TContext> => {
-
-const mutationKey = getGiveConsentMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof giveConsent>>, GiveConsentMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  giveConsent(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type GiveConsentMutationResult = NonNullable<Awaited<ReturnType<typeof giveConsent>>>
-    export type GiveConsentMutationBody = ConsentInput
-    export type GiveConsentMutationError = UnauthenticatedResponse | ValidationFailedResponse
-    export type GiveConsentMutationVariables = {data: ConsentInput}
-
-    /**
- * @summary Give consent to one document
- */
-export const useGiveConsent = <TError = UnauthenticatedResponse | ValidationFailedResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof giveConsent>>, TError,GiveConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof giveConsent>>,
-        TError,
-        GiveConsentMutationVariables,
-        TContext
-      > => {
-      return useMutation(getGiveConsentMutationOptions(options), queryClient);
-    }
-
-export type withdrawConsentResponse200 = {
-  data: WithdrawConsent200
-  status: 200
-}
-
-export type withdrawConsentResponse204 = {
-  data: void
-  status: 204
-}
-
-export type withdrawConsentResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type withdrawConsentResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type withdrawConsentResponseSuccess = (withdrawConsentResponse200 | withdrawConsentResponse204) & {
-  headers: Headers;
-};
-export type withdrawConsentResponseError = (withdrawConsentResponse401 | withdrawConsentResponse404) & {
-  headers: Headers;
-};
-
-export type withdrawConsentResponse = (withdrawConsentResponseSuccess | withdrawConsentResponseError)
-
-export const getWithdrawConsentUrl = (document: 'resident_personal_data' | 'guest_personal_data',) => {
-
-
-
-
-  return `/consents/${document}/withdrawal`
-}
-
-/**
- * FR-35, fourth criterion: withdrawal, from the personal account.
- *
- * **What the withdrawal does.** It writes `revoked_at` and stops the
- * processing that rested on consent. It does not delete the record — art.
- * 9 part 3 puts on the operator the burden of proving consent, and the
- * proof is needed for the period before the withdrawal as much as after.
- *
- * **What it does not do.** For a resident it closes nothing: the housing
- * register, the resident card and the notifications the dormitory is
- * obliged to send all rest on the accommodation contract (art. 6 part 1
- * cl. 5) and continue. What stops are the categories of FR-34 that have
- * no other ground than the consent. The person becomes pending
- * again and is offered the text at the next sign-in; they are not locked
- * out, because consent that could only be withheld at the price of the
- * service would not be free.
- *
- * For a **guest** the same withdrawal is absolute, and that asymmetry is
- * the point of §2.7.1: a guest is not a party to the accommodation
- * contract, so consent is the sole ground there is and without it no entry
- * can be recorded at the post.
- *
- * A withdrawal when nothing stands is 204 rather than 404: the caller
- * asked for a state, and the state is what they get.
- * @summary Withdraw consent to one document
- */
-export const withdrawConsent = async (document: 'resident_personal_data' | 'guest_personal_data', options?: Parameters<typeof apiFetch>[1]): Promise<withdrawConsentResponse> => {
-
-  return apiFetch<withdrawConsentResponse>(getWithdrawConsentUrl(document),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getWithdrawConsentMutationKey = () => ['withdrawConsent'] as const;
-
-export const getWithdrawConsentMutationOptions = <TError = UnauthenticatedResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawConsent>>, TError,WithdrawConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof withdrawConsent>>, TError,WithdrawConsentMutationVariables, TContext> => {
-
-const mutationKey = getWithdrawConsentMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof withdrawConsent>>, WithdrawConsentMutationVariables> = (props) => {
-          const {document} = props ?? {};
-
-          return  withdrawConsent(document,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type WithdrawConsentMutationResult = NonNullable<Awaited<ReturnType<typeof withdrawConsent>>>
-
-    export type WithdrawConsentMutationError = UnauthenticatedResponse | NotFoundResponse
-    export type WithdrawConsentMutationVariables = {document: 'resident_personal_data' | 'guest_personal_data'}
-
-    /**
- * @summary Withdraw consent to one document
- */
-export const useWithdrawConsent = <TError = UnauthenticatedResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawConsent>>, TError,WithdrawConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof withdrawConsent>>,
-        TError,
-        WithdrawConsentMutationVariables,
-        TContext
-      > => {
-      return useMutation(getWithdrawConsentMutationOptions(options), queryClient);
-    }
-
 export type listAuditLogsResponse200 = {
   data: ListAuditLogs200
   status: 200
@@ -4438,9 +3901,9 @@ export const getPublishAnnouncementUrl = () => {
  * which case the announcement does not expire. An expiry already past is
  * 422: it would produce a notice in no feed and in no archive.
  *
- * The fan-out to the audience is queued and passes through the
- * notification gate, so a resident who has withdrawn the consent the
- * `announcement` category rests on receives nothing (FR-34, FR-35).
+ * The fan-out to the audience is queued: the warden's request returns
+ * once the announcement is written, and the messages of FR-34 are put on
+ * the queue by a job behind it.
  * @summary Publish an announcement
  */
 export const publishAnnouncement = async (announcementInput: AnnouncementInput, options?: Parameters<typeof apiFetch>[1]): Promise<publishAnnouncementResponse> => {
@@ -5587,138 +5050,6 @@ export const useVerifyGuestAtCheckpoint = <TError = UnauthenticatedResponse | Fo
       return useMutation(getVerifyGuestAtCheckpointMutationOptions(options), queryClient);
     }
 
-export type recordGuestConsentResponse201 = {
-  data: RecordGuestConsent201
-  status: 201
-}
-
-export type recordGuestConsentResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type recordGuestConsentResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type recordGuestConsentResponse422 = {
-  data: ValidationFailedResponse
-  status: 422
-}
-
-export type recordGuestConsentResponseSuccess = (recordGuestConsentResponse201) & {
-  headers: Headers;
-};
-export type recordGuestConsentResponseError = (recordGuestConsentResponse401 | recordGuestConsentResponse403 | recordGuestConsentResponse422) & {
-  headers: Headers;
-};
-
-export type recordGuestConsentResponse = (recordGuestConsentResponseSuccess | recordGuestConsentResponseError)
-
-export const getRecordGuestConsentUrl = () => {
-
-
-
-
-  return `/checkpoint/guest-consent`
-}
-
-/**
- * FR-35, first criterion, guest half, and §2.7.1's whole argument.
- *
- * The request was filed by the resident while the personal data belong to
- * the guest, so consent under art. 9 part 1 of Federal Law No. 152-FZ
- * cannot be given «on the guest's behalf» at submission. It is taken from
- * the guest, in person, at the post, **before** the entry is recorded —
- * and `POST /checkpoint/check-in` answers 409 until it is.
- *
- * A route of its own, because art. 9 part 1 has consent «executed
- * separately from other documents»: there is no consent field on the
- * check-in body, exactly as there is none on the sign-in form.
- *
- * The record names the guest request as its subject and carries no
- * account — a guest has none. `revision` is the text the guest was shown
- * and is checked against the repository.
- * @summary Record the guest's consent, at the desk
- */
-export const recordGuestConsent = async (guestConsentInput: GuestConsentInput, options?: Parameters<typeof apiFetch>[1]): Promise<recordGuestConsentResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<recordGuestConsentResponse>(getRecordGuestConsentUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(guestConsentInput)
-  }
-);}
-
-
-
-
-
-export const getRecordGuestConsentMutationKey = () => ['recordGuestConsent'] as const;
-
-export const getRecordGuestConsentMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordGuestConsent>>, TError,RecordGuestConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof recordGuestConsent>>, TError,RecordGuestConsentMutationVariables, TContext> => {
-
-const mutationKey = getRecordGuestConsentMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordGuestConsent>>, RecordGuestConsentMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  recordGuestConsent(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RecordGuestConsentMutationResult = NonNullable<Awaited<ReturnType<typeof recordGuestConsent>>>
-    export type RecordGuestConsentMutationBody = GuestConsentInput
-    export type RecordGuestConsentMutationError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse
-    export type RecordGuestConsentMutationVariables = {data: GuestConsentInput}
-
-    /**
- * @summary Record the guest's consent, at the desk
- */
-export const useRecordGuestConsent = <TError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordGuestConsent>>, TError,RecordGuestConsentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof recordGuestConsent>>,
-        TError,
-        RecordGuestConsentMutationVariables,
-        TContext
-      > => {
-      return useMutation(getRecordGuestConsentMutationOptions(options), queryClient);
-    }
-
 export type checkInGuestResponse201 = {
   data: CheckInGuest201
   status: 201
@@ -5734,11 +5065,6 @@ export type checkInGuestResponse403 = {
   status: 403
 }
 
-export type checkInGuestResponse409 = {
-  data: ConsentRequiredError
-  status: 409
-}
-
 export type checkInGuestResponse422 = {
   data: EntryNotPermittedError
   status: 422
@@ -5747,7 +5073,7 @@ export type checkInGuestResponse422 = {
 export type checkInGuestResponseSuccess = (checkInGuestResponse201) & {
   headers: Headers;
 };
-export type checkInGuestResponseError = (checkInGuestResponse401 | checkInGuestResponse403 | checkInGuestResponse409 | checkInGuestResponse422) & {
+export type checkInGuestResponseError = (checkInGuestResponse401 | checkInGuestResponse403 | checkInGuestResponse422) & {
   headers: Headers;
 };
 
@@ -5817,7 +5143,7 @@ return apiFetch<checkInGuestResponse>(getCheckInGuestUrl(),
 
 export const getCheckInGuestMutationKey = () => ['checkInGuest'] as const;
 
-export const getCheckInGuestMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | ConsentRequiredError | EntryNotPermittedError,
+export const getCheckInGuestMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | EntryNotPermittedError,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkInGuest>>, TError,CheckInGuestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof checkInGuest>>, TError,CheckInGuestMutationVariables, TContext> => {
 
@@ -5846,13 +5172,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CheckInGuestMutationResult = NonNullable<Awaited<ReturnType<typeof checkInGuest>>>
     export type CheckInGuestMutationBody = CheckInInput
-    export type CheckInGuestMutationError = UnauthenticatedResponse | ForbiddenResponse | ConsentRequiredError | EntryNotPermittedError
+    export type CheckInGuestMutationError = UnauthenticatedResponse | ForbiddenResponse | EntryNotPermittedError
     export type CheckInGuestMutationVariables = {data: CheckInInput}
 
     /**
  * @summary Record a guest's entry
  */
-export const useCheckInGuest = <TError = UnauthenticatedResponse | ForbiddenResponse | ConsentRequiredError | EntryNotPermittedError,
+export const useCheckInGuest = <TError = UnauthenticatedResponse | ForbiddenResponse | EntryNotPermittedError,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkInGuest>>, TError,CheckInGuestMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof checkInGuest>>,

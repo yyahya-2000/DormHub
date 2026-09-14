@@ -8,9 +8,7 @@
  * (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
  * resident card). The third follows revision 2 of the role model: FR-41 (staff
  * appointment inside a building) and FR-42 (issuing a resident account). The
- * fourth is the personal account: FR-34 (notifications and the switches that
- * decide which of them arrive) and FR-35 (consent to the processing of
- * personal data).
+ * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
  * built around: FR-16 (the request), FR-17 (the duty officer's decision),
@@ -82,21 +80,6 @@
  * residents holding one place over overlapping periods is refused by a partial
  * unique index in the database, and the refusal carries the conflicting record.
  *
- * Consent to the processing of personal data has routes of its own, and that
- * is the requirement rather than an arrangement. Art. 9 part 1 of Federal Law
- * No. 152-FZ has consent «executed separately from other documents», so no
- * other request in this document carries a field that records one: not the
- * sign-in, not the first password, not the account form. `POST /consents`
- * names exactly one document and one text revision, and it is the only way a
- * consent record comes into being.
- *
- * A guest's consent is taken at the security post and not at submission. The
- * request is filed by the resident while the personal data belong to the
- * guest, so `POST /checkpoint/guest-consent` is a route of its own and
- * `POST /checkpoint/check-in` answers 409 until it has been called. The record
- * names the guest request as its subject and carries no account, because a
- * guest has none.
- *
  * The visiting regime is a property of each dormitory and never a constant.
  * `visiting_from`, `visiting_to` and `guest_lead_time_hours` sit
  * on the BUILDING row, and they are what the submission validator, the card at
@@ -161,8 +144,6 @@ export interface CheckpointCard {
   status: GuestRequestStatus;
   status_label: string;
   visit?: CheckpointCardVisit;
-  /** Whether the guest has consented at this post. False means the entry cannot yet be written (§2.7.1). */
-  consent_on_record?: boolean;
   admission: CheckpointCardAdmission;
   checked_at: string;
 }
