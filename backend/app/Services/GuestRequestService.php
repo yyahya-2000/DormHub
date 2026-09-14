@@ -7,12 +7,10 @@ namespace App\Services;
 use App\Enums\AuditAction;
 use App\Enums\AuditResult;
 use App\Enums\ConsentDocument;
-use App\Enums\GuestDocumentType;
 use App\Enums\GuestRequestStatus;
 use App\Enums\NotificationCategory;
 use App\Exceptions\GuestQuotaExceededException;
 use App\Exceptions\IllegalTransitionException;
-use App\Exceptions\ResponsibleOfficerMarkRequiredException;
 use App\Guests\AccessCodeGenerator;
 use App\Guests\GuestQuota;
 use App\Guests\GuestRequestStateMachine;
@@ -29,7 +27,7 @@ use Illuminate\Support\Facades\DB;
  * built to that specification.
  *
  * *Purpose*: owns the guest-request lifecycle — submission, the duty officer's
- * decision, cancellation, expiry (FR-16, FR-17, FR-20, FR-23).
+ * decision, cancellation, expiry (FR-16, FR-17, FR-20).
  * *Subordinates*: `GuestRequestStateMachine`, `AccessCodeGenerator`,
  * `GuestQuota`, `AuditRecorder`. *Dependencies*: the domain layer only; no
  * controller, no HTTP object, no status code (§3.3.1).
@@ -44,9 +42,8 @@ use Illuminate\Support\Facades\DB;
  * §3.9.6 counts a refusal among the events the log must hold, and a refusal
  * written inside the transaction it refuses is carried away by the rollback —
  * leaving a log that records every approval and no quota breach, which is the
- * one shape of log that is worse than none. So the quota check and the
- * migration mark are asserted inside, and their exceptions are caught outside
- * and recorded there.
+ * one shape of log that is worse than none. So the quota is asserted inside,
+ * and its exception is caught outside and recorded there.
  */
 final readonly class GuestRequestService
 {
@@ -63,48 +60,30 @@ final readonly class GuestRequestService
      * The validity of the interval — the lead time, the visiting window, the
      * date — is settled by `StoreGuestRequestRequest` before this method is
      * reached, because it is a property of the input and 422 is the answer
-     * (§3.3.3). What is settled here is what the input cannot say: the foreign
-     * flag of FR-23 is derived from the document type rather than accepted
-     * from the client, since a client that could set it could also clear it.
+     * (§3.3.3). What is left here is the row and the record that it was made.
      */
     public function submit(
         User $student,
         Building $building,
         string $guestFullName,
-        GuestDocumentType $documentType,
-        string $documentNumber,
         CarbonInterface $visitDate,
         string $plannedFrom,
         string $plannedTo,
-        ?string $purpose = null,
         ?string $ipAddress = null,
     ): GuestRequest {
         return DB::transaction(function () use (
-            $student, $building, $guestFullName, $documentType, $documentNumber,
-            $visitDate, $plannedFrom, $plannedTo, $purpose, $ipAddress
+            $student, $building, $guestFullName, $visitDate, $plannedFrom, $plannedTo, $ipAddress
         ): GuestRequest {
             $request = GuestRequest::query()->create([
                 'student_id' => $student->getKey(),
                 'building_id' => $building->getKey(),
                 'guest_full_name' => $guestFullName,
-                'guest_doc_type' => $documentType,
-                'guest_doc_number' => $documentNumber,
-                'is_foreign_document' => $documentType->isForeign(),
-                'purpose' => $purpose,
                 'visit_date' => $visitDate->toDateString(),
                 'planned_from' => $plannedFrom,
                 'planned_to' => $plannedTo,
                 'status' => GuestRequestStatus::PendingReview,
             ]);
 
-            /*
-             * The payload carries no document number, masked or otherwise. The
-             * audit log is retained a year (§3.9.6) and the request's personal
-             * data is depersonalised on a shorter schedule (§3.9.4); copying
-             * the number into the log would quietly defeat the shorter of the
-             * two periods. What the log needs is that a request was made, by
-             * whom, for whom and when.
-             */
             $this->audit->record(
                 action: AuditAction::GuestRequestSubmitted,
                 actor: $student,
@@ -112,8 +91,6 @@ final readonly class GuestRequestService
                 payload: [
                     'building_id' => $building->getKey(),
                     'guest_full_name' => $guestFullName,
-                    'guest_doc_type' => $documentType->value,
-                    'is_foreign_document' => $documentType->isForeign(),
                     'visit_date' => $visitDate->toDateString(),
                     'planned_from' => $plannedFrom,
                     'planned_to' => $plannedTo,
@@ -130,17 +107,15 @@ final readonly class GuestRequestService
      *
      * @throws IllegalTransitionException the request is no longer pending (409)
      * @throws GuestQuotaExceededException the day is full (422)
-     * @throws ResponsibleOfficerMarkRequiredException FR-23, an overnight interval on a foreign document (422)
      */
     public function approve(
         User $officer,
         GuestRequest $request,
         ?string $comment = null,
-        ?string $responsibleOfficerMark = null,
         ?string $ipAddress = null,
     ): GuestRequest {
         try {
-            $approved = DB::transaction(function () use ($officer, $request, $comment, $responsibleOfficerMark, $ipAddress): GuestRequest {
+            $approved = DB::transaction(function () use ($officer, $request, $comment, $ipAddress): GuestRequest {
                 // §3.3.4: «load the request under SELECT … FOR UPDATE». Two
                 // officers with the same queue open reach this line together
                 // and the second one waits, which is what makes the transition
@@ -148,8 +123,6 @@ final readonly class GuestRequestService
                 $locked = GuestRequest::query()->lockForUpdate()->findOrFail($request->getKey());
 
                 $this->states->assert($locked->status, GuestRequestStatus::Approved);
-
-                $this->assertMigrationMark($locked, $responsibleOfficerMark);
 
                 $this->quota->assertRoomFor($locked);
 
@@ -160,13 +133,6 @@ final readonly class GuestRequestService
                 $locked->decided_by = $officer->getKey();
                 $locked->decided_at = now();
                 $locked->decision_comment = $comment;
-
-                if ($responsibleOfficerMark !== null && $responsibleOfficerMark !== '') {
-                    $locked->responsible_officer_mark = $responsibleOfficerMark;
-                    $locked->responsible_officer_mark_by = $officer->getKey();
-                    $locked->responsible_officer_mark_at = now();
-                }
-
                 $locked->save();
 
                 $this->audit->record(
@@ -178,14 +144,13 @@ final readonly class GuestRequestService
                         'student_id' => $locked->student_id,
                         'visit_date' => $locked->visit_date?->toDateString(),
                         'comment' => $comment,
-                        'responsible_officer_mark' => $responsibleOfficerMark,
                     ],
                     ipAddress: $ipAddress,
                 );
 
                 return $locked;
             });
-        } catch (GuestQuotaExceededException|ResponsibleOfficerMarkRequiredException $refusal) {
+        } catch (GuestQuotaExceededException $refusal) {
             $this->recordDecisionRefusal($officer, $request, $refusal, $ipAddress);
 
             throw $refusal;
@@ -363,61 +328,10 @@ final readonly class GuestRequestService
         });
     }
 
-    /**
-     * NFR-06 and §3.9.6: the document number in full, and the record that
-     * somebody asked for it.
-     *
-     * Reading is an event here for the same reason reading a resident card is
-     * (FR-33): the value is personal data, the mask exists precisely so that
-     * it is not on every screen, and an unmasking that left no trace would
-     * make the mask a matter of convenience rather than of protection.
-     */
-    public function revealDocumentNumber(User $viewer, GuestRequest $request, ?string $ipAddress = null): string
-    {
-        $this->audit->record(
-            action: AuditAction::GuestDocumentNumberViewed,
-            actor: $viewer,
-            subject: $request,
-            payload: [
-                'building_id' => $request->building_id,
-                'guest_doc_type' => $request->guest_doc_type?->value,
-            ],
-            ipAddress: $ipAddress,
-        );
-
-        return (string) $request->guest_doc_number;
-    }
-
-    /**
-     * FR-23, second criterion.
-     *
-     * Both halves have to be true before the mark is demanded. A foreign
-     * document on a visit that ends the same evening creates no place of stay
-     * (§2.7.4, art. 2 cl. 4 of Federal Law No. 109-FZ), and demanding a
-     * migration mark for it would be the requirement overstated — which is the
-     * error §2.7.4 opens by warning against. An overnight interval on a
-     * Russian internal passport raises no migration question at all.
-     */
-    private function assertMigrationMark(GuestRequest $request, ?string $mark): void
-    {
-        if (! $request->is_foreign_document || ! $request->spansMoreThanOneDay()) {
-            return;
-        }
-
-        if ($mark !== null && trim($mark) !== '') {
-            return;
-        }
-
-        throw new ResponsibleOfficerMarkRequiredException(
-            requestId: (int) $request->getKey(),
-            documentType: $request->guest_doc_type?->value ?? 'unknown',
-        );
-    }
-
     private function recordDecisionRefusal(
         User $officer,
         GuestRequest $request,
-        GuestQuotaExceededException|ResponsibleOfficerMarkRequiredException $refusal,
+        GuestQuotaExceededException $refusal,
         ?string $ipAddress,
     ): void {
         $this->audit->record(
