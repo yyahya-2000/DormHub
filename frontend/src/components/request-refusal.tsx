@@ -11,6 +11,7 @@ import {
   asEntryNotPermitted,
   asIllegalTransition,
   asMandatoryCategory,
+  asNoAcceptedClaim,
   asOfficerMarkRequired,
   asQuotaSpent,
   asResidencyConflict,
@@ -43,8 +44,35 @@ import { cn } from '@/lib/utils'
  * which machine refused. The screen that made the call can, and does: a
  * maintenance screen passes `maintenance` and the code is translated from that
  * namespace. Nothing is decided by this; it chooses a noun.
+ *
+ * `lostFound` is the third, and it is the one that needs two namespaces rather
+ * than one: the refused move may be a transition of an entry — published,
+ * claimed, resolved — or of a claim against it, and the two enumerations share
+ * a schema and no values. The code is looked for in both, in that order, and
+ * falls through to the server's own word when it is in neither.
  */
-export type StatusVocabulary = 'guest' | 'maintenance'
+export type StatusVocabulary = 'guest' | 'maintenance' | 'lostFound'
+
+/**
+ * The code of a refused transition, read in the vocabulary of the screen that
+ * made the call. Never a decision: it chooses which namespace the word is
+ * looked up in, and the server has already refused.
+ */
+function transitionWord(
+  vocabulary: StatusVocabulary,
+  status: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (vocabulary === 'maintenance') {
+    return t(`maintenanceStatus.${status}`, { defaultValue: status })
+  }
+  if (vocabulary === 'lostFound') {
+    return t(`lostFoundStatus.${status}`, {
+      defaultValue: t(`lostFoundClaimStatus.${status}`, { defaultValue: status }),
+    })
+  }
+  return t(`guestStatus.${status}`, { defaultValue: status })
+}
 
 export function RequestRefusal({
   error,
@@ -70,6 +98,7 @@ export function RequestRefusal({
   const transition = asIllegalTransition(error)
   const windowClosed = asConfirmationWindowClosed(error)
   const visitClosed = asVisitAlreadyClosed(error)
+  const noAcceptedClaim = asNoAcceptedClaim(error)
   const fields = fieldMessages(error)
 
   let title = t('refusal.title')
@@ -237,14 +266,31 @@ export function RequestRefusal({
         ) : null}
       </>
     )
+  } else if (noAcceptedClaim !== null) {
+    /*
+     * FR-26, first criterion. Read before the illegal transition for the same
+     * reason the confirmation window is: the move itself is admissible, and
+     * what is missing is somebody to hand the object to.
+     */
+    title = t('lostFound.noAcceptedTitle')
+    body = (
+      <>
+        <p className="m-0">{t('lostFound.noAcceptedBody')}</p>
+        {noAcceptedClaim.outstanding_claims !== undefined ? (
+          <p className="mt-2 mb-0">
+            {t('lostFound.noAcceptedOutstanding', {
+              count: noAcceptedClaim.outstanding_claims,
+            })}
+          </p>
+        ) : null}
+      </>
+    )
   } else if (transition !== null) {
     title = t('guestQueue.transitionTitle')
     body = (
       <p className="m-0">
         {t('guestQueue.transitionBody', {
-          status: t(`${vocabulary === 'maintenance' ? 'maintenanceStatus' : 'guestStatus'}.${transition.status}`, {
-            defaultValue: transition.status ?? '',
-          }),
+          status: transitionWord(vocabulary, transition.status ?? '', t),
         })}
       </p>
     )

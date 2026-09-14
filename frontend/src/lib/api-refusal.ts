@@ -6,6 +6,7 @@ import type {
   EntryNotPermittedError,
   IllegalTransitionError,
   MandatoryCategory,
+  NoAcceptedClaimError,
   OfficerMarkRequiredError,
   QuotaError,
   ResidencyConflict,
@@ -183,6 +184,29 @@ export function asConfirmationWindowClosed(
   }
   return typeof body.confirmation_window_days === 'number'
     ? (body as unknown as ConfirmationWindowClosedError)
+    : null
+}
+
+/**
+ * FR-26's «only», and the one refusal of the lost-and-found module a
+ * transition table cannot express: the entry is `claimed`, `claimed →
+ * resolved` is a move the table admits — correctly, because that is the move
+ * FR-26 is about — and what is missing is a row in another table. No claim on
+ * the entry has been accepted, so there is nobody the object went to.
+ *
+ * It shares 409 with the illegal transition and is told apart by its shape: a
+ * count of claims still waiting, and no `attempted_status`. Read before the
+ * transition where both are, because it is the more specific answer and the
+ * only one that says how many people are still owed one.
+ */
+export function asNoAcceptedClaim(error: unknown): NoAcceptedClaimError | null {
+  const body = bodyOf(error)
+  if (body === null || statusOf(error) !== 409) {
+    return null
+  }
+  return typeof body.outstanding_claims === 'number' ||
+    typeof body.lost_found_item_id === 'number'
+    ? (body as unknown as NoAcceptedClaimError)
     : null
 }
 
