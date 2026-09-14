@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Consent;
 
 use App\Enums\AuditAction;
+use App\Enums\Citizenship;
 use App\Enums\ConsentDocument;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
@@ -220,20 +221,23 @@ final class ConsentTest extends TestCase
         $this->postJson("/api/v1/buildings/{$this->building->id}/residents", [
             'full_name' => 'Zinaida Ryzhova',
             'email' => 'incoming@example.test',
+            'phone' => '+79001112233',
+            'citizenship' => Citizenship::Russia->value,
             'consent' => true,
             'personal_data_consent' => true,
         ])->assertStatus(201);
 
         $this->assertDatabaseCount('consent_records', 0);
 
-        // Setting the first password: the same.
+        // Changing a password: the same.
+        Sanctum::actingAs($this->resident);
+
         $this->postJson('/api/v1/auth/password', [
-            'email' => 'incoming@example.test',
-            'token' => 'not-a-token',
-            'password' => 'would-be-nice',
-            'password_confirmation' => 'would-be-nice',
+            'current_password' => 'a-password-of-my-own',
+            'password' => 'a-different-password',
+            'password_confirmation' => 'a-different-password',
             'consent' => true,
-        ])->assertStatus(422);
+        ])->assertStatus(204);
 
         $this->assertDatabaseCount('consent_records', 0);
 

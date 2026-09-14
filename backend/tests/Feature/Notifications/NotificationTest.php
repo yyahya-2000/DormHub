@@ -16,7 +16,6 @@ use App\Notifications\EventNotification;
 use App\Notifications\GuestRequestDecided;
 use App\Notifications\GuestVisitOverdue;
 use App\Notifications\MaintenanceRequestStatusChanged;
-use App\Notifications\ResidentAccountIssued;
 use App\Services\Notifier;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -171,9 +170,9 @@ final class NotificationTest extends TestCase
             'categories' => [NotificationCategory::MaintenanceStatus->value => false],
         ])
             ->assertOk()
-            ->assertJsonPath('data.3.category', NotificationCategory::MaintenanceStatus->value)
-            ->assertJsonPath('data.3.enabled', false)
-            ->assertJsonPath('data.3.mandatory', false);
+            ->assertJsonPath('data.2.category', NotificationCategory::MaintenanceStatus->value)
+            ->assertJsonPath('data.2.enabled', false)
+            ->assertJsonPath('data.2.mandatory', false);
 
         Notification::fake();
 
@@ -311,28 +310,6 @@ final class NotificationTest extends TestCase
                 fn (string $line): bool => str_contains($line, 'Agafya Sviridova')
             ),
         );
-    }
-
-    /**
-     * The one-time credential of FR-42 is the exception, and deliberately so:
-     * it is the only notification that leaves no copy in the table, because
-     * the copy would be a secret sitting in a database after its single use.
-     */
-    public function test_the_one_time_credential_leaves_no_copy_in_the_in_app_list(): void
-    {
-        $issued = new ResidentAccountIssued(
-            token: 'a-one-time-code',
-            buildingName: $this->building->name,
-            expiresInMinutes: 60,
-        );
-
-        $this->assertSame(['mail'], $issued->via($this->resident));
-        $this->assertSame(NotificationCategory::AccountIssued, $issued->category());
-        $this->assertTrue($issued->category()->isMandatory());
-
-        $this->resident->notify($issued);
-
-        $this->assertSame(0, $this->resident->notifications()->count());
     }
 
     public function test_the_settings_list_every_category_with_its_mandatory_flag(): void

@@ -6,9 +6,9 @@ namespace Tests\Feature\Housing;
 
 use App\Enums\AuditAction;
 use App\Enums\BedStatus;
+use App\Enums\Citizenship;
 use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
-use App\Enums\StudyStatus;
 use App\Models\Bed;
 use App\Models\Building;
 use App\Models\Residency;
@@ -101,7 +101,7 @@ final class ResidentCardTest extends TestCase
             ->assertJsonPath('data.id', $this->residentOfFirst->id);
     }
 
-    public function test_the_own_card_returns_name_study_status_citizenship_contact_current_bed_history_and_open_obligations(): void
+    public function test_the_own_card_returns_name_citizenship_contact_current_bed_history_and_open_obligations(): void
     {
         Sanctum::actingAs($this->residentOfFirst);
 
@@ -110,8 +110,8 @@ final class ResidentCardTest extends TestCase
             ->assertJsonStructure([
                 'data' => [
                     'full_name',
-                    'study_status',
                     'citizenship',
+                    'citizenship_label',
                     'contact' => ['email', 'phone'],
                     'current_bed' => ['building_name', 'room_number', 'bed_label', 'moved_in_at'],
                     'residency_history',
@@ -120,8 +120,8 @@ final class ResidentCardTest extends TestCase
             ])
             ->json('data');
 
-        $this->assertSame(StudyStatus::Enrolled->value, $card['study_status']);
         $this->assertSame('RU', $card['citizenship']);
+        $this->assertSame('Russia', $card['citizenship_label']);
         $this->assertSame($this->residentOfFirst->email, $card['contact']['email']);
         $this->assertSame('Block 1', $card['current_bed']['building_name']);
         $this->assertSame('305', $card['current_bed']['room_number']);
@@ -307,7 +307,6 @@ final class ResidentCardTest extends TestCase
             'bed_id' => $bed->getKey(),
             'contract_number' => sprintf('DOG-%s-%s', $roomNumber, $bedLabel),
             'moved_in_at' => CarbonImmutable::now()->subMonths(4)->toDateString(),
-            'moved_in_ground' => 'Accommodation order',
             'status' => ResidencyStatus::Active,
         ]);
     }
@@ -318,8 +317,7 @@ final class ResidentCardTest extends TestCase
             ->withRole(RoleCode::Resident, $building)
             ->create([
                 'email' => $email,
-                'study_status' => StudyStatus::Enrolled,
-                'citizenship' => 'RU',
+                'citizenship' => Citizenship::Russia,
             ]);
     }
 
