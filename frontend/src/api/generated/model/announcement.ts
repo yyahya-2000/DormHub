@@ -19,10 +19,11 @@
  * is in this increment too and has no route at all: it is a quarter-hourly
  * sweep that reads the deadline frozen on each visit.
  *
- * The sixth is the announcement module of increment 2: FR-09 (publication),
- * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
- * an important announcement, is Could priority and outside the MVP — there is
- * no route for it and no column behind one.
+ * The sixth is the announcement module of increment 2: FR-09 (publication) and
+ * FR-11 (the feed). FR-10, pinning an important announcement, is Could
+ * priority and outside the MVP — there is no route for it and no column behind
+ * one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+ * MVP together with the table it rested on.
  *
  * The seventh is the maintenance module of increment 3: FR-36 (the resident
  * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -106,10 +107,11 @@
  * sector's.
  *
  * An announcement is addressed by `building_id`, and a null one means every
- * dormitory. That single column is the audience: the feed filters on it, the
- * fan-out reads it, and there is no recipient list that could disagree with
- * it. Leaving it out is the administrator's right and nobody else's — a warden
- * who could would be addressing dormitories his grant does not name. The
+ * dormitory. That single column is the whole of the audience: the feed filters
+ * on it, the fan-out reads it, and there is no second field and no recipient
+ * list that could disagree with it. The administrator names a dormitory or
+ * leaves the field out; leaving it out is his right and nobody else's — a
+ * warden who could would be addressing dormitories his grant does not name. The
  * validity period is the same kind of thing: `expires_at` is a comparison the
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
@@ -123,7 +125,6 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { AnnouncementCategory } from './announcementCategory';
 
 export interface Announcement {
   id: number;
@@ -140,22 +141,18 @@ export interface Announcement {
   /** @maxLength 255 */
   title: string;
   body: string;
-  category: AnnouncementCategory;
-  category_label?: string;
-  /** FR-12 turns on this flag: the reader is asked to acknowledge, the notification cannot be switched off, and the readers report is meaningful. */
-  is_mandatory: boolean;
+  /**
+     * The heading as it was stored. Often one of `AnnouncementCategory`'s, but any label up to 32 characters is admissible.
+     * @maxLength 32
+     */
+  category: string;
+  /** What to show beside the notice: the catalogue's name when the value is one of its five, and the value itself when the author typed their own. */
+  category_label: string;
   published_at: string;
   /**
      * The validity period of FR-09. Null means the announcement does not expire; otherwise this is the moment it leaves the feed for the archive, by comparison and not by anybody moving it.
      * @nullable
      */
   expires_at?: string | null;
-  /**
-     * When this reader acknowledged it, null if they have not.
-     * @nullable
-     */
-  acknowledged_at?: string | null;
-  /** FR-11's mark, computed per reader by a left join against the acknowledgements. */
-  is_unread: boolean;
   created_at?: string;
 }

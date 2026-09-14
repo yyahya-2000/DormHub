@@ -19,10 +19,11 @@
  * is in this increment too and has no route at all: it is a quarter-hourly
  * sweep that reads the deadline frozen on each visit.
  *
- * The sixth is the announcement module of increment 2: FR-09 (publication),
- * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
- * an important announcement, is Could priority and outside the MVP — there is
- * no route for it and no column behind one.
+ * The sixth is the announcement module of increment 2: FR-09 (publication) and
+ * FR-11 (the feed). FR-10, pinning an important announcement, is Could
+ * priority and outside the MVP — there is no route for it and no column behind
+ * one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+ * MVP together with the table it rested on.
  *
  * The seventh is the maintenance module of increment 3: FR-36 (the resident
  * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -106,10 +107,11 @@
  * sector's.
  *
  * An announcement is addressed by `building_id`, and a null one means every
- * dormitory. That single column is the audience: the feed filters on it, the
- * fan-out reads it, and there is no recipient list that could disagree with
- * it. Leaving it out is the administrator's right and nobody else's — a warden
- * who could would be addressing dormitories his grant does not name. The
+ * dormitory. That single column is the whole of the audience: the feed filters
+ * on it, the fan-out reads it, and there is no second field and no recipient
+ * list that could disagree with it. The administrator names a dormitory or
+ * leaves the field out; leaving it out is his right and nobody else's — a
+ * warden who could would be addressing dormitories his grant does not name. The
  * validity period is the same kind of thing: `expires_at` is a comparison the
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
@@ -126,16 +128,12 @@
 
 export * from './acceptLostFoundClaim200';
 export * from './acceptMaintenanceRequest200';
-export * from './acknowledgeAnnouncement200';
 export * from './announcement';
 export * from './announcementCategory';
 export * from './announcementInput';
-export * from './announcementReader';
-export * from './announcementReaders';
 export * from './appointStaff200';
 export * from './appointStaff201';
 export * from './approveGuestRequest200';
-export * from './archiveBuilding200';
 export * from './auditAction';
 export * from './auditEntry';
 export * from './auditEntryPayload';
@@ -187,18 +185,12 @@ export * from './deletionBlockedBlockedBy';
 export * from './entryNotPermittedError';
 export * from './entryNotPermittedErrorReasonCode';
 export * from './error';
-export * from './exportVisitRegister200One';
-export * from './exportVisitRegister200OneMeta';
-export * from './exportVisitRegister200OneMetaColumns';
-export * from './exportVisitRegisterFormat';
-export * from './exportVisitRegisterParams';
 export * from './fileMaintenanceRequest201';
 export * from './floor';
 export * from './forbiddenResponse';
 export * from './giveConsent201';
 export * from './guestApprovalInput';
 export * from './guestConsentInput';
-export * from './guestDocumentType';
 export * from './guestRejectionInput';
 export * from './guestRequest';
 export * from './guestRequestInput';
@@ -212,6 +204,8 @@ export * from './issuedAccount';
 export * from './issuedAccountBuilding';
 export * from './issuedToken';
 export * from './issueResidentAccount201';
+export * from './listAnnouncementCategories200';
+export * from './listAnnouncementCategories200DataItem';
 export * from './listAnnouncements200';
 export * from './listAnnouncementsParams';
 export * from './listAuditLogs200';
@@ -235,14 +229,12 @@ export * from './listMyMaintenanceRequests200';
 export * from './listMyMaintenanceRequestsParams';
 export * from './listMyMaintenanceRequestsScope';
 export * from './listNotifications200';
-export * from './listNotificationSettings200';
 export * from './listNotificationsParams';
 export * from './listPendingConsents200';
 export * from './listVisitRegister200';
 export * from './listVisitRegister200Meta';
 export * from './listVisitRegisterParams';
 export * from './login200';
-export * from './loginLocked';
 export * from './loginRequest';
 export * from './lostFoundAcceptanceInput';
 export * from './lostFoundClaim';
@@ -262,7 +254,6 @@ export * from './maintenanceCommentInput';
 export * from './maintenanceLocation';
 export * from './maintenanceQueuePage';
 export * from './maintenanceQueuePageMeta';
-export * from './maintenanceQueuePageMetaColumns';
 export * from './maintenanceQueueRow';
 export * from './maintenanceRejectionInput';
 export * from './maintenanceRequest';
@@ -270,17 +261,13 @@ export * from './maintenanceRequestInput';
 export * from './maintenanceRequestStatus';
 export * from './maintenanceUrgency';
 export * from './maintenanceWorkLogEntry';
-export * from './mandatoryCategory';
 export * from './markNotificationRead200';
 export * from './noAcceptedClaimError';
 export * from './notFoundResponse';
 export * from './notification';
 export * from './notificationCategory';
 export * from './notificationPayload';
-export * from './notificationSetting';
-export * from './notificationSettingsInput';
-export * from './officerMarkRequiredError';
-export * from './officerMarkRequiredErrorRequiredField';
+export * from './notificationsMeta';
 export * from './pageParameter';
 export * from './paginationLink';
 export * from './paginationLinks';
@@ -303,23 +290,16 @@ export * from './residencyStatus';
 export * from './residentAccountInput';
 export * from './residentCard';
 export * from './residentCardContact';
-export * from './residentCardOpenObligationsItem';
-export * from './residentCardOpenObligationsItemKind';
+export * from './residentCardOverdueGuestVisitsItem';
 export * from './resolveLostFoundItem200';
 export * from './roleCode';
 export * from './roleGrant';
 export * from './room';
 export * from './roomInput';
-export * from './roomStatus';
 export * from './roomType';
-export * from './setPasswordInput';
-export * from './showAnnouncementReaders200';
 export * from './showBuilding200';
-export * from './showGuestDocumentNumber200';
-export * from './showGuestDocumentNumber200Data';
 export * from './showGuestRequest200';
 export * from './showLostFoundItem200';
-export * from './showMaintenanceQueueFormat';
 export * from './showMaintenanceQueueParams';
 export * from './showMaintenanceQueueScope';
 export * from './showMaintenanceRequest200';
@@ -327,7 +307,6 @@ export * from './showResidentCard200';
 export * from './showRoom200';
 export * from './staffAppointmentInput';
 export * from './startMaintenanceWork200';
-export * from './studyStatus';
 export * from './submitGuestRequest201';
 export * from './terminateResidency200';
 export * from './terminateResidencyBody';
@@ -335,7 +314,6 @@ export * from './throttleReason';
 export * from './tooManyRequests';
 export * from './unauthenticatedResponse';
 export * from './updateBuilding200';
-export * from './updateNotificationSettings200';
 export * from './updateRoom200';
 export * from './user';
 export * from './userStatus';

@@ -19,10 +19,11 @@
  * is in this increment too and has no route at all: it is a quarter-hourly
  * sweep that reads the deadline frozen on each visit.
  *
- * The sixth is the announcement module of increment 2: FR-09 (publication),
- * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
- * an important announcement, is Could priority and outside the MVP — there is
- * no route for it and no column behind one.
+ * The sixth is the announcement module of increment 2: FR-09 (publication) and
+ * FR-11 (the feed). FR-10, pinning an important announcement, is Could
+ * priority and outside the MVP — there is no route for it and no column behind
+ * one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+ * MVP together with the table it rested on.
  *
  * The seventh is the maintenance module of increment 3: FR-36 (the resident
  * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -106,10 +107,11 @@
  * sector's.
  *
  * An announcement is addressed by `building_id`, and a null one means every
- * dormitory. That single column is the audience: the feed filters on it, the
- * fan-out reads it, and there is no recipient list that could disagree with
- * it. Leaving it out is the administrator's right and nobody else's — a warden
- * who could would be addressing dormitories his grant does not name. The
+ * dormitory. That single column is the whole of the audience: the feed filters
+ * on it, the fan-out reads it, and there is no second field and no recipient
+ * list that could disagree with it. The administrator names a dormitory or
+ * leaves the field out; leaving it out is his right and nobody else's — a
+ * warden who could would be addressing dormitories his grant does not name. The
  * validity period is the same kind of thing: `expires_at` is a comparison the
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
@@ -145,7 +147,6 @@ import type {
 import type {
   AcceptLostFoundClaim200,
   AcceptMaintenanceRequest200,
-  AcknowledgeAnnouncement200,
   AnnouncementInput,
   AppointStaff200,
   AppointStaff201,
@@ -188,6 +189,7 @@ import type {
   IllegalTransitionError,
   InvalidCredentials,
   IssueResidentAccount201,
+  ListAnnouncementCategories200,
   ListAnnouncements200,
   ListAnnouncementsParams,
   ListAuditLogs200,
@@ -207,7 +209,6 @@ import type {
   ListLostFoundParams,
   ListMyMaintenanceRequests200,
   ListMyMaintenanceRequestsParams,
-  ListNotificationSettings200,
   ListNotifications200,
   ListNotificationsParams,
   ListPendingConsents200,
@@ -226,11 +227,9 @@ import type {
   MaintenanceQueuePage,
   MaintenanceRejectionInput,
   MaintenanceRequestInput,
-  MandatoryCategory,
   MarkNotificationRead200,
   NoAcceptedClaimError,
   NotFoundResponse,
-  NotificationSettingsInput,
   PublishAnnouncement201,
   PublishLostFoundItem201,
   QuotaError,
@@ -244,7 +243,6 @@ import type {
   ResidentAccountInput,
   ResolveLostFoundItem200,
   RoomInput,
-  ShowAnnouncementReaders200,
   ShowBuilding200,
   ShowGuestRequest200,
   ShowLostFoundItem200,
@@ -260,7 +258,6 @@ import type {
   TooManyRequests,
   UnauthenticatedResponse,
   UpdateBuilding200,
-  UpdateNotificationSettings200,
   UpdateRoom200,
   ValidationError,
   ValidationFailedResponse,
@@ -2135,11 +2132,11 @@ export const getShowResidentCardUrl = (resident: number,) => {
  * and not merely in the interface.
  *
  * The card carries the name, the citizenship, the contact, the current
- * place, the whole residency history and the open obligations.
- * `current_bed` and `open_obligations` are read as «resident today», not as
- * «no departure date written»: somebody leaving at the end of December has
- * a current place until the end of December. Reading the card is recorded in
- * the audit log, because it carries personal data.
+ * place, the whole residency history and the guest visits of this person
+ * that ran past their deadline. `current_bed` is read as «resident today»,
+ * not as «no departure date written»: somebody leaving at the end of
+ * December has a current place until the end of December. Reading the card
+ * is recorded in the audit log, because it carries personal data.
  * @summary The resident card
  */
 export const showResidentCard = async (resident: number, options?: Parameters<typeof apiFetch>[1]): Promise<showResidentCardResponse> => {
@@ -3364,12 +3361,22 @@ export const getListNotificationsUrl = (params?: ListNotificationsParams,) => {
  * `payload` is the body of the message and its shape depends on the
  * category — each notification decides its own in `toDatabase()`. `category`
  * is lifted out of it into a field of its own, because that is what a
- * client groups and filters by.
+ * client draws the icon and the caption from.
  *
  * The field is called `payload` and not `data` on purpose: a resource
  * whose top-level object carried a key called `data` would be taken by the
  * framework to have wrapped itself, and this one route would answer
  * without the `data` envelope every other route in this document has.
+ *
+ * **There is no filter.** The route used to take an `unread` parameter and
+ * it is gone with the settings screen: a person with a dozen messages does
+ * not sort them, they read down the page. Unread is a colour on the row,
+ * and `POST /notifications/{notification}/read` clears it.
+ *
+ * `meta.unread_count` is the number behind the badge in the menu, which is
+ * drawn on every screen and is a different question from «what is on this
+ * page». It is one count over the rows this listing already scopes itself
+ * to, answered in the same request.
  * @summary The messages of the personal account
  */
 export const listNotifications = async (params?: ListNotificationsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listNotificationsResponse> => {
@@ -3564,262 +3571,6 @@ export const useMarkNotificationRead = <TError = UnauthenticatedResponse | NotFo
         TContext
       > => {
       return useMutation(getMarkNotificationReadMutationOptions(options), queryClient);
-    }
-
-export type listNotificationSettingsResponse200 = {
-  data: ListNotificationSettings200
-  status: 200
-}
-
-export type listNotificationSettingsResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type listNotificationSettingsResponseSuccess = (listNotificationSettingsResponse200) & {
-  headers: Headers;
-};
-export type listNotificationSettingsResponseError = (listNotificationSettingsResponse401) & {
-  headers: Headers;
-};
-
-export type listNotificationSettingsResponse = (listNotificationSettingsResponseSuccess | listNotificationSettingsResponseError)
-
-export const getListNotificationSettingsUrl = () => {
-
-
-
-
-  return `/notification-settings`
-}
-
-/**
- * FR-34, second criterion. Every category is listed, including the ones
- * nobody has decided about — those come back `enabled: true`, which is the
- * default.
- *
- * `mandatory` says whether the switch may be moved at all. It is in the
- * answer rather than left to the client to keep a list of its own: which
- * categories are mandatory is a matter of the legal ground the message
- * rests on, the server decides it, and a client that duplicated the
- * decision would eventually draw a switch the server refuses to move.
- * @summary Which categories of notification reach this person
- */
-export const listNotificationSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listNotificationSettingsResponse> => {
-
-  return apiFetch<listNotificationSettingsResponse>(getListNotificationSettingsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListNotificationSettingsQueryKey = () => {
-    return [
-    `/notification-settings`
-    ] as const;
-    }
-
-
-export const getListNotificationSettingsQueryOptions = <TData = Awaited<ReturnType<typeof listNotificationSettings>>, TError = UnauthenticatedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListNotificationSettingsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotificationSettings>>> = ({ signal }) => listNotificationSettings({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListNotificationSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof listNotificationSettings>>>
-export type ListNotificationSettingsQueryError = UnauthenticatedResponse
-
-
-export function useListNotificationSettings<TData = Awaited<ReturnType<typeof listNotificationSettings>>, TError = UnauthenticatedResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listNotificationSettings>>,
-          TError,
-          Awaited<ReturnType<typeof listNotificationSettings>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListNotificationSettings<TData = Awaited<ReturnType<typeof listNotificationSettings>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listNotificationSettings>>,
-          TError,
-          Awaited<ReturnType<typeof listNotificationSettings>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListNotificationSettings<TData = Awaited<ReturnType<typeof listNotificationSettings>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary Which categories of notification reach this person
- */
-
-export function useListNotificationSettings<TData = Awaited<ReturnType<typeof listNotificationSettings>>, TError = UnauthenticatedResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotificationSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListNotificationSettingsQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export type updateNotificationSettingsResponse200 = {
-  data: UpdateNotificationSettings200
-  status: 200
-}
-
-export type updateNotificationSettingsResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type updateNotificationSettingsResponse422 = {
-  data: ValidationError | MandatoryCategory
-  status: 422
-}
-
-export type updateNotificationSettingsResponseSuccess = (updateNotificationSettingsResponse200) & {
-  headers: Headers;
-};
-export type updateNotificationSettingsResponseError = (updateNotificationSettingsResponse401 | updateNotificationSettingsResponse422) & {
-  headers: Headers;
-};
-
-export type updateNotificationSettingsResponse = (updateNotificationSettingsResponseSuccess | updateNotificationSettingsResponseError)
-
-export const getUpdateNotificationSettingsUrl = () => {
-
-
-
-
-  return `/notification-settings`
-}
-
-/**
- * FR-34, second criterion: «the user can disable non-mandatory
- * categories».
- *
- * The map may be partial — the screen sends what it changed, and a request
- * carrying one category must not switch the rest back on. The answer is
- * the whole state all the same, so the client redraws from one response
- * and cannot end up showing a switch the server did not accept.
- *
- * A mandatory category is refused with 422 rather than ignored. Ignoring
- * it would answer «saved» and go on sending, and the person would be left
- * believing they had switched something off.
- *
- * Turning a category on does not by itself guarantee delivery: the
- * categories that rest on consent stop when the consent of FR-35 is
- * withdrawn, whatever the switch says.
- * @summary Switch notification categories on or off
- */
-export const updateNotificationSettings = async (notificationSettingsInput: NotificationSettingsInput, options?: Parameters<typeof apiFetch>[1]): Promise<updateNotificationSettingsResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<updateNotificationSettingsResponse>(getUpdateNotificationSettingsUrl(),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(notificationSettingsInput)
-  }
-);}
-
-
-
-
-
-export const getUpdateNotificationSettingsMutationKey = () => ['updateNotificationSettings'] as const;
-
-export const getUpdateNotificationSettingsMutationOptions = <TError = UnauthenticatedResponse | ValidationError | MandatoryCategory,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNotificationSettings>>, TError,UpdateNotificationSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateNotificationSettings>>, TError,UpdateNotificationSettingsMutationVariables, TContext> => {
-
-const mutationKey = getUpdateNotificationSettingsMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateNotificationSettings>>, UpdateNotificationSettingsMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  updateNotificationSettings(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateNotificationSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateNotificationSettings>>>
-    export type UpdateNotificationSettingsMutationBody = NotificationSettingsInput
-    export type UpdateNotificationSettingsMutationError = UnauthenticatedResponse | ValidationError | MandatoryCategory
-    export type UpdateNotificationSettingsMutationVariables = {data: NotificationSettingsInput}
-
-    /**
- * @summary Switch notification categories on or off
- */
-export const useUpdateNotificationSettings = <TError = UnauthenticatedResponse | ValidationError | MandatoryCategory,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNotificationSettings>>, TError,UpdateNotificationSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateNotificationSettings>>,
-        TError,
-        UpdateNotificationSettingsMutationVariables,
-        TContext
-      > => {
-      return useMutation(getUpdateNotificationSettingsMutationOptions(options), queryClient);
     }
 
 export type listPendingConsentsResponse200 = {
@@ -4259,8 +4010,8 @@ export const getWithdrawConsentUrl = (document: 'resident_personal_data' | 'gues
  * **What it does not do.** For a resident it closes nothing: the housing
  * register, the resident card and the notifications the dormitory is
  * obliged to send all rest on the accommodation contract (art. 6 part 1
- * cl. 5) and continue. What stops is the optional half of FR-34's
- * categories, which have no other ground. The person becomes pending
+ * cl. 5) and continue. What stops are the categories of FR-34 that have
+ * no other ground than the consent. The person becomes pending
  * again and is offered the text at the next sign-in; they are not locked
  * out, because consent that could only be withheld at the price of the
  * service would not be free.
@@ -4520,7 +4271,7 @@ export const getListAnnouncementsUrl = (params?: ListAnnouncementsParams,) => {
 /**
  * FR-11. The announcements addressed to the dormitories this account is
  * attached to, plus those addressed to every dormitory, published and not
- * yet expired, newest first, with the unread marked.
+ * yet expired, newest first.
  *
  * **The route carries no building parameter, and that is the boundary.**
  * The audience is computed from the grants of the token, so there is no
@@ -4528,10 +4279,6 @@ export const getListAnnouncementsUrl = (params?: ListAnnouncementsParams,) => {
  * boundary of FR-07 is the absence of a parameter here rather than a check
  * somebody has to remember. FR-05 applies on top of it: a resident whose
  * departure date has passed stops seeing that dormitory's feed.
- *
- * `is_unread` is computed per reader by a left join against the
- * acknowledgements, so one resident acknowledging a notice does not mark
- * it read for the rest of the dormitory.
  *
  * `archived=true` returns the other side of the `expires_at` comparison —
  * the announcements that have left the feed. Nothing moves them there;
@@ -4669,25 +4416,31 @@ export const getPublishAnnouncementUrl = () => {
  * FR-09. The warden or the manager of the dormitory named, and the
  * administrator.
  *
- * **Omitting `building_id` addresses every dormitory, and it is the
- * administrator's alone.** A null building is an audience and not a
- * missing field (§3.4.2); a warden permitted to leave it out would be
- * addressing buildings his grant does not name, which is FR-07's boundary
- * crossed by an omission rather than by a leak. A warden who tries gets
- * 403.
+ * **`building_id` is the whole of the addressee: an identifier, or null
+ * for every dormitory.** There is no separate «all buildings» flag and
+ * there must not be one — two fields could disagree, and the
+ * disagreement would be a notice addressed to nobody. The administrator
+ * picks a dormitory by naming it or addresses all of them by leaving the
+ * field out; a null building is an audience and not a missing field
+ * (§3.4.2), and a warden permitted to leave it out would be addressing
+ * buildings his grant does not name. A warden who tries gets 403.
+ *
+ * `category` is a free label of at most 32 characters, trimmed. The
+ * client offers the catalogue of `GET /announcement-categories` first and
+ * lets the author type something else; the server stores what it is
+ * given.
  *
  * `published_at` is not accepted. Publication happens now — a settable
- * date would let a notice be back-dated, and FR-12's evidence is that the
- * resident was told on a day they can check.
+ * date would let a notice be back-dated, and the audit record of the
+ * publication would then carry a date the author chose.
  *
  * `expires_at` is the validity period of FR-09 and may be omitted, in
  * which case the announcement does not expire. An expiry already past is
  * 422: it would produce a notice in no feed and in no archive.
  *
- * The fan-out to the audience is queued. A resident who has switched the
- * routine announcement category off receives nothing; one who has
- * switched it off still receives an announcement marked
- * `is_mandatory`, because that category cannot be switched off (FR-34).
+ * The fan-out to the audience is queued and passes through the
+ * notification gate, so a resident who has withdrawn the consent the
+ * `announcement` category rests on receives nothing (FR-34, FR-35).
  * @summary Publish an announcement
  */
 export const publishAnnouncement = async (announcementInput: AnnouncementInput, options?: Parameters<typeof apiFetch>[1]): Promise<publishAnnouncementResponse> => {
@@ -4767,192 +4520,51 @@ export const usePublishAnnouncement = <TError = UnauthenticatedResponse | Forbid
       return useMutation(getPublishAnnouncementMutationOptions(options), queryClient);
     }
 
-export type acknowledgeAnnouncementResponse200 = {
-  data: AcknowledgeAnnouncement200
+export type listAnnouncementCategoriesResponse200 = {
+  data: ListAnnouncementCategories200
   status: 200
 }
 
-export type acknowledgeAnnouncementResponse401 = {
+export type listAnnouncementCategoriesResponse401 = {
   data: UnauthenticatedResponse
   status: 401
 }
 
-export type acknowledgeAnnouncementResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type acknowledgeAnnouncementResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type acknowledgeAnnouncementResponseSuccess = (acknowledgeAnnouncementResponse200) & {
+export type listAnnouncementCategoriesResponseSuccess = (listAnnouncementCategoriesResponse200) & {
   headers: Headers;
 };
-export type acknowledgeAnnouncementResponseError = (acknowledgeAnnouncementResponse401 | acknowledgeAnnouncementResponse403 | acknowledgeAnnouncementResponse404) & {
+export type listAnnouncementCategoriesResponseError = (listAnnouncementCategoriesResponse401) & {
   headers: Headers;
 };
 
-export type acknowledgeAnnouncementResponse = (acknowledgeAnnouncementResponseSuccess | acknowledgeAnnouncementResponseError)
+export type listAnnouncementCategoriesResponse = (listAnnouncementCategoriesResponseSuccess | listAnnouncementCategoriesResponseError)
 
-export const getAcknowledgeAnnouncementUrl = (announcement: number,) => {
-
-
+export const getListAnnouncementCategoriesUrl = () => {
 
 
-  return `/announcements/${announcement}/ack`
+
+
+  return `/announcement-categories`
 }
 
 /**
- * FR-12, first criterion: the fact and the time of the acknowledgement are
- * recorded, as a row carrying the reader and the moment.
+ * The headings the publishing form offers before it lets the author type
+ * one of their own, with the name to show beside each.
  *
- * **Idempotent, and 200 on the first call as on the twentieth.** A repeat
- * returns the acknowledgement already on record rather than writing a
- * second one — `UNIQUE (announcement_id, user_id)` in the database, not a
- * check in a service — and the moment stored stays the first reading. A
- * status that told the first call from a repeat would invite a client to
- * treat the repeat as an error, which is the opposite of what idempotence
- * is for.
+ * **A catalogue and not a closed list.** `announcements.category` is a
+ * free string of at most 32 characters and nothing validates against
+ * these five; they exist so that five wardens announcing a water shutoff
+ * agree on the heading without being forced to. `max_length` is the bound
+ * the form should enforce, and it is the width of the column.
  *
- * Only the audience may acknowledge: a row asserting that somebody read a
- * notice they could not see would be worse than no row. Any announcement
- * may be acknowledged, not only a mandatory one — the same row is what
- * clears the unread mark of FR-11.
- *
- * The announcement comes back carrying the mark, so a client that
- * acknowledges from the feed redraws one row rather than reloading.
- * @summary Acknowledge an announcement
+ * The shape is `GET /citizenships`'s, deliberately: both answer «what may
+ * this field hold», and a client that reads one should not have to learn
+ * a second shape for the other.
+ * @summary The catalogue of announcement categories
  */
-export const acknowledgeAnnouncement = async (announcement: number, options?: Parameters<typeof apiFetch>[1]): Promise<acknowledgeAnnouncementResponse> => {
+export const listAnnouncementCategories = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listAnnouncementCategoriesResponse> => {
 
-  return apiFetch<acknowledgeAnnouncementResponse>(getAcknowledgeAnnouncementUrl(announcement),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getAcknowledgeAnnouncementMutationKey = () => ['acknowledgeAnnouncement'] as const;
-
-export const getAcknowledgeAnnouncementMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext> => {
-
-const mutationKey = getAcknowledgeAnnouncementMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, AcknowledgeAnnouncementMutationVariables> = (props) => {
-          const {announcement} = props ?? {};
-
-          return  acknowledgeAnnouncement(announcement,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AcknowledgeAnnouncementMutationResult = NonNullable<Awaited<ReturnType<typeof acknowledgeAnnouncement>>>
-
-    export type AcknowledgeAnnouncementMutationError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
-    export type AcknowledgeAnnouncementMutationVariables = {announcement: number}
-
-    /**
- * @summary Acknowledge an announcement
- */
-export const useAcknowledgeAnnouncement = <TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAnnouncement>>, TError,AcknowledgeAnnouncementMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof acknowledgeAnnouncement>>,
-        TError,
-        AcknowledgeAnnouncementMutationVariables,
-        TContext
-      > => {
-      return useMutation(getAcknowledgeAnnouncementMutationOptions(options), queryClient);
-    }
-
-export type showAnnouncementReadersResponse200 = {
-  data: ShowAnnouncementReaders200
-  status: 200
-}
-
-export type showAnnouncementReadersResponse401 = {
-  data: UnauthenticatedResponse
-  status: 401
-}
-
-export type showAnnouncementReadersResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type showAnnouncementReadersResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type showAnnouncementReadersResponseSuccess = (showAnnouncementReadersResponse200) & {
-  headers: Headers;
-};
-export type showAnnouncementReadersResponseError = (showAnnouncementReadersResponse401 | showAnnouncementReadersResponse403 | showAnnouncementReadersResponse404) & {
-  headers: Headers;
-};
-
-export type showAnnouncementReadersResponse = (showAnnouncementReadersResponseSuccess | showAnnouncementReadersResponseError)
-
-export const getShowAnnouncementReadersUrl = (announcement: number,) => {
-
-
-
-
-  return `/announcements/${announcement}/readers`
-}
-
-/**
- * FR-12, second criterion: the acknowledged share and a named list of
- * those who have not read, **within the caller's own dormitory**.
- *
- * The route returns personal data assembled for a purpose — residents who
- * have not complied with an instruction — and it is guarded twice over.
- *
- * The caller must hold the publishing capability in the dormitory the
- * announcement names; a warden of another building gets 403 and the
- * refusal is in the audit log as `access.denied`. And for an announcement
- * addressed to every dormitory, where a building-scoped warden
- * legitimately may look, the names returned are narrowed to his own
- * building — `building_ids` in the response says which dormitories the
- * figures are about. The administrator, whose grant names none, sees them
- * all.
- *
- * The audience is the residents of those dormitories by the register, less
- * those the register says have moved out (FR-05): a warden is not handed
- * the name of somebody who failed to read a notice they could not see.
- *
- * Reading this list is itself an event of the audit log
- * (`announcement.readers_viewed`). The acknowledgements are not: the row
- * already carries who and when.
- * @summary Who has acknowledged an announcement, and who has not
- */
-export const showAnnouncementReaders = async (announcement: number, options?: Parameters<typeof apiFetch>[1]): Promise<showAnnouncementReadersResponse> => {
-
-  return apiFetch<showAnnouncementReadersResponse>(getShowAnnouncementReadersUrl(announcement),
+  return apiFetch<listAnnouncementCategoriesResponse>(getListAnnouncementCategoriesUrl(),
   {
     ...options,
     method: 'GET'
@@ -4965,69 +4577,69 @@ export const showAnnouncementReaders = async (announcement: number, options?: Pa
 
 
 
-export const getShowAnnouncementReadersQueryKey = (announcement: number,) => {
+export const getListAnnouncementCategoriesQueryKey = () => {
     return [
-    `/announcements/${announcement}/readers`
+    `/announcement-categories`
     ] as const;
     }
 
 
-export const getShowAnnouncementReadersQueryOptions = <TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getListAnnouncementCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listAnnouncementCategories>>, TError = UnauthenticatedResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getShowAnnouncementReadersQueryKey(announcement);
+  const queryKey =  queryOptions?.queryKey ?? getListAnnouncementCategoriesQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof showAnnouncementReaders>>> = ({ signal }) => showAnnouncementReaders(announcement, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAnnouncementCategories>>> = ({ signal }) => listAnnouncementCategories({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: announcement !== null && announcement !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type ShowAnnouncementReadersQueryResult = NonNullable<Awaited<ReturnType<typeof showAnnouncementReaders>>>
-export type ShowAnnouncementReadersQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse
+export type ListAnnouncementCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listAnnouncementCategories>>>
+export type ListAnnouncementCategoriesQueryError = UnauthenticatedResponse
 
 
-export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
- announcement: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>> & Pick<
+export function useListAnnouncementCategories<TData = Awaited<ReturnType<typeof listAnnouncementCategories>>, TError = UnauthenticatedResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof showAnnouncementReaders>>,
+          Awaited<ReturnType<typeof listAnnouncementCategories>>,
           TError,
-          Awaited<ReturnType<typeof showAnnouncementReaders>>
+          Awaited<ReturnType<typeof listAnnouncementCategories>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
- announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>> & Pick<
+export function useListAnnouncementCategories<TData = Awaited<ReturnType<typeof listAnnouncementCategories>>, TError = UnauthenticatedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof showAnnouncementReaders>>,
+          Awaited<ReturnType<typeof listAnnouncementCategories>>,
           TError,
-          Awaited<ReturnType<typeof showAnnouncementReaders>>
+          Awaited<ReturnType<typeof listAnnouncementCategories>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
- announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useListAnnouncementCategories<TData = Awaited<ReturnType<typeof listAnnouncementCategories>>, TError = UnauthenticatedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Who has acknowledged an announcement, and who has not
+ * @summary The catalogue of announcement categories
  */
 
-export function useShowAnnouncementReaders<TData = Awaited<ReturnType<typeof showAnnouncementReaders>>, TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse>(
- announcement: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof showAnnouncementReaders>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useListAnnouncementCategories<TData = Awaited<ReturnType<typeof listAnnouncementCategories>>, TError = UnauthenticatedResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAnnouncementCategories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getShowAnnouncementReadersQueryOptions(announcement,options)
+  const queryOptions = getListAnnouncementCategoriesQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

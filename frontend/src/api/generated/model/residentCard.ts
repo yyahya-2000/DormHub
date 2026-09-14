@@ -19,10 +19,11 @@
  * is in this increment too and has no route at all: it is a quarter-hourly
  * sweep that reads the deadline frozen on each visit.
  *
- * The sixth is the announcement module of increment 2: FR-09 (publication),
- * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
- * an important announcement, is Could priority and outside the MVP — there is
- * no route for it and no column behind one.
+ * The sixth is the announcement module of increment 2: FR-09 (publication) and
+ * FR-11 (the feed). FR-10, pinning an important announcement, is Could
+ * priority and outside the MVP — there is no route for it and no column behind
+ * one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+ * MVP together with the table it rested on.
  *
  * The seventh is the maintenance module of increment 3: FR-36 (the resident
  * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -106,10 +107,11 @@
  * sector's.
  *
  * An announcement is addressed by `building_id`, and a null one means every
- * dormitory. That single column is the audience: the feed filters on it, the
- * fan-out reads it, and there is no recipient list that could disagree with
- * it. Leaving it out is the administrator's right and nobody else's — a warden
- * who could would be addressing dormitories his grant does not name. The
+ * dormitory. That single column is the whole of the audience: the feed filters
+ * on it, the fan-out reads it, and there is no second field and no recipient
+ * list that could disagree with it. The administrator names a dormitory or
+ * leaves the field out; leaving it out is his right and nobody else's — a
+ * warden who could would be addressing dormitories his grant does not name. The
  * validity period is the same kind of thing: `expires_at` is a comparison the
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
@@ -127,7 +129,7 @@ import type { Citizenship } from './citizenship';
 import type { Placement } from './placement';
 import type { Residency } from './residency';
 import type { ResidentCardContact } from './residentCardContact';
-import type { ResidentCardOpenObligationsItem } from './residentCardOpenObligationsItem';
+import type { ResidentCardOverdueGuestVisitsItem } from './residentCardOverdueGuestVisitsItem';
 import type { RoleGrant } from './roleGrant';
 import type { UserStatus } from './userStatus';
 
@@ -150,10 +152,22 @@ export interface ResidentCard {
   /** Every residency, newest first. Nothing is removed on move-out. */
   residency_history: Residency[];
   /**
-     * What the resident still owes the dormitory. The MVP register knows one
-     * kind: an accommodation contract that has not been terminated.
-     * Obligations arising from the inventory handover belong to entities
-     * outside this iteration and are not represented here.
+     * FR-20, third criterion: «the fact is visible on the inviting
+     * resident's card». Every visit of a guest this person invited that
+     * was still open when its deadline passed.
+     *
+     * A key of its own rather than an entry among the residency rows: a
+     * residency is what the register says the person holds, and an overdue
+     * visit is something that happened — clause 2.2 of the rules of
+     * internal order makes the inviting resident answerable for the
+     * departure, and clause 3.4 of the Model Rules says the same. Folding
+     * the two together would have made «holds a place» and «has never been
+     * late» one statement.
+     *
+     * The entry stays after the guest has left: the mark is
+     * `reported_overdue_at`, so a visit since closed as `closed_late`
+     * still appears. The card records that a deadline was passed, not
+     * whether somebody is at this moment still inside.
      */
-  open_obligations: ResidentCardOpenObligationsItem[];
+  overdue_guest_visits: ResidentCardOverdueGuestVisitsItem[];
 }

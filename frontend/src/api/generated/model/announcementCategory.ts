@@ -19,10 +19,11 @@
  * is in this increment too and has no route at all: it is a quarter-hourly
  * sweep that reads the deadline frozen on each visit.
  *
- * The sixth is the announcement module of increment 2: FR-09 (publication),
- * FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
- * an important announcement, is Could priority and outside the MVP — there is
- * no route for it and no column behind one.
+ * The sixth is the announcement module of increment 2: FR-09 (publication) and
+ * FR-11 (the feed). FR-10, pinning an important announcement, is Could
+ * priority and outside the MVP — there is no route for it and no column behind
+ * one — and FR-12, the acknowledgement of reading, has been withdrawn from the
+ * MVP together with the table it rested on.
  *
  * The seventh is the maintenance module of increment 3: FR-36 (the resident
  * files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
@@ -106,10 +107,11 @@
  * sector's.
  *
  * An announcement is addressed by `building_id`, and a null one means every
- * dormitory. That single column is the audience: the feed filters on it, the
- * fan-out reads it, and there is no recipient list that could disagree with
- * it. Leaving it out is the administrator's right and nobody else's — a warden
- * who could would be addressing dormitories his grant does not name. The
+ * dormitory. That single column is the whole of the audience: the feed filters
+ * on it, the fan-out reads it, and there is no second field and no recipient
+ * list that could disagree with it. The administrator names a dormitory or
+ * leaves the field out; leaving it out is his right and nobody else's — a
+ * warden who could would be addressing dormitories his grant does not name. The
  * validity period is the same kind of thing: `expires_at` is a comparison the
  * feed makes and not a status anybody sets, so an announcement leaves the feed
  * for the archive by itself and no job has to run for it to happen.
@@ -125,14 +127,19 @@
  */
 
 /**
- * What an announcement is about (FR-09, FR-11), and the closed list the
- * feed's filter is drawn from.
+ * The five headings the publishing form suggests (FR-09, FR-11).
  *
- * The category is **not** the mandatory flag: the subject of a notice and
- * the obligation to read it vary independently, which is why the ER model
- * of §3.4.3 carries `category` and `is_mandatory` as two columns. A water
- * shutoff is `utilities` and is normally mandatory; a film evening is
- * `events` and never is.
+ * **A catalogue and not a constraint.** The column is a free string of at
+ * most 32 characters: any value outside this list is accepted and stored
+ * as it stands, so a client must render an unknown category rather than
+ * treat it as an error. The list is served with its display names at
+ * `GET /announcement-categories`.
+ *
+ * It was a closed enumeration with a CHECK constraint behind it. Closing
+ * the list kept two wardens from writing «Ремонт» and «ремонт» and getting
+ * two headings, and it also forced every subject the five did not foresee
+ * into `general` — a residual heading collecting half the feed is a filter
+ * that filters nothing.
  */
 export type AnnouncementCategory = typeof AnnouncementCategory[keyof typeof AnnouncementCategory];
 
