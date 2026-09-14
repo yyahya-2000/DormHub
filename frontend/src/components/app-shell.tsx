@@ -129,9 +129,27 @@ export function AppShell() {
     <div className="flex min-h-dvh flex-col">
       <header className="bg-prussian text-white">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate font-semibold tracking-wide">{t('app.fullName')}</p>
-            <p className="truncate text-white/70">{user.full_name}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            {/*
+              The emblem of the university the dormitory belongs to, taken from
+              the official brand book in its version for dark backgrounds — the
+              blue one loses its circle against `prussian` and leaves the
+              monogram floating. It is an attribution of the institution and not
+              a mark of the service: the system is coursework, so the emblem is
+              a plain image of fixed height, never a link to hse.ru, and the
+              name beside it stays the larger of the two.
+            */}
+            <img
+              src="/hse-emblem-on-dark.svg"
+              alt={t('app.logoAlt')}
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="truncate font-semibold tracking-wide">{t('app.fullName')}</p>
+              <p className="truncate text-white/70">{user.full_name}</p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <LanguageSwitch />
@@ -208,7 +226,10 @@ export function AppShell() {
       </main>
 
       <footer className="border-t border-rule px-4 py-4">
-        <p className="mx-auto w-full max-w-5xl text-steel">{t('app.fullName')}</p>
+        <div className="mx-auto w-full max-w-5xl text-steel">
+          <p>{t('app.fullName')}</p>
+          <p className="mt-1">{t('app.disclaimer')}</p>
+        </div>
       </footer>
     </div>
   )
