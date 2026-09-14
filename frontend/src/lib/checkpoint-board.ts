@@ -2,8 +2,7 @@
  * What this terminal has recorded during this shift.
  *
  * **Why the board is local, and what it therefore is not.** The contract gives
- * the security post four calls — verify, the guest's consent, the entry, the
- * exit — and no list. That is not an omission: §3.9.6 gives the visitor
+ * the security post three calls — verify, the entry, the exit — and no list. That is not an omission: §3.9.6 gives the visitor
  * register to the administrator and the warden, and a post able to read the
  * register of a dormitory over a period is a different instrument from one that
  * cannot. So the roll of guests still inside is assembled here, from the

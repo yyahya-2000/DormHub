@@ -12,13 +12,12 @@ import { buildingsWith, Permission } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { CheckpointBoard } from '@/components/checkpoint/checkpoint-board'
 import { CheckpointCardView } from '@/components/checkpoint/checkpoint-card'
-import { GuestConsentStep } from '@/components/checkpoint/guest-consent-step'
 import { FormField, selectClassName } from '@/components/form-field'
 import { Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { asConsentRequired, statusOf } from '@/lib/api-refusal'
+import { statusOf } from '@/lib/api-refusal'
 import {
   forgetEntry,
   loadBoard,
@@ -37,10 +36,7 @@ import { useFormatters } from '@/lib/format'
  * types it and presses Enter, which is one — press «Найти», press «Отметить
  * вход». Nothing is behind a tab, nothing needs a second screen, and a single
  * match selects itself so that no press is spent choosing between one option
- * and none. The consent of a first-time guest is a fourth act and is meant to
- * be: art. 9 part 1 of Federal Law No. 152-FZ has it «executed separately from
- * other documents», so folding it into the entry is precisely what may not be
- * done.
+ * and none.
  *
  * **Verification and the entry are separate steps.** `verify` reads and
  * renders; `check-in` writes. That is §3.5.1's design note and it is the reason
@@ -63,18 +59,6 @@ type Stage =
   | { kind: 'search' }
   | { kind: 'matches'; cards: CheckpointCard[] }
   | { kind: 'card'; card: CheckpointCard }
-  /*
-   * The override reason travels with the consent step. The officer types it
-   * once, before the refusal that sends them here, and an entry recorded after
-   * the consent has to carry the same sentence — asking for it twice would be
-   * asking the same question about the same decision.
-   */
-  | {
-      kind: 'consent'
-      card: CheckpointCard
-      revision: string
-      overrideReason: string | null
-    }
   | { kind: 'entered'; card: CheckpointCard; visit: GuestVisit }
   | { kind: 'left'; visit: GuestVisit }
 
@@ -184,30 +168,9 @@ export function CheckpointPage() {
           )
           setStage({ kind: 'entered', card, visit })
         },
-        onError: (error) => {
-          /*
-           * FR-35 at the point it bites. The 409 names the document and the
-           * revision, and the revision is what the consent step then records —
-           * the client never names one of its own. The entry is written on the
-           * call that follows the consent, which is the order §2.7.1 asks for:
-           * consent from the guest, in person, before the record.
-           */
-          const needed = asConsentRequired(error)
-          if (needed !== null) {
-            setStage({
-              kind: 'consent',
-              card,
-              revision: needed.revision,
-              overrideReason,
-            })
-            return
-          }
-          // Any other refusal belongs beside the card, where the officer can
-          // read it against the five fields and the verdict. A refusal shown on
-          // the consent step would be a refusal about the entry displayed under
-          // a heading about a document.
-          setStage({ kind: 'card', card })
-        },
+        // A refusal belongs beside the card, where the officer can read it
+        // against the five fields and the verdict.
+        onError: () => setStage({ kind: 'card', card }),
       },
     )
   }
@@ -395,11 +358,7 @@ export function CheckpointPage() {
           card={stage.card}
           entering={checkIn.isPending}
           leaving={checkOut.isPending}
-          entryError={
-            checkIn.isError && asConsentRequired(checkIn.error) === null
-              ? checkIn.error
-              : null
-          }
+          entryError={checkIn.isError ? checkIn.error : null}
           exitError={checkOut.isError ? checkOut.error : null}
           onCheckIn={(reason) => recordEntry(stage.card, reason)}
           onCheckOut={() => {
@@ -409,19 +368,6 @@ export function CheckpointPage() {
             }
           }}
           onBack={restart}
-        />
-      ) : null}
-
-      {stage.kind === 'consent' ? (
-        <GuestConsentStep
-          guestRequestId={stage.card.guest_request_id ?? 0}
-          guestName={stage.card.guest?.full_name ?? ''}
-          revision={stage.revision}
-          onRecorded={() => {
-            checkIn.reset()
-            recordEntry(stage.card, stage.overrideReason)
-          }}
-          onCancel={restart}
         />
       ) : null}
 
