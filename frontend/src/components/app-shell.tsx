@@ -1,8 +1,7 @@
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import {
-  awaitsConsent,
   buildingsOf,
   buildingsWith,
   guestRequestBuildingsOf,
@@ -22,13 +21,10 @@ import { cn } from '@/lib/utils'
  * account — see `auth/navigation.ts` for why that is a matter of drawing and
  * not of permission.
  *
- * Two things of the personal account live here rather than on a page, because
- * both have to be true of every screen. The count of unread messages (FR-34),
+ * One thing of the personal account lives here rather than on a page, because
+ * it has to be true of every screen: the count of unread messages (FR-34),
  * which is on the tab that leads to them so that a message arriving while
- * somebody is three screens deep in the housing register is still noticed. And
- * the standing offer of the consent text (FR-35), which is a strip and not a
- * modal: art. 9 part 1 wants consent free, and a dialog that has to be
- * dismissed before the application can be used is the opposite of that.
+ * somebody is three screens deep in the housing register is still noticed.
  */
 export function AppShell() {
   const { t } = useTranslation()
@@ -45,7 +41,6 @@ export function AppShell() {
   const user = session.user
   const buildings = buildingsOf(user)
   const primaryBuilding = buildings[0]
-  const pendingConsents = awaitsConsent(user)
 
   /*
    * The sections, built from the grants of the account. A tab is drawn when the
@@ -116,14 +111,13 @@ export function AppShell() {
   tabs.push({ to: '/lost-found', label: t('app.section.lostFound') })
 
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
-  // The personal account is nobody's privilege: the routes behind these two
-  // are scoped to the token and take no parameter naming anyone else.
+  // The personal account is nobody's privilege: the route behind this one is
+  // scoped to the token and takes no parameter naming anyone else.
   tabs.push({
     to: '/notifications',
     label: t('app.section.notifications'),
     ...(unread !== null && unread > 0 ? { badge: unread } : {}),
   })
-  tabs.push({ to: '/consents', label: t('app.section.personalData') })
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -215,23 +209,6 @@ export function AppShell() {
             ))}
           </ul>
         </nav>
-      ) : null}
-
-      {/*
-        FR-35, first criterion, on every screen rather than only at sign-in. The
-        offer stands until the person decides, and it never stands in the way:
-        it is a strip that scrolls with the page, and nothing below it is
-        disabled while it is there.
-      */}
-      {pendingConsents ? (
-        <div className="border-b border-rule bg-brass-wash">
-          <div className="mx-auto flex w-full max-w-5xl flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-4 py-3">
-            <p className="m-0 min-w-0 text-ink">{t('consent.strip')}</p>
-            <Link className="font-medium text-prussian underline" to="/consent">
-              {t('consent.stripAction')}
-            </Link>
-          </div>
-        </div>
       ) : null}
 
       <main className="mx-auto w-full max-w-5xl grow px-4 py-8">

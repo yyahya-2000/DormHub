@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { useLogin } from '@/api/generated/dormitory'
 import type { InvalidCredentials, ValidationError } from '@/api/generated/model'
 import { ApiError } from '@/api/http-client'
-import { awaitsConsent } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Button } from '@/components/ui/button'
@@ -134,23 +133,6 @@ export function LoginPage() {
 
   if (session.status === 'authenticated') {
     const from = (location.state as { from?: string } | null)?.from
-    /*
-     * FR-35, first criterion: «consent is displayed and recorded on first
-     * login». The redirect is what makes «on first login» true — the session
-     * carries `consent_required`, and while it names anything the first screen
-     * after the form is the text itself rather than the register of
-     * dormitories.
-     *
-     * It is a redirect and not a gate. The consent screen has a way out that
-     * leads straight into the application, and a person who came back to a
-     * deep link is sent there instead: consent has to be free (art. 9 part 1),
-     * and a sign-in that could only be completed by agreeing would be
-     * extracting it. What this arranges is that the text is *seen*, once, by
-     * everyone — which is the part the criterion actually asks for.
-     */
-    if (from === undefined && awaitsConsent(session.user)) {
-      return <Navigate to="/consent" replace />
-    }
     return <Navigate to={from ?? '/'} replace />
   }
 
