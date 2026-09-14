@@ -1,8 +1,9 @@
 {
   "app": {
-    "name": "Dormitory",
-    "fullName": "Dormitory support system",
-    "documentTitle": "Dormitory — residence support system",
+    "name": "HSE DormHub",
+    "fullName": "HSE DormHub — dormitory residence support",
+    "documentTitle": "HSE DormHub",
+    "logoAlt": "HSE University emblem",
     "section": {
       "register": "Buildings",
       "building": "Building",
@@ -16,7 +17,8 @@
       "announcements": "Announcements",
       "maintenance": "Repairs",
       "lostFound": "Lost and found"
-    }
+    },
+    "disclaimer": "A student prototype. Coursework at HSE University; not a service of the University."
   },
   "common": {
     "loading": "Loading",

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 
 info:
-  title: Dormitory support system — API v1
+  title: HSE DormHub — API v1
   version: 0.1.0
   summary: >-
     Role model, authentication, audit log, the housing register, staff, the

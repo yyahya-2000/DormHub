@@ -1,8 +1,9 @@
 {
   "app": {
-    "name": "Общежитие",
-    "fullName": "Система поддержки проживания в общежитии",
-    "documentTitle": "Общежитие — система поддержки проживания",
+    "name": "HSE DormHub",
+    "fullName": "HSE DormHub — поддержка проживания в общежитии",
+    "documentTitle": "HSE DormHub",
+    "logoAlt": "Эмблема НИУ ВШЭ",
     "section": {
       "register": "Корпуса",
       "building": "Корпус",
@@ -16,7 +17,8 @@
       "announcements": "Объявления",
       "maintenance": "Ремонт",
       "lostFound": "Бюро находок"
-    }
+    },
+    "disclaimer": "Учебный прототип. Курсовая работа студента НИУ ВШЭ, сервисом университета не является."
   },
   "common": {
     "loading": "Загрузка",
