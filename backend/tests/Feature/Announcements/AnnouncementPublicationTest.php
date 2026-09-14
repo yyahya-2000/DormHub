@@ -293,6 +293,15 @@ final class AnnouncementPublicationTest extends TestCase
      * on `expires_at`, so the announcement leaves it by itself and a system
      * that forgot to run an archiving sweep could not disagree with the feed
      * about which notices are current.
+     *
+     * **The flag is written `archived=true` and not `archived=1`, which is the
+     * acceptance finding of 15.09.2026.** The contract declares the parameter
+     * `type: boolean` and the generated client serialises it with
+     * `String(value)`, so `true` is the spelling every real caller sends —
+     * and Laravel's `boolean` rule admits `"1"` and not `"true"`, so the
+     * Archive button was answered 422 while this test passed. A test that
+     * writes a spelling nobody's client produces is a test of the wrong
+     * route.
      */
     public function test_on_expiry_the_announcement_leaves_the_feed_and_moves_to_the_archive(): void
     {
@@ -308,7 +317,7 @@ final class AnnouncementPublicationTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('data.0.id', $expiring->getKey());
 
-        $this->getJson('/api/v1/announcements?archived=1')
+        $this->getJson('/api/v1/announcements?archived=true')
             ->assertStatus(200)
             ->assertJsonCount(0, 'data');
 
@@ -318,7 +327,7 @@ final class AnnouncementPublicationTest extends TestCase
             ->assertStatus(200)
             ->assertJsonCount(0, 'data');
 
-        $this->getJson('/api/v1/announcements?archived=1')
+        $this->getJson('/api/v1/announcements?archived=true')
             ->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $expiring->getKey());
@@ -329,6 +338,32 @@ final class AnnouncementPublicationTest extends TestCase
             $expiring->updated_at?->toIso8601String(),
             $expiring->fresh()?->updated_at?->toIso8601String(),
         );
+    }
+
+    /**
+     * The archive flag in every spelling a client actually sends, and one it
+     * must still refuse.
+     *
+     * The acceptance finding of 15.09.2026 in one test. The generated client
+     * turns a boolean query parameter into `"true"` or `"false"`; Laravel's
+     * `boolean` rule admits `1`, `0`, `"1"` and `"0"` and nothing else, so the
+     * Archive button answered 422 on a value the contract declares. The
+     * normalisation admits the words and leaves everything else to the rule —
+     * `archived=maybe` is not a boolean in any spelling and is still a 422
+     * naming the field.
+     */
+    public function test_the_archive_flag_is_read_in_the_spelling_a_client_sends(): void
+    {
+        Sanctum::actingAs($this->residentOfA);
+
+        foreach (['true', 'false', '1', '0'] as $spelling) {
+            $this->getJson('/api/v1/announcements?archived='.$spelling)
+                ->assertStatus(200, sprintf('archived=%s was refused.', $spelling));
+        }
+
+        $this->getJson('/api/v1/announcements?archived=maybe')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('archived');
     }
 
     /**

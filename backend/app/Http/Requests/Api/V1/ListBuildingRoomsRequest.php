@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Http\Requests\Api\V1\Concerns\AcceptsBooleanQueryFlags;
 use App\Models\Building;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -25,12 +26,24 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 final class ListBuildingRoomsRequest extends FormRequest
 {
+    use AcceptsBooleanQueryFlags;
+
     public function authorize(): bool
     {
         $building = $this->route('building');
 
         return $building instanceof Building
             && $this->user()?->can('viewRooms', $building) === true;
+    }
+
+    /**
+     * `free=true` is the spelling the generated client sends, and it used to
+     * be a 422 — the same defect acceptance found on the announcement feed.
+     * See `AcceptsBooleanQueryFlags`.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->normaliseBooleanFlags('free');
     }
 
     /**
