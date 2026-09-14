@@ -11,31 +11,7 @@ import { Button } from '@/components/ui/button'
 import { flagOf, numberOf } from '@/lib/notifications'
 import { useLostFoundRefresh } from '@/lib/lost-found-cache'
 
-/**
- * FR-26's last clause, and the only screen in the client that could carry it:
- * «a claim the two sides cannot settle is referred to the warden, who decides».
- *
- * **The offer lives on the message and not on the card.** A claimant cannot
- * read the claims made against an entry — the identifying marks are what makes
- * a claim checkable, and a list of them readable by the corridor would tell the
- * next claimant what to write — so there is no screen on which they watch their
- * own claim, and there is no route by which they could. What they get instead
- * is what the requirement gives them: they are told the decision, and the
- * refusal arrives with the offer attached. `referral_offered` on the body is
- * that offer, put there by the server rather than inferred from a status, and
- * `lost_found_claim_id` is what it acts on.
- *
- * **The offer is drawn from a message and the message does not change.** A
- * notification is a record of what was sent; referring does not rewrite it, so
- * a second visit to a message already acted on still shows the button. Pressing
- * it again is 409 — a claim may be referred once — and the refusal is shown in
- * the place the button was, which is the honest ending for a control the client
- * cannot know is spent.
- *
- * The note is a courtesy. The warden reads the claim, the marks and the refusal
- * in full on the row, so a second statement of the case is optional and stays
- * optional here.
- */
+/** FR-26's last clause: «a claim the two sides cannot settle is referred to the warden, who decides». */
 export function ClaimReferral({ notification }: { notification: Notification }) {
   const { t } = useTranslation()
   const refresh = useLostFoundRefresh()
@@ -81,7 +57,6 @@ export function ClaimReferral({ notification }: { notification: Notification }) 
               <FormField
                 id={`lost-found-referral-${notification.id}`}
                 label={t('lostFound.referral.note')}
-                note={t('lostFound.referral.noteNote')}
               >
                 <textarea
                   id={`lost-found-referral-${notification.id}`}

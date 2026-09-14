@@ -16,32 +16,7 @@ import { Input } from '@/components/ui/input'
 import { useFormatters } from '@/lib/format'
 import { awaitsHolder, awaitsJudge } from '@/lib/lost-found'
 
-/**
- * FR-26, the answering end: the claims made against one entry, and the moves
- * the reader is in a position to make on them.
- *
- * **Two actors share this list and never share a button.** The person holding
- * the object accepts or declines a claim nobody has answered; the warden or
- * manager decides a claim whose refusal the claimant would not accept. §2.5.4
- * keeps them apart deliberately: the module is peer-to-peer, and a member of
- * staff reaching an ordinary claim would be the moderation step it was built to
- * do without. There is no route by which one could, either — a claim nobody
- * referred is answered with 409 and not 403, because the capability is not what
- * is missing.
- *
- * **The claimant's name is here and the entry's author's is not**, and the
- * asymmetry is §3.5.3's. A claim is read by three people arranging a handover
- * and the person handing an umbrella over has to know who to hand it to; the
- * card outside is read by the whole dormitory, which is why it carries nobody.
- * No contacts travel in either direction. The exchange meets at the handover
- * point, which is the one piece of location this module publishes and is a
- * place the person holding the object chose.
- *
- * **The marks are the substance.** A claim that says «it's mine» gives the
- * holder nothing to judge, which is why the route refuses one shorter than ten
- * characters, and why this list is not readable by the rest of the dormitory: a
- * visible list of identifying features tells the next claimant what to write.
- */
+/** FR-26, the answering end: the claims made against one entry, and the moves the reader can make. */
 export function ClaimList({
   claims,
   holder,
@@ -129,12 +104,6 @@ function ClaimRow({
           </>
         ) : null}
 
-        {/*
-          §2.4.4: «the claimant is notified with the handover point». It is
-          written the moment somebody accepts and is the one piece of location
-          this module publishes — a place the person holding the object chose,
-          and not an address of theirs.
-        */}
         {claim.handover_point !== null &&
         claim.handover_point !== undefined &&
         claim.handover_point !== '' ? (
@@ -154,23 +123,7 @@ function ClaimRow({
   )
 }
 
-/**
- * The holder's two answers, and the asymmetry between them.
- *
- * Accepting requires a handover point — «the claimant is notified with the
- * handover point» is the requirement's own sentence, the argument is required
- * by the service behind the route and there is a CHECK constraint on the table.
- * Declining requires nothing: FR-37 makes a refusal without a reason impossible
- * for a maintenance request and FR-26 makes no such demand of a claim, and a
- * required field here would be a rule the requirement does not carry, put in
- * front of a resident who is doing the dormitory a favour by answering at all.
- * What the requirement puts in its place is the offer that goes to the claimant
- * with the refusal: put it to the warden.
- *
- * **Accepting does not close the entry.** It stays `claimed` until the object
- * actually changes hands and the holder says so. An acceptance that closed it
- * would be the system recording a handover that had not happened.
- */
+/** The holder's two answers: accept with a handover point, or decline. */
 function HolderAnswer({ claim, onDone }: { claim: LostFoundClaim; onDone: () => void }) {
   const { t } = useTranslation()
 
@@ -227,11 +180,9 @@ function HolderAnswer({ claim, onDone }: { claim: LostFoundClaim; onDone: () => 
           className="grid gap-3 border-l-4 border-brick bg-brick-wash px-3 py-3"
           onSubmit={sendRefusal}
         >
-          <p className="m-0 text-ink">{t('lostFound.claims.declineLead')}</p>
           <FormField
             id={`lost-found-reason-${claim.id}`}
             label={t('lostFound.claims.reason')}
-            note={t('lostFound.claims.reasonNote')}
           >
             <textarea
               id={`lost-found-reason-${claim.id}`}
@@ -269,7 +220,7 @@ function HolderAnswer({ claim, onDone }: { claim: LostFoundClaim; onDone: () => 
           <FormField
             id={`lost-found-handover-${claim.id}`}
             label={t('lostFound.claims.handover')}
-            note={t('lostFound.claims.handoverNote')}
+            required
           >
             <Input
               id={`lost-found-handover-${claim.id}`}
@@ -320,21 +271,7 @@ function HolderAnswer({ claim, onDone }: { claim: LostFoundClaim; onDone: () => 
   )
 }
 
-/**
- * FR-26's other ending: the warden read the claim, the refusal and the marks,
- * and says which of the two residents is right.
- *
- * **One act and not two routes.** Where the guest and maintenance modules put
- * approval and rejection on separate endpoints with separate bodies, here the
- * body is the same either way and `upheld` is a boolean on it. The note is
- * required in both directions, because a decision that overrides a person
- * entitled to make it is one nobody can answer if nobody explained it.
- *
- * **Upholding does not close the entry** any more than an acceptance does. It
- * makes the claim `accepted`, which is the ground FR-26 admits for a closure;
- * the closure itself stays with the person who hands the object over, because
- * they are the only one who can know that it changed hands.
- */
+/** FR-26's other ending: the warden decides a claim whose refusal was referred to them. */
 function JudgeDecision({ claim, onDone }: { claim: LostFoundClaim; onDone: () => void }) {
   const { t } = useTranslation()
 
@@ -364,8 +301,6 @@ function JudgeDecision({ claim, onDone }: { claim: LostFoundClaim; onDone: () =>
       className="grid gap-3 border-l-4 border-brass bg-brass-wash px-3 py-3"
       onSubmit={send}
     >
-      <p className="m-0 text-ink">{t('lostFound.claims.judgeLead')}</p>
-
       {decide.isError ? (
         <RequestRefusal error={decide.error} vocabulary="lostFound" />
       ) : null}
@@ -373,11 +308,7 @@ function JudgeDecision({ claim, onDone }: { claim: LostFoundClaim; onDone: () =>
       <FormField
         id={`lost-found-verdict-${claim.id}`}
         label={t('lostFound.claims.verdict')}
-        note={
-          upheld
-            ? t('lostFound.claims.verdictUpheldNote')
-            : t('lostFound.claims.verdictRefusedNote')
-        }
+        required
       >
         <select
           id={`lost-found-verdict-${claim.id}`}
@@ -394,7 +325,7 @@ function JudgeDecision({ claim, onDone }: { claim: LostFoundClaim; onDone: () =>
         <FormField
           id={`lost-found-judge-handover-${claim.id}`}
           label={t('lostFound.claims.handover')}
-          note={t('lostFound.claims.judgeHandoverNote')}
+          required
         >
           <Input
             id={`lost-found-judge-handover-${claim.id}`}
@@ -411,7 +342,7 @@ function JudgeDecision({ claim, onDone }: { claim: LostFoundClaim; onDone: () =>
       <FormField
         id={`lost-found-judge-note-${claim.id}`}
         label={t('lostFound.claims.note')}
-        note={t('lostFound.claims.judgeNoteNote')}
+        required
       >
         <textarea
           id={`lost-found-judge-note-${claim.id}`}

@@ -10,7 +10,7 @@ import {
 import { ConsentDocument, type ConsentRecord, type ConsentText } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
 import { useSession } from '@/auth/session-context'
-import { ConsentBody, ConsentDraftNotice } from '@/components/consent-document'
+import { ConsentBody } from '@/components/consent-document'
 import { LanguageSwitch } from '@/components/language-switch'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
@@ -21,36 +21,11 @@ import { useFormatters } from '@/lib/format'
 /**
  * FR-35, first criterion: the text is shown and the decision is recorded.
  *
- * **Why this is a screen and not a checkbox.** Art. 9 part 1 of Federal Law
- * No. 152-FZ has consent «executed separately from other documents». The
- * contract obeys it on the wire — `POST /consents` names one document and one
- * revision, and no other request in the whole API records a consent as a
- * by-product — and this screen is the same rule applied to the interface. There
- * is no tick on the sign-in form, none on the first-password form, none at the
- * foot of a profile page. The person arrives here, reads the wording, and
- * decides; that is the whole screen and it has nothing else on it.
- *
- * It is deliberately drawn outside the application frame, with its own title
- * bar. Tabs along the top would put the document among the sections of a
- * system, and it is not one of them: it is a document being signed.
- *
- * **Why nothing is trapped behind it.** Consent has to be free (art. 9 part 1),
- * so a screen that locked the account until it was given would be extracting
- * consent rather than receiving it — and the API says so outright: the pending
- * list blocks no session. «Decide later» is therefore a first-class way out,
- * placed beside the agreement and not hidden as a link in a corner, and what is
- * lost by declining is stated before either button is pressed.
- *
- * **The revision travels with the decision.** `POST /consents` is sent the
- * revision that came down with the text, not a constant and not the newest one
- * the client knows of. If the operator publishes a new wording while this page
- * is open, the server refuses with 422 and the person is sent back for the
- * current text — a record naming a wording they never read would prove nothing,
- * and art. 9 part 3 puts the burden of proving consent on the operator.
- *
- * The guest's document is never decided here. It is taken at the security post,
- * in person, before an entry is recorded; if one ever appears in this list the
- * text is shown and the buttons are not.
+ * Art. 9 part 1 of Federal Law No. 152-FZ has consent «executed separately from
+ * other documents», so this is a screen of its own outside the application
+ * frame and no other form in the system records a consent as a by-product. The
+ * revision travels with the decision: a record naming a wording the person
+ * never read would prove nothing.
  */
 export function ConsentPage() {
   const { t } = useTranslation()
@@ -97,15 +72,6 @@ export function ConsentPage() {
                 : t('consent.lead')}
             </p>
           </div>
-
-          {/*
-            Why the reader is looking at a page of their own instead of a line
-            in a form. Stated once, at the top, because it is the reason the
-            screen exists and the reason it will not be folded into anything.
-          */}
-          <p className="border-l-4 border-prussian bg-prussian-wash px-4 py-3 text-ink">
-            {t('consent.separateNote')}
-          </p>
 
           {pending.isError ? <RequestRefusal error={pending.error} /> : null}
 
@@ -166,28 +132,13 @@ function PendingDocument({
   const { t } = useTranslation()
   const give = useGiveConsent<ApiError>()
 
-  // The resident's document is the only one this route may record. The guest's
-  // is taken at the post, and the API refuses it here — so the screen does not
-  // offer a button whose only possible answer is a refusal (§3.3.2 the other
-  // way round: the server decides, and the client does not draw what it knows
-  // the server will not do).
   const decidable = document.document === ConsentDocument.resident_personal_data
 
   return (
     <section className="grid gap-6">
-      <ConsentDraftNotice revision={document.revision} />
-
       <article className="border border-rule bg-paper-raised">
         <header className="border-b border-rule bg-prussian-wash px-4 py-3">
           <h2 className="m-0 text-lg font-semibold text-ink">{document.title}</h2>
-          <p className="mt-1 mb-0 text-steel">
-            {t('consent.documentOf', {
-              code: t(`consentDocument.${document.document}`, {
-                defaultValue: document.document,
-              }),
-              revision: document.revision,
-            })}
-          </p>
         </header>
         <div className="px-4 py-5">
           <ConsentBody markdown={document.body} />
@@ -198,19 +149,10 @@ function PendingDocument({
 
       {decidable ? (
         <section className="border border-rule bg-paper-raised px-4 py-5">
-          <h2 className="m-0 text-lg font-semibold text-ink">{t('consent.decisionTitle')}</h2>
-          {/*
-            What declining costs, said before the buttons. A person who finds
-            out afterwards that their guest-request decisions stopped arriving
-            was not informed, whatever the record says.
-          */}
-          <ul className="mt-3 mb-0 grid gap-1 pl-5 text-ink">
-            <li>{t('consent.ifYes')}</li>
-            <li>{t('consent.ifNo')}</li>
-            <li>{t('consent.notBlocking')}</li>
-          </ul>
-
-          <div className="mt-5 flex flex-wrap items-center gap-3">
+          <h2 className="mt-0 mb-4 text-lg font-semibold text-ink">
+            {t('consent.decisionTitle')}
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               disabled={give.isPending}
@@ -252,12 +194,6 @@ function PendingDocument({
   )
 }
 
-/**
- * What was written down, shown back. The three facts FR-35's third criterion
- * requires to be stored are the three facts printed here — the fact, the date
- * and the revision of the text — so that the person can see the record says
- * what they did and not something adjacent to it.
- */
 function ConsentReceipt({
   record,
   onContinue,
@@ -279,7 +215,6 @@ function ConsentReceipt({
         <dt className="label-caps">{t('consent.fields.acceptedAt')}</dt>
         <dd className="m-0">{formatters.dateTime(record.accepted_at)}</dd>
       </dl>
-      <p className="mt-3 mb-0 text-ink">{t('consent.recordedNote')}</p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button type="button" onClick={onContinue}>
           {t('consent.continue')}

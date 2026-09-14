@@ -25,40 +25,6 @@ import { Input } from '@/components/ui/input'
 import { useLostFoundRefresh } from '@/lib/lost-found-cache'
 import { LOST_FOUND_KINDS, latestFindingDate } from '@/lib/lost-found'
 
-/**
- * FR-24. Publishing a find — or a loss, which is the same notice read from the
- * other end.
- *
- * **There is no approval step, and no control on this form could ask for one.**
- * FR-24's fourth criterion is that publication passes through no staff
- * approval, and §2.5.4 gives the reason: routing every umbrella through a
- * member of staff would put back the delay the module exists to remove. The
- * entry is in the feed the moment the route answers 201 — there is no
- * moderation state in the vocabulary for it to wait in, and this screen offers
- * no field by which one could be asked for.
- *
- * **Nobody is named on this form.** The record is bound to the publishing
- * account as the finder, so there is no reporter to enter; and the identifier
- * does not come back in the response either, because FR-25 keeps it out of the
- * card. What the form asks for is the object and the place, which is what a
- * reader needs to recognise something of theirs.
- *
- * **Two dates that must not be confused (§3.4.2).** The day of the finding is
- * required and is not the day of the entry — somebody clearing a desk drawer in
- * December may well be publishing what they picked up in September, and nothing
- * refuses that. The day the find was declared to the police or to a local
- * self-government body is the second, it is offered only on the deposited path
- * where such declarations are actually filed, and the six-month period of Civil
- * Code art. 228 cl. 1 runs from it and never from the registration. FR-27
- * counts those days and is outside this iteration: nothing on this screen
- * promises that anything is being counted.
- *
- * **The deposited path is a statement about the university**, so only an
- * account holding the safekeeping capability in that dormitory is offered it. A
- * resident sending it anyway is answered with 403 — nothing about the value is
- * malformed, and it is the account that may not make that statement.
- */
-
 type PublishFields = {
   building: string
   kind: LostFoundItemKind
@@ -73,6 +39,7 @@ type PublishFields = {
 /** FR-24, third criterion: the photograph is optional, and there is at most one. */
 const PHOTO_LIMIT = 1
 
+/** FR-24: publishing a find — or a loss, which is the same notice read from the other end. */
 export function LostFoundPublishPage() {
   const { t } = useTranslation()
   const { session } = useSession()
@@ -86,7 +53,6 @@ export function LostFoundPublishPage() {
         <h1 className="text-2xl font-semibold text-ink">
           {t('lostFound.publishHeading')}
         </h1>
-        <p className="mt-1 text-steel">{t('lostFound.publishLead')}</p>
       </div>
 
       <div>
@@ -201,11 +167,6 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           <h2 className="m-0 text-lg font-semibold text-ink">
             {t('lostFound.publishedTitle')}
           </h2>
-          {/*
-            FR-24's fourth criterion, stated to the person who just used it:
-            the entry is in the feed, there is nothing to wait for and nobody
-            to wait on.
-          */}
           <p className="mt-2 mb-0 text-ink">
             {t('lostFound.publishedBody', { title: published.title })}
           </p>
@@ -227,7 +188,11 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           ) : null}
 
           {buildings.length > 1 ? (
-            <FormField id="lost-found-building" label={t('lostFound.fields.building')}>
+            <FormField
+              id="lost-found-building"
+              label={t('lostFound.fields.building')}
+              required
+            >
               <select
                 id="lost-found-building"
                 className={selectClassName}
@@ -247,11 +212,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           <FormField
             id="lost-found-kind-field"
             label={t('lostFound.fields.kind')}
-            note={
-              form.kind === LostFoundItemKind.found
-                ? t('lostFound.fields.kindNoteFound')
-                : t('lostFound.fields.kindNoteLost')
-            }
+            required
           >
             <select
               id="lost-found-kind-field"
@@ -282,11 +243,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
             <FormField
               id="lost-found-custody"
               label={t('lostFound.fields.custody')}
-              note={
-                deposited
-                  ? t('lostFound.fields.custodyNoteAdministration')
-                  : t('lostFound.fields.custodyNoteFinder')
-              }
+              required
             >
               <select
                 id="lost-found-custody"
@@ -306,11 +263,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
             </FormField>
           ) : null}
 
-          <FormField
-            id="lost-found-title"
-            label={t('lostFound.fields.title')}
-            note={t('lostFound.fields.titleNote')}
-          >
+          <FormField id="lost-found-title" label={t('lostFound.fields.title')} required>
             <Input
               id="lost-found-title"
               value={form.title}
@@ -325,7 +278,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           <FormField
             id="lost-found-place"
             label={t(`lostFound.fields.placeLabel.${form.kind}`)}
-            note={t('lostFound.fields.placeNote')}
+            required
           >
             <Input
               id="lost-found-place"
@@ -341,7 +294,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           <FormField
             id="lost-found-happened"
             label={t(`lostFound.fields.happenedOn.${form.kind}`)}
-            note={t('lostFound.fields.happenedOnNote')}
+            required
           >
             <Input
               id="lost-found-happened"
@@ -354,11 +307,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           </FormField>
 
           {deposited ? (
-            <FormField
-              id="lost-found-declared"
-              label={t('lostFound.fields.declaredOn')}
-              note={t('lostFound.fields.declaredOnNote')}
-            >
+            <FormField id="lost-found-declared" label={t('lostFound.fields.declaredOn')}>
               <Input
                 id="lost-found-declared"
                 type="date"
@@ -373,7 +322,6 @@ function PublishForm({ buildings }: { buildings: number[] }) {
           <FormField
             id="lost-found-description"
             label={t('lostFound.fields.description')}
-            note={t('lostFound.fields.descriptionNote')}
           >
             <textarea
               id="lost-found-description"
@@ -384,11 +332,7 @@ function PublishForm({ buildings }: { buildings: number[] }) {
             />
           </FormField>
 
-          <FormField
-            id="lost-found-photo"
-            label={t('lostFound.fields.photo')}
-            note={t('lostFound.fields.photoNote')}
-          >
+          <FormField id="lost-found-photo" label={t('lostFound.fields.photo')}>
             <PhotoPicker
               id="lost-found-photo"
               value={photos}

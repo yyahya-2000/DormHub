@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { keepPreviousData } from '@tanstack/react-query'
+import { Plus, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -25,44 +27,19 @@ import { Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
+import { lastPageOf, usePagination } from '@/hooks/use-pagination'
 import { useFormatters } from '@/lib/format'
 import { LOST_FOUND_KINDS, LOST_FOUND_LIST_STATUSES } from '@/lib/lost-found'
 
 /**
- * FR-25, the feed — the finds and losses of the dormitories this account is
- * attached to.
- *
- * **There is no building chooser here, and the absence is the requirement.**
- * The route carries no building parameter: the dormitories are computed from
- * the grants of the token, so there is no way to phrase a request for another
- * one. FR-07's horizontal boundary is a missing parameter rather than a check
- * somebody has to remember to write, and FR-05 rides on top of it — a resident
- * whose departure date has passed stops reading that feed without this screen
- * knowing anything about it. The administrator's grant names no dormitory and
- * is therefore not confined to one, which is why the building is printed on
- * each row rather than assumed.
- *
- * **No card carries a name or a telephone number.** FR-25's second criterion
- * is the whole of §3.5.3: a list read by several hundred people with the
- * finder beside every entry is a directory of who found what and lives where.
- * The response has no `reporter_id`, no `reporter_name` and no contacts in it
- * — and this screen has nowhere to put one even if a later revision leaked it.
- * The exchange runs through a claim inside the system, and the only piece of
- * location the module ever publishes is the handover point, chosen by the
- * person holding the object and shown to the one claimant they accepted.
- *
- * **Two readings of the list and not three.** The default is `published`,
- * which is what «the published list» means and what makes FR-26's «a declined
- * claim returns the find to the published list» say something; `claimed` is
- * the entries somebody is already waiting on. `resolved` is not offered,
- * because the route refuses it with 422 — after closure the record is out of
- * the public list altogether (FR-26, third criterion), and the person who
- * published it still reads it at its own address.
+ * FR-25, the feed: the finds and losses of the dormitories this account is
+ * attached to. The dormitories come from the token, so the route takes no
+ * building parameter; no card carries a name or a telephone number.
  */
 export function LostFoundPage() {
   const { t } = useTranslation()
-  const formatters = useFormatters()
   const { session } = useSession()
 
   const user = session.status === 'authenticated' ? session.user : null
@@ -72,55 +49,37 @@ export function LostFoundPage() {
   const [kind, setKind] = useState<LostFoundItemKind | ''>('')
   /*
    * The typed text and the text the query was last run with are two different
-   * things on purpose. A request per keystroke would be a request per keystroke
-   * against a route that reads two `LIKE` patterns, and the substring the
-   * reader has half-finished typing is rarely the one they meant.
+   * things on purpose: a request per keystroke would be a request per keystroke
+   * against a route that reads two `LIKE` patterns.
    */
   const [typed, setTyped] = useState('')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const paging = usePagination({ resetKey: `${status}:${kind}:${search}` })
 
   const feed = useListLostFound<listLostFoundResponse, ApiError>(
     {
       status,
       ...(kind === '' ? {} : { kind }),
       ...(search === '' ? {} : { search }),
-      page,
+      page: paging.page,
     },
-    { query: { retry: false } },
+    { query: { retry: false, placeholderData: keepPreviousData } },
   )
 
   const payload = feed.data?.status === 200 ? feed.data.data : null
   const rows = payload?.data ?? null
   const meta = payload?.meta
 
-  function choose<T>(set: (value: T) => void, value: T) {
-    set(value)
-    setPage(1)
-  }
-
   function runSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSearch(typed.trim())
-    setPage(1)
   }
 
   return (
     <div className="grid grid-cols-1 gap-6">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('lostFound.heading')}</h1>
-        <p className="mt-1 text-steel">{t('lostFound.lead')}</p>
       </div>
-
-      {/*
-        FR-25's second criterion, said out loud rather than merely obeyed. A
-        reader who expects a telephone number beside an umbrella and finds none
-        will look for the trick; a line saying why there is none is the
-        difference between a feature and a missing field.
-      */}
-      <p className="m-0 border-l-4 border-prussian bg-prussian-wash px-4 py-3 text-ink">
-        {t('lostFound.privacyNote')}
-      </p>
 
       {publishesIn.length > 0 ? (
         <div>
@@ -129,24 +88,23 @@ export function LostFoundPage() {
             size="lg"
             className="h-auto min-h-12 min-w-0 whitespace-normal"
           >
-            <Link to="/lost-found/new">{t('lostFound.publishLink')}</Link>
+            <Link to="/lost-found/new">
+              <Plus aria-hidden="true" className="size-5" />
+              {t('lostFound.publishLink')}
+            </Link>
           </Button>
         </div>
       ) : null}
 
       <Panel caption={t('lostFound.filters.heading')}>
         <form className="grid gap-4 px-4 py-4 sm:grid-cols-2" onSubmit={runSearch}>
-          <FormField
-            id="lost-found-status"
-            label={t('lostFound.filters.status')}
-            note={t('lostFound.filters.statusNote')}
-          >
+          <FormField id="lost-found-status" label={t('lostFound.filters.status')}>
             <select
               id="lost-found-status"
               className={selectClassName}
               value={status}
               onChange={(event) =>
-                choose(setStatus, event.target.value as ListLostFoundStatus)
+                setStatus(event.target.value as ListLostFoundStatus)
               }
             >
               {LOST_FOUND_LIST_STATUSES.map((value) => (
@@ -157,18 +115,12 @@ export function LostFoundPage() {
             </select>
           </FormField>
 
-          <FormField
-            id="lost-found-kind"
-            label={t('lostFound.filters.kind')}
-            note={t('lostFound.filters.kindNote')}
-          >
+          <FormField id="lost-found-kind" label={t('lostFound.filters.kind')}>
             <select
               id="lost-found-kind"
               className={selectClassName}
               value={kind}
-              onChange={(event) =>
-                choose(setKind, event.target.value as LostFoundItemKind | '')
-              }
+              onChange={(event) => setKind(event.target.value as LostFoundItemKind | '')}
             >
               <option value="">{t('lostFound.filters.kindAll')}</option>
               {LOST_FOUND_KINDS.map((value) => (
@@ -182,7 +134,6 @@ export function LostFoundPage() {
           <FormField
             id="lost-found-search"
             label={t('lostFound.filters.search')}
-            note={t('lostFound.filters.searchNote')}
             className="sm:col-span-2"
           >
             <Input
@@ -201,20 +152,21 @@ export function LostFoundPage() {
               className="h-auto min-h-11 min-w-0 whitespace-normal"
               disabled={feed.isFetching}
             >
+              <Search aria-hidden="true" className="size-5" />
               {t('lostFound.filters.apply')}
             </Button>
             {search === '' ? null : (
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-0 whitespace-normal"
+                size="icon"
+                aria-label={t('lostFound.filters.clear')}
                 onClick={() => {
                   setTyped('')
                   setSearch('')
-                  setPage(1)
                 }}
               >
-                {t('lostFound.filters.clear')}
+                <X aria-hidden="true" className="size-5" />
               </Button>
             )}
           </div>
@@ -258,49 +210,19 @@ export function LostFoundPage() {
             </ul>
           ) : null}
 
-          {meta !== undefined && (meta.last_page ?? 1) > 1 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-3">
-              <span className="text-steel">
-                {t('lostFound.page', {
-                  current: formatters.count(meta.current_page),
-                  total: formatters.count(meta.last_page),
-                })}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={(meta.current_page ?? 1) <= 1 || feed.isFetching}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  {t('lostFound.previous')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    (meta.current_page ?? 1) >= (meta.last_page ?? 1) || feed.isFetching
-                  }
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  {t('lostFound.next')}
-                </Button>
-              </div>
-            </div>
-          ) : null}
+          <Pagination
+            page={paging.page}
+            lastPage={lastPageOf(meta)}
+            onPageChange={paging.setPage}
+            disabled={feed.isFetching}
+          />
         </Panel>
       )}
     </div>
   )
 }
 
-/**
- * One entry of the feed. Everything a reader needs to recognise an object of
- * theirs — what it is, where it turned up, when — and nothing at all about who
- * has it.
- */
+/** One entry of the feed: what it is, where it turned up, when. */
 function FeedRow({ item }: { item: LostFoundItem }) {
   const { t } = useTranslation()
   const formatters = useFormatters()
