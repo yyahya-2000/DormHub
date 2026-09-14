@@ -23,20 +23,27 @@ class DatabaseSeeder extends Seeder
          * the dormitories are there — otherwise «one per building» would mean
          * one, for the single block the staff seeder creates for itself.
          *
-         * The personal-account seeders come last for the same kind of reason:
-         * a notification is addressed to a person, so it needs the accounts to
-         * exist. None of them invents a person of its own — if there are no
+         * The module seeders come after the accounts for the same kind of
+         * reason: a request is addressed to a person, so it needs the accounts
+         * to exist. None of them invents a person of its own — if there are no
          * residents, they seed nothing.
+         *
+         * **`NotificationSeeder` runs last, and the acceptance of 15.09.2026
+         * is why it moved there.** It used to run fourth and to invent the
+         * rows its messages were about — guest request 1000+n, maintenance
+         * request 3000+n moving to a status the enumeration has never had.
+         * Every message it writes now quotes a row of the guest or maintenance
+         * register, so those registers have to be seeded first.
          */
         $this->call([
             RoleSeeder::class,
             HousingSeeder::class,
             DemoSeeder::class,
-            NotificationSeeder::class,
             GuestSeeder::class,
             AnnouncementSeeder::class,
             MaintenanceSeeder::class,
             LostFoundSeeder::class,
+            NotificationSeeder::class,
         ]);
     }
 }
