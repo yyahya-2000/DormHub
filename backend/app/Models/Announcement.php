@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\AnnouncementCategory;
 use Carbon\CarbonInterface;
 use Database\Factories\AnnouncementFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -12,17 +11,19 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * ANNOUNCEMENT of the ER model (§3.4.3): FR-09, FR-11, FR-12.
+ * ANNOUNCEMENT of the ER model (§3.4.3): FR-09 and FR-11.
  *
- * Every column name below is qualified with the table in the scopes, and that
- * is not decoration. The feed of §4.6.1 computes the unread mark by a left
- * join against `announcement_acks`, which carries an `announcement_id`, an
- * `id` and a `user_id` of its own; an unqualified `where('id', …)` in a scope
- * would become ambiguous the moment the join is added, and PostgreSQL would
- * say so at run time rather than here.
+ * Every column name below is qualified with the table in the scopes. It costs
+ * nothing and it keeps a scope usable from a query that has joined something
+ * else on: an unqualified `where('id', …)` would become ambiguous the moment a
+ * join arrived, and PostgreSQL would say so at run time rather than here.
+ *
+ * **`category` is a free label and not an enumeration.** The column holds at
+ * most 32 characters, `StoreAnnouncementRequest` enforces that bound, and
+ * `App\Enums\AnnouncementCategory` is the catalogue the form offers first
+ * rather than the set of values the column admits.
  */
 #[Fillable([
     'building_id',
@@ -30,7 +31,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'title',
     'body',
     'category',
-    'is_mandatory',
     'published_at',
     'expires_at',
 ])]
@@ -44,7 +44,6 @@ class Announcement extends Model
      */
     protected $attributes = [
         'category' => 'general',
-        'is_mandatory' => false,
     ];
 
     /**
@@ -55,18 +54,9 @@ class Announcement extends Model
         return [
             'building_id' => 'integer',
             'author_id' => 'integer',
-            'category' => AnnouncementCategory::class,
-            'is_mandatory' => 'boolean',
+            'category' => 'string',
             'published_at' => 'datetime',
             'expires_at' => 'datetime',
-            /*
-             * Not a column of this table. The feed selects it as an alias off
-             * the left-joined `announcement_acks`, and the cast is declared so
-             * that the resource reads a date rather than the string the driver
-             * hands back. On a row fetched without the join the attribute is
-             * simply absent, which is what the resource tests for.
-             */
-            'acknowledged_at' => 'datetime',
         ];
     }
 
@@ -87,16 +77,6 @@ class Announcement extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_id');
-    }
-
-    /**
-     * FR-12. Who has acknowledged this announcement, and when.
-     *
-     * @return HasMany<AnnouncementAck, $this>
-     */
-    public function acknowledgements(): HasMany
-    {
-        return $this->hasMany(AnnouncementAck::class);
     }
 
     /** Whether this notice is addressed to every dormitory. */
@@ -171,10 +151,12 @@ class Announcement extends Model
     }
 
     /**
+     * FR-11's category filter, matched on the stored label exactly.
+     *
      * @param  Builder<Announcement>  $query
      */
-    public function scopeOfCategory(Builder $query, AnnouncementCategory $category): void
+    public function scopeOfCategory(Builder $query, string $category): void
     {
-        $query->where('announcements.category', $category->value);
+        $query->where('announcements.category', $category);
     }
 }

@@ -4,27 +4,25 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Enums\AnnouncementCategory;
 use App\Enums\AuditAction;
 use App\Jobs\AnnounceToAudience;
 use App\Models\Announcement;
-use App\Models\AnnouncementAck;
 use App\Models\Building;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 /**
- * The write side of the announcement module (FR-09, FR-12).
+ * The write side of the announcement module (FR-09).
  *
- * *Purpose*: publishes an announcement and records an acknowledgement of one.
+ * *Purpose*: publishes an announcement.
  * *Subordinates*: `AuditRecorder`, and the queue for the fan-out.
  * *Dependencies*: the domain layer only; no controller, no HTTP object, no
  * status code (§3.3.1).
  *
  * The module is the lightest in the MVP (§4.6.1): no state machine, no
- * external actor, no scheduled job. Two properties of the two methods below
- * are nevertheless the same ones the guest module is careful about — the audit
+ * external actor, no scheduled job. Two properties of the one method below are
+ * nevertheless the same ones the guest module is careful about — the audit
  * record is written **inside** the transaction of the change it describes, and
  * the notification is dispatched **after** that transaction has committed.
  */
@@ -43,22 +41,25 @@ final readonly class AnnouncementService
      * **`published_at` is the moment of publication and is not accepted from
      * the client.** The column exists so that the feed can be sorted and so
      * that a seeded stand can hold notices of different ages; a route that let
-     * a warden set it would let him post a notice dated last week, and FR-12's
-     * evidence — «you were told on the ninth» — would rest on a field the
-     * person it is used against could not check.
+     * a warden set it would let him post a notice dated last week, and the
+     * audit record of the publication — «this was posted on the ninth» — would
+     * then describe a date he had chosen rather than one the system observed.
+     *
+     * **`$category` is a free label.** It arrives trimmed and bounded at 32
+     * characters by `StoreAnnouncementRequest`; the column takes it as it
+     * stands.
      */
     public function publish(
         User $author,
         ?Building $building,
         string $title,
         string $body,
-        AnnouncementCategory $category,
-        bool $mandatory = false,
+        string $category,
         ?CarbonInterface $expiresAt = null,
         ?string $ipAddress = null,
     ): Announcement {
         $announcement = DB::transaction(function () use (
-            $author, $building, $title, $body, $category, $mandatory, $expiresAt, $ipAddress
+            $author, $building, $title, $body, $category, $expiresAt, $ipAddress
         ): Announcement {
             $announcement = Announcement::query()->create([
                 'building_id' => $building?->getKey(),
@@ -66,7 +67,6 @@ final readonly class AnnouncementService
                 'title' => $title,
                 'body' => $body,
                 'category' => $category,
-                'is_mandatory' => $mandatory,
                 'published_at' => now(),
                 'expires_at' => $expiresAt,
             ]);
@@ -82,8 +82,7 @@ final readonly class AnnouncementService
                     // two a notice was.
                     'building_id' => $building?->getKey(),
                     'title' => $title,
-                    'category' => $category->value,
-                    'is_mandatory' => $mandatory,
+                    'category' => $category,
                     'expires_at' => $expiresAt?->toIso8601String(),
                 ],
                 ipAddress: $ipAddress,
@@ -106,38 +105,5 @@ final readonly class AnnouncementService
         AnnounceToAudience::dispatch($announcement);
 
         return $announcement;
-    }
-
-    /**
-     * FR-12, first criterion: «the fact and time of acknowledgement are
-     * recorded».
-     *
-     * **Idempotent, and by the database rather than by a check.**
-     * `firstOrCreate` reads and writes over `UNIQUE (announcement_id,
-     * user_id)`, so a resident who taps twice, or a client that retries a call
-     * whose answer was lost, gets the row they already have. A guard that read
-     * first and inserted second would admit a duplicate between the two
-     * statements, and the duplicate would show up as an acknowledged share
-     * above one — a figure that makes FR-12's whole report unusable rather
-     * than merely wrong.
-     *
-     * **The act is not written to the audit log.** The row below already
-     * carries the person, the announcement and the moment, which is precisely
-     * what FR-12 asks to be recorded; a second copy per resident per notice
-     * would add nothing and would bury the log. The reading of the list, which
-     * discloses personal data, *is* recorded — see `AuditAction`.
-     */
-    public function acknowledge(
-        User $reader,
-        Announcement $announcement,
-        ?CarbonInterface $at = null,
-    ): AnnouncementAck {
-        return AnnouncementAck::query()->firstOrCreate(
-            [
-                'announcement_id' => $announcement->getKey(),
-                'user_id' => $reader->getKey(),
-            ],
-            ['acknowledged_at' => $at ?? now()],
-        );
     }
 }

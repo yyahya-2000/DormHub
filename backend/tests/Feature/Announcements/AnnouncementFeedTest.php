@@ -17,12 +17,14 @@ use Tests\Support\BuildsAGuestScenario;
 use Tests\TestCase;
 
 /**
- * FR-11, «Announcement feed», one test per acceptance criterion.
+ * FR-11, «Announcement feed», one test per acceptance criterion still in the
+ * MVP.
  *
- * The three criteria are the three properties of one query, and the tests keep
- * them apart on purpose: the ordering, the category filter and the unread mark
- * fail for different reasons and a single test asserting all three would hide
- * which.
+ * The criterion about marking unread items has gone with the acknowledgement
+ * it was derived from: the mark was a left join against `announcement_acks`
+ * and there is no such table. What is left — the interval of NFR-01, the
+ * ordering, the category filter and the pagination — is kept in separate tests
+ * on purpose, because they fail for different reasons.
  */
 final class AnnouncementFeedTest extends TestCase
 {
@@ -33,8 +35,6 @@ final class AnnouncementFeedTest extends TestCase
     private User $warden;
 
     private User $resident;
-
-    private User $neighbour;
 
     protected function setUp(): void
     {
@@ -47,7 +47,6 @@ final class AnnouncementFeedTest extends TestCase
         $this->building = $this->dormitory('Block A');
         $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
         $this->resident = $this->residentOf($this->building, 'resident@example.test', '305');
-        $this->neighbour = $this->residentOf($this->building, 'neighbour@example.test', '306');
     }
 
     protected function tearDown(): void
@@ -98,64 +97,7 @@ final class AnnouncementFeedTest extends TestCase
     }
 
     /**
-     * Second criterion: «unread items are visually marked».
-     *
-     * The mark is `is_unread`, computed by the left join of §4.6.1 against
-     * `announcement_acks`, and it clears when the acknowledgement is recorded
-     * — which is the same row FR-12 counts, not a second «read» flag that
-     * could disagree with it.
-     */
-    public function test_unread_items_are_marked_and_the_mark_clears_on_acknowledgement(): void
-    {
-        $announcement = Announcement::factory()
-            ->forBuilding($this->building)
-            ->by($this->warden)
-            ->create();
-
-        Sanctum::actingAs($this->resident);
-
-        $this->getJson('/api/v1/announcements')
-            ->assertStatus(200)
-            ->assertJsonPath('data.0.is_unread', true)
-            ->assertJsonPath('data.0.acknowledged_at', null);
-
-        $this->postJson("/api/v1/announcements/{$announcement->getKey()}/ack")
-            ->assertStatus(200);
-
-        $this->getJson('/api/v1/announcements')
-            ->assertStatus(200)
-            ->assertJsonPath('data.0.is_unread', false)
-            ->assertJsonPath('data.0.acknowledged_at', CarbonImmutable::now()->toIso8601String());
-    }
-
-    /**
-     * The same criterion at the point it is easiest to get wrong.
-     *
-     * The join is keyed on the reader, so one resident's acknowledgement must
-     * not mark the notice read for the whole dormitory. A join written without
-     * the `user_id` condition passes the test above and fails this one, which
-     * is why the two are separate.
-     */
-    public function test_one_residents_acknowledgement_leaves_the_item_unread_for_another(): void
-    {
-        $announcement = Announcement::factory()
-            ->forBuilding($this->building)
-            ->by($this->warden)
-            ->create();
-
-        Sanctum::actingAs($this->resident);
-        $this->postJson("/api/v1/announcements/{$announcement->getKey()}/ack")->assertStatus(200);
-
-        Sanctum::actingAs($this->neighbour);
-
-        $this->getJson('/api/v1/announcements')
-            ->assertStatus(200)
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.is_unread', true);
-    }
-
-    /**
-     * Third criterion, first half: «the feed is sorted by date».
+     * Second criterion, first half: «the feed is sorted by date».
      *
      * Newest first, which is the order a feed is read in. The identifier
      * breaks a tie, so two notices posted in the same second keep their places
@@ -177,7 +119,13 @@ final class AnnouncementFeedTest extends TestCase
     }
 
     /**
-     * Third criterion, second half: «filterable by category».
+     * Second criterion, second half: «filterable by category».
+     *
+     * The category is a free label, so the filter is an exact match on what
+     * was stored and a heading nobody has posted under is an empty page. It is
+     * **not** a 422 any more: there is no closed list left for a value to be
+     * outside of, and refusing an unknown label would refuse the very headings
+     * the free field exists to admit.
      */
     public function test_the_feed_is_filterable_by_category(): void
     {
@@ -204,11 +152,39 @@ final class AnnouncementFeedTest extends TestCase
             ->assertStatus(200)
             ->assertJsonCount(0, 'data');
 
-        // A category the enumeration does not know is a malformed request and
-        // not an empty feed: a client filtering on a typo must be told.
+        // A heading nobody has posted under is an empty feed and not a 422.
         $this->getJson('/api/v1/announcements?category=gossip')
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('category');
+            ->assertStatus(200)
+            ->assertJsonCount(0, 'data');
+    }
+
+    /**
+     * The same filter over a heading the author typed rather than chose, which
+     * is the case the closed enumeration used to make impossible.
+     */
+    public function test_the_feed_is_filterable_by_a_category_nobody_chose_from_the_catalogue(): void
+    {
+        $typed = Announcement::factory()
+            ->forBuilding($this->building)
+            ->by($this->warden)
+            ->ofCategory('water_supply')
+            ->create(['title' => 'Cold water off on Wednesday']);
+
+        Announcement::factory()
+            ->forBuilding($this->building)
+            ->by($this->warden)
+            ->ofCategory(AnnouncementCategory::Events)
+            ->create(['title' => 'Board games on Thursdays']);
+
+        Sanctum::actingAs($this->resident);
+
+        $this->getJson('/api/v1/announcements?category=water_supply')
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $typed->getKey())
+            // Nothing in the catalogue answers to it, so the label is its own
+            // name.
+            ->assertJsonPath('data.0.category_label', 'water_supply');
     }
 
     /**
