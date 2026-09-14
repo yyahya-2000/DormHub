@@ -141,6 +141,82 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Maintenance requests (FR-36 … FR-40)
+    |---------------------------------------------------------------------------
+    |
+    | Three of the five requirements of this module state a number, and all
+    | three numbers are here rather than in a service. FR-39 says the
+    | confirmation window is «configurable»; FR-40 says in so many words that
+    | «the overdue threshold is configuration, not code». FR-36's ceiling of
+    | three photographs is the requirement's own figure and is stated here as
+    | well, because the validator and the database CHECK both read it and a
+    | literal in two places is a literal that will one day differ.
+    |
+    | What is deliberately *not* here: the categories, the urgencies and the
+    | statuses. Those are the vocabulary FR-36 and FR-38 fix, they are enums
+    | and CHECK constraints, and a deployment that could add a status through
+    | configuration would be a deployment whose transition table describes
+    | nothing.
+    |
+    */
+
+    'maintenance' => [
+
+        /*
+        | FR-39: «a request not confirmed within the window closes
+        | automatically». §3.5.2 draws seven days and calls the interval
+        | configuration in the same breath, so seven is the default and not
+        | the rule. The worked example of §2.4.3 runs on three, which is the
+        | test that proves the value is read rather than compiled in.
+        */
+        'confirmation_window_days' => (int) env('MAINTENANCE_CONFIRMATION_WINDOW_DAYS', 7),
+
+        /*
+        | FR-40, fourth criterion. Days since submission after which an open
+        | request is flagged overdue in the queue and in the warden's nightly
+        | digest. A request whose planned completion date has already passed is
+        | overdue whatever this says — that is a promise broken rather than a
+        | standard missed — so the figure governs the requests nobody has
+        | triaged at all, which is the backlog it exists to surface.
+        */
+        'overdue_after_days' => (int) env('MAINTENANCE_OVERDUE_AFTER_DAYS', 7),
+
+        /*
+        | FR-36: «up to three photographs». Read by the form request and by the
+        | CHECK constraint through the migration, so the ceiling is stated once
+        | and enforced twice.
+        */
+        'max_photos' => (int) env('MAINTENANCE_MAX_PHOTOS', 3),
+
+        // The largest photograph the form accepts, in kilobytes. A phone
+        // photograph of a leaking pipe is a few hundred; the ceiling is there
+        // so that a client uploading an original from a camera is refused with
+        // a sentence rather than with a timeout.
+        'max_photo_kilobytes' => (int) env('MAINTENANCE_MAX_PHOTO_KILOBYTES', 5120),
+
+        /*
+        | Where the photographs go. The default is the deployment's default
+        | disk, which the Compose environment points at the S3-compatible
+        | store; the database holds paths and never the files themselves.
+        */
+        'photo_disk' => env('MAINTENANCE_PHOTO_DISK', env('FILESYSTEM_DISK', 'local')),
+
+        // Directory inside that disk. A path rather than a bucket of its own,
+        // so that a deployment with one bucket needs no further configuration.
+        'photo_directory' => env('MAINTENANCE_PHOTO_DIRECTORY', 'maintenance'),
+
+        /*
+        | FR-40. The page a queue or a period export is read in. A dormitory
+        | over an academic year accumulates thousands of requests, and a client
+        | that asked for all of them at once would get a timeout instead of an
+        | answer — the same argument the visitor register makes.
+        */
+        'queue_page_size' => (int) env('MAINTENANCE_QUEUE_PAGE_SIZE', 50),
+
+    ],
+
+    /*
+    |---------------------------------------------------------------------------
     | Consent to the processing of personal data (FR-35)
     |---------------------------------------------------------------------------
     |

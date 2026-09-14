@@ -7,10 +7,15 @@ namespace App\Providers;
 use App\Contracts\IdentityProvider;
 use App\Enums\ThrottleReason;
 use App\Guests\GuestQuota;
+use App\Maintenance\MaintenanceRequestStateMachine;
+use App\Maintenance\PhotoStore;
 use App\Services\AuditLogReader;
 use App\Services\AuditRecorder;
 use App\Services\AuthenticationService;
 use App\Services\LoginThrottle;
+use App\Services\MaintenanceQueue;
+use App\Services\MaintenanceService;
+use App\Services\Notifier;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as Cache;
@@ -63,6 +68,41 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(GuestQuota::class, fn ($app) => new GuestQuota(
             perResident: (int) config('dormitory.guests.daily_quota_per_resident'),
             perBuilding: (int) config('dormitory.guests.daily_quota_per_building'),
+        ));
+
+        /*
+         * FR-39 and FR-40, the two numbers those requirements make
+         * configuration in so many words: «reopening within the configurable
+         * window», «the overdue threshold is configuration, not code». They
+         * are bound here for the same reason «five attempts, fifteen minutes»
+         * is — a literal inside the service would be this deployment's rule
+         * imposed on every dormitory the code is ever installed in, and the
+         * test that proves the rule is read rather than compiled in would have
+         * nothing to move.
+         */
+        $this->app->bind(MaintenanceService::class, fn ($app) => new MaintenanceService(
+            states: $app->make(MaintenanceRequestStateMachine::class),
+            audit: $app->make(AuditRecorder::class),
+            notifier: $app->make(Notifier::class),
+            confirmationWindowDays: (int) config('dormitory.maintenance.confirmation_window_days'),
+        ));
+
+        $this->app->bind(MaintenanceQueue::class, fn ($app) => new MaintenanceQueue(
+            audit: $app->make(AuditRecorder::class),
+            overdueAfterDays: (int) config('dormitory.maintenance.overdue_after_days'),
+            pageSize: (int) config('dormitory.maintenance.queue_page_size'),
+        ));
+
+        /*
+         * FR-36's photographs. The disk is configuration because the
+         * deployment's object store is (§3.2.2) and because the test suite
+         * pins a fake one; the ceiling is here so that the form rule, the
+         * CHECK constraint and this adapter all read the same figure.
+         */
+        $this->app->bind(PhotoStore::class, fn ($app) => new PhotoStore(
+            disk: (string) config('dormitory.maintenance.photo_disk'),
+            directory: (string) config('dormitory.maintenance.photo_directory'),
+            maximum: (int) config('dormitory.maintenance.max_photos'),
         ));
 
         $this->app->bind(AuditLogReader::class, fn ($app) => new AuditLogReader(

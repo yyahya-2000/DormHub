@@ -222,6 +222,45 @@ final class BuildingPolicy
     }
 
     /**
+     * FR-40: the maintenance queue of this dormitory.
+     *
+     * Read and triage are two methods for two capabilities, and the pair is
+     * the one the horizontal-access matrix is checked on in
+     * `MaintenanceQueueTest`: a warden of block 1 holds both in block 1 and
+     * neither in block 2, so a request of block 2 is invisible to him at the
+     * API and not merely in the interface.
+     */
+    public function viewMaintenanceRequests(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::ViewMaintenanceRequests, $building);
+    }
+
+    /**
+     * FR-37, FR-38: accepting, refusing and working a request of this
+     * dormitory. The warden and the manager beneath him; not the duty officer,
+     * not the administrator, and never the resident who filed it.
+     */
+    public function triageMaintenanceRequests(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::TriageMaintenanceRequests, $building);
+    }
+
+    /**
+     * FR-36: filing a maintenance request about this dormitory.
+     *
+     * Decided against the residency register and not against a capability, for
+     * the same reason `submitGuestRequest()` below is: living somewhere is not
+     * a role. FR-36's acceptance criterion — «a resident without an active
+     * residency record cannot submit» — is this one line, and it is a line in
+     * a policy rather than a rule in a form because it is a question about the
+     * register and not about the input.
+     */
+    public function submitMaintenanceRequest(User $user, Building $building): bool
+    {
+        return $user->residesIn($building);
+    }
+
+    /**
      * FR-16: submitting a guest request for this dormitory.
      *
      * Decided against the residency register and not against a capability, for
