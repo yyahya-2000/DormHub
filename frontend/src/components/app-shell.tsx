@@ -131,13 +131,26 @@ export function AppShell() {
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             {/*
-              The emblem of the university the dormitory belongs to, taken from
-              the official brand book in its version for dark backgrounds — the
-              blue one loses its circle against `prussian` and leaves the
-              monogram floating. It is an attribution of the institution and not
-              a mark of the service: the system is coursework, so the emblem is
-              a plain image of fixed height, never a link to hse.ru, and the
-              name beside it stays the larger of the two.
+              The emblem of the university the dormitory belongs to. The brand
+              book ships two marks under «Знак → версия для тёмных фонов», and
+              the one to take is the second: a white disc carrying the monogram
+              in brand blue. The first is the inverse — a blue disc inside a
+              hairline white ring — and against `prussian` it reads as a hole
+              rather than as a mark, which is also why hse.ru puts the white
+              disc in its own dark header.
+
+              The file is `Znak_for_black_2/CMYK/01_Znak_for_black_CMYK_2.svg`
+              out of https://www.hse.ru/mirror/pubs/share/533609051, copied
+              byte for byte, so `shasum -a 256 public/hse-emblem-on-dark.svg`
+              still answers for where it came from. Governing act: приказ НИУ
+              ВШЭ от 15.11.2022 «Об утверждении Правил работы с фирменным
+              стилем», in force; the brand book revision of April 2026 reworked
+              the descriptors and the palette but left the mark alone.
+
+              It is an attribution of the institution and not a mark of the
+              service: the system is coursework, so the emblem is a plain image
+              of fixed height, never a link to hse.ru, and the name beside it
+              stays the larger of the two.
             */}
             <img
               src="/hse-emblem-on-dark.svg"
