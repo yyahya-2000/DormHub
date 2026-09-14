@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Files\PhotoStore;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ConfirmMaintenanceRequestRequest;
 use App\Http\Requests\Api\V1\ListMaintenanceRequestsRequest;
 use App\Http\Requests\Api\V1\StoreMaintenanceRequestRequest;
 use App\Http\Requests\Api\V1\TriageMaintenanceRequestRequest;
 use App\Http\Resources\MaintenanceRequestResource;
-use App\Maintenance\PhotoStore;
 use App\Models\MaintenanceRequest;
 use App\Services\MaintenanceService;
 use Illuminate\Http\JsonResponse;

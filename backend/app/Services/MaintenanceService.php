@@ -39,7 +39,7 @@ use Illuminate\Support\Facades\DB;
  * *Subordinates*: `MaintenanceRequestStateMachine`, `AuditRecorder`,
  * `Notifier`. *Dependencies*: the domain layer only; no controller, no HTTP
  * object, no status code (§3.3.1) — the photographs arrive as paths, which is
- * why `App\Maintenance\PhotoStore` exists.
+ * why `App\Files\PhotoStore` exists.
  *
  * **Every public method below is one call to `move()`, and that is the design
  * rather than an economy.** §3.4.1's sixth decision says each status change is

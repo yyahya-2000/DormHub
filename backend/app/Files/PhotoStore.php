@@ -2,21 +2,33 @@
 
 declare(strict_types=1);
 
-namespace App\Maintenance;
+namespace App\Files;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * FR-36's photographs, on their way from the form to the object store.
+ * Photographs on their way from a form to the object store: FR-36's up to
+ * three, and FR-24's optional one.
  *
- * It sits in `App\Maintenance` and not in `App\Services` on purpose. §3.3.1
- * keeps HTTP objects out of the application layer, and `UploadedFile` is one:
- * `MaintenanceService::submit()` therefore takes paths, which is all the
- * register needs to know, and this class is the adapter the controller calls
- * on the way in. The alternative — a service method taking uploaded files —
- * would make the register unusable from a console command or a seeder, which
- * are exactly the two callers that already exist.
+ * It sits outside `App\Services` on purpose. §3.3.1 keeps HTTP objects out of
+ * the application layer, and `UploadedFile` is one: `MaintenanceService::
+ * submit()` and `LostFoundService::publish()` therefore take paths, which is
+ * all either register needs to know, and this class is the adapter the
+ * controller calls on the way in. The alternative — a service method taking
+ * uploaded files — would make the register unusable from a console command or
+ * a seeder, which are exactly the two callers that already exist.
+ *
+ * **It sits in `App\Files` and not in `App\Maintenance`, which is where it was
+ * written.** The lost-and-found module of increment 4 stores one photograph
+ * per find on the same terms — a generated name, a configured disk, a path in
+ * the column — and the choice was between a second copy of this class and a
+ * neutral home for the one that exists. A copy would have been two definitions
+ * of «how a photograph is stored», and the second of them would have been the
+ * one nobody updated when the disk changed. The disk, the directory and the
+ * ceiling are constructor arguments precisely so that one class can serve two
+ * modules with two configurations, and `AppServiceProvider` binds each module
+ * its own instance.
  *
  * **The database holds paths and never the files.** §3.2.2 puts the object
  * store in a container of its own; a photograph of a burst pipe is a few
@@ -62,6 +74,24 @@ final readonly class PhotoStore
         }
 
         return $paths;
+    }
+
+    /**
+     * FR-24's single photograph, which is optional: null in, null out.
+     *
+     * A method of its own rather than `store([$file])[0] ?? null` at the call
+     * site, because the find's column holds one path and the unwrapping would
+     * then be repeated by every caller — the controller, the seeder and
+     * whatever imports a backlog later. The ceiling still applies: a store
+     * configured with `maximum: 1` keeps this the only file it will take.
+     */
+    public function storeOne(?UploadedFile $file): ?string
+    {
+        if ($file === null) {
+            return null;
+        }
+
+        return $this->store([$file])[0] ?? null;
     }
 
     /**
