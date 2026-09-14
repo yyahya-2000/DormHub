@@ -30,17 +30,29 @@ use Illuminate\Support\Collection;
  * it works.
  *
  * So the schedule is dumb and frequent, and the selection is what carries the
- * regime: every fifteen minutes, take the buildings whose control time has
- * already passed today, and inside them the visits whose deadline has passed
- * with no exit recorded. A building at 22:00 is swept from 22:00 and one at
- * 01:00 from 01:00, and the schedule knows neither number.
+ * regime: every fifteen minutes, take the open visits whose own deadline has
+ * passed. A building at 22:00 is swept from 22:00 and one at 01:00 from 01:00,
+ * and the schedule knows neither number.
  *
- * **«Whose control time has passed today», not «since the last run».** The
- * narrower window is tempting and loses visits: a run that fails, a container
- * restarted, a queue backed up for twenty minutes, and the quarter-hour in
- * which the curfew fell is gone — nobody is ever told. Idempotence is bought
- * instead with `overdue_notified_at`, which is written once and which the
- * database refuses to overwrite, so a repeat run finds nothing left to do.
+ * **The deadline is the visit's and not the dormitory's, and this is the whole
+ * of the selection.** `GUEST_VISIT.due_at` is frozen at the moment of entry as
+ * the earlier of the end of the approved interval and the building's control
+ * time (`GuestRequest::dueAt()`), so the curfew is already inside the column
+ * the query reads — and so is the other half of it. An earlier version of this
+ * command took the buildings past their curfew first and looked at `due_at`
+ * only within them, which quietly made the curfew the *only* deadline: a guest
+ * approved until 14:00 in a dormitory closing at 23:00 was overdue at 14:00 and
+ * nobody was told until 23:00. Nine hours in which the resident answerable for
+ * the departure under clause 2.2 was not asked about it, on a fact the
+ * `check-out` route already knew — it closes such a visit `closed_late`. One
+ * condition, `due_at <= now`, is what makes the two agree.
+ *
+ * **Everything past its deadline, not «since the last run».** The narrower
+ * window is tempting and loses visits: a run that fails, a container restarted,
+ * a queue backed up for twenty minutes, and the quarter-hour in which the
+ * deadline fell is gone — nobody is ever told. Idempotence is bought instead
+ * with `overdue_notified_at`, which is written once and which the database
+ * refuses to overwrite, so a repeat run finds nothing left to do.
  *
  * **What the command does not do.** It does not restrict anybody's movement
  * and does not claim to. FR-20 is phrased so as not to promise what software
@@ -52,29 +64,17 @@ final class SweepOverdueVisits extends Command
 {
     protected $signature = 'guests:sweep-overdue-visits';
 
-    protected $description = 'Mark guest visits past the control time of their building as overdue and notify';
+    protected $description = 'Mark guest visits past their departure deadline as overdue and notify';
 
     public function handle(CheckpointService $checkpoint, Notifier $notifier): int
     {
         $now = CarbonImmutable::now();
-        $buildings = $this->buildingsPastTheirControlTime($now);
-
-        if ($buildings->isEmpty()) {
-            $this->info('No dormitory has passed its control time yet.');
-
-            return self::SUCCESS;
-        }
-
         $reported = 0;
 
         GuestVisit::query()
             ->open()
             ->whereNull('overdue_notified_at')
             ->where('due_at', '<=', $now)
-            ->whereHas(
-                'request',
-                fn (Builder $request) => $request->whereIn('building_id', $buildings->modelKeys())
-            )
             ->with(['request.student', 'request.building'])
             ->orderBy('id')
             ->chunkById(100, function (Collection $due) use ($checkpoint, $notifier, $now, &$reported): void {
@@ -89,27 +89,6 @@ final class SweepOverdueVisits extends Command
         $this->info(sprintf('Overdue visits reported: %d.', $reported));
 
         return self::SUCCESS;
-    }
-
-    /**
-     * The dormitories whose control time has already come round today.
-     *
-     * A curfew at or before the opening of the visiting window belongs to the
-     * following morning — a dormitory open 08:00 to 02:00 closes at 02:00, not
-     * at two in the morning of the day the visit started — and such a building
-     * is swept once that hour has passed. `TimeWindow` does the arithmetic; the
-     * comparison here only asks whether the moment has arrived.
-     *
-     * @return Collection<int, Building>
-     */
-    private function buildingsPastTheirControlTime(CarbonImmutable $now): Collection
-    {
-        return Building::query()
-            ->get()
-            ->filter(fn (Building $building): bool => $building
-                ->curfewOn($now)
-                ->lessThanOrEqualTo($now))
-            ->values();
     }
 
     /**

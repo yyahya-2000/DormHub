@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\GuestDocumentType;
 use App\Enums\GuestRequestStatus;
+use App\Exceptions\ImmutableRecordException;
 use App\Guests\TimeWindow;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -95,6 +96,25 @@ class GuestRequest extends Model
             'decided_at' => 'datetime',
             'responsible_officer_mark_at' => 'datetime',
         ];
+    }
+
+    /**
+     * FR-21, and the same reasoning `GuestVisit` states: a draft may be
+     * dropped, a decided request may not.
+     *
+     * Three of clause 2.1.2's six fields are read off this row, so from the
+     * decision onwards it is part of the register and not a form. The database
+     * refuses the delete through `guest_requests_no_deletion` as well; this
+     * refusal is the one a developer meets first and the only one that can say
+     * why.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (GuestRequest $request): void {
+            if ($request->status !== GuestRequestStatus::PendingReview) {
+                throw ImmutableRecordException::for(self::class, 'a delete after the decision');
+            }
+        });
     }
 
     /**
@@ -188,6 +208,16 @@ class GuestRequest extends Model
      * curfew belongs to the visit day, the guest is staying beyond it with the
      * responsible officer's mark, and applying it would make the deadline fall
      * before the entry.
+     *
+     * **A curfew at or before the start of the interval belongs to the next
+     * day**, by `TimeWindow`'s one rule, and this is the other way the deadline
+     * could fall before the entry. A dormitory configured 08:00–23:00 with the
+     * control time at 08:00 — a plausible reading of «closes in the morning» —
+     * made every visit overdue from the moment it was recorded: the curfew read
+     * as this morning's, which had already passed. The visit day of a guest
+     * admitted at 14:00 does not end at eight that same morning; either the
+     * hour belongs to the following day, in which case nothing is capped, or
+     * the dormitory means something the column cannot express.
      */
     public function dueAt(?Building $building = null): CarbonImmutable
     {
@@ -202,6 +232,10 @@ class GuestRequest extends Model
             CarbonImmutable::parse(($this->visit_date ?? CarbonImmutable::now())->toDateString()),
             (string) $building->curfew_at,
         );
+
+        if ($curfew->lessThanOrEqualTo($window->from)) {
+            $curfew = $curfew->addDay();
+        }
 
         return $curfew->lessThan($window->to) ? $curfew : $window->to;
     }
