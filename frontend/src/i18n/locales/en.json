@@ -28,6 +28,7 @@
     "save": "Save",
     "saving": "Saving",
     "cancel": "Cancel",
+    "close": "Close",
     "language": "Interface language",
     "languageRu": "Rus",
     "languageEn": "Eng",
@@ -409,6 +410,8 @@
     "visitDue": "Was to have left by {{time}}",
     "visitBuilding": "Building: {{building}}",
     "visitDuty": "A guest is in the dormitory while the resident who invited them is present — clause 2.2 of the rules of internal order.",
+    "announcementPublished": "A notice has been published: «{{title}}»",
+    "announcementBuilding": "Dormitory: {{building}}",
     "maintenanceMoved": "The maintenance request has moved to «{{status}}»",
     "maintenanceFrom": "Was: {{status}}",
     "maintenanceNumber": "Request no. {{number}}",
@@ -744,8 +747,7 @@
       "previewAlt": "Photograph {{number}} before it is sent",
       "kilobytes": "{{size}} KB",
       "remove": "Remove",
-      "stored_one": "{{count, number}} photograph",
-      "stored_other": "{{count, number}} photographs"
+      "alt": "Photograph {{number}} attached to «{{subject}}»"
     },
     "log": {
       "heading": "History of the work",
@@ -812,6 +814,7 @@
     },
     "photograph": {
       "attached": "A photograph is attached",
+      "alt": "The photograph of «{{title}}»",
       "none": "None"
     },
     "fields": {

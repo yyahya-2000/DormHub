@@ -28,6 +28,7 @@
     "save": "Сохранить",
     "saving": "Сохраняем",
     "cancel": "Отмена",
+    "close": "Закрыть",
     "language": "Язык интерфейса",
     "languageRu": "Рус",
     "languageEn": "Eng",
@@ -425,6 +426,8 @@
     "visitDue": "Уйти следовало до {{time}}",
     "visitBuilding": "Корпус: {{building}}",
     "visitDuty": "Гость находится в общежитии в присутствии пригласившего — п. 2.2 правил внутреннего распорядка.",
+    "announcementPublished": "Опубликовано объявление «{{title}}»",
+    "announcementBuilding": "Корпус: {{building}}",
     "maintenanceMoved": "Заявка на обслуживание перешла в состояние «{{status}}»",
     "maintenanceFrom": "Было: {{status}}",
     "maintenanceNumber": "Заявка № {{number}}",
@@ -776,10 +779,7 @@
       "previewAlt": "Фотография {{number}} до отправки",
       "kilobytes": "{{size}} КБ",
       "remove": "Убрать",
-      "stored_one": "{{count, number}} фотография",
-      "stored_few": "{{count, number}} фотографии",
-      "stored_many": "{{count, number}} фотографий",
-      "stored_other": "{{count, number}} фотографий"
+      "alt": "Снимок {{number}} к заявке «{{subject}}»"
     },
     "log": {
       "heading": "История работ",
@@ -848,6 +848,7 @@
     },
     "photograph": {
       "attached": "Есть фотография",
+      "alt": "Снимок вещи «{{title}}»",
       "none": "Нет"
     },
     "fields": {
