@@ -217,6 +217,62 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Lost and found (FR-24, FR-25, FR-26)
+    |---------------------------------------------------------------------------
+    |
+    | Four settings, and what is missing from them is the more interesting
+    | half.
+    |
+    | There is **no moderation switch**. FR-24's fourth criterion — «publication
+    | passes through no staff approval step» — is a property of the module and
+    | not of the deployment: a flag that could switch a review queue on would
+    | be a flag that makes the acceptance criterion false on some stands, and
+    | §2.5.4 gives the reason the queue is refused everywhere rather than made
+    | optional.
+    |
+    | There is **no retention period**. FR-27 puts the six-month clock of Civil
+    | Code art. 228 cl. 1 outside the MVP as an automated control, so nothing
+    | in this increment counts days and a number here would be one nothing
+    | reads. The two dates it will one day be counted from are in the table all
+    | the same, because those cannot be retrofitted (§2.5.4).
+    |
+    */
+
+    'lost_found' => [
+
+        /*
+        | Where the photographs go. The lost-and-found module gets its own
+        | disk and directory rather than sharing the maintenance module's,
+        | because the two hold different things for different lengths of time:
+        | a photograph of a burst pipe belongs to a repair record and a
+        | photograph of somebody's umbrella belongs to a feed that turns over
+        | in weeks. Sharing one directory would make «delete the finds of last
+        | term» a query rather than a prefix.
+        */
+        'photo_disk' => env('LOST_FOUND_PHOTO_DISK', env('FILESYSTEM_DISK', 'local')),
+
+        'photo_directory' => env('LOST_FOUND_PHOTO_DIRECTORY', 'lost-found'),
+
+        /*
+        | FR-24: «the photograph is optional», and there is at most one. The
+        | ceiling is a size and not a count — a count of one is the column.
+        | The figure is the maintenance module's, because it is a limit on what
+        | a telephone camera produces rather than on what the picture is of.
+        */
+        'max_photo_kilobytes' => (int) env('LOST_FOUND_MAX_PHOTO_KILOBYTES', 5120),
+
+        /*
+        | FR-25. The page the feed is read in. A dormitory loses a few things a
+        | week and the first page is normally the whole of what anybody wants;
+        | the figure matters once a term's worth of unclaimed entries has piled
+        | up behind it.
+        */
+        'feed_page_size' => (int) env('LOST_FOUND_FEED_PAGE_SIZE', 20),
+
+    ],
+
+    /*
+    |---------------------------------------------------------------------------
     | Consent to the processing of personal data (FR-35)
     |---------------------------------------------------------------------------
     |

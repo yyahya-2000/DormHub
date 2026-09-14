@@ -6,13 +6,18 @@ namespace App\Providers;
 
 use App\Contracts\IdentityProvider;
 use App\Enums\ThrottleReason;
+use App\Files\PhotoStore;
 use App\Guests\GuestQuota;
+use App\Http\Controllers\Api\V1\LostFoundController;
+use App\LostFound\LostFoundClaimStateMachine;
+use App\LostFound\LostFoundItemStateMachine;
 use App\Maintenance\MaintenanceRequestStateMachine;
-use App\Maintenance\PhotoStore;
 use App\Services\AuditLogReader;
 use App\Services\AuditRecorder;
 use App\Services\AuthenticationService;
 use App\Services\LoginThrottle;
+use App\Services\LostFoundFeed;
+use App\Services\LostFoundService;
 use App\Services\MaintenanceQueue;
 use App\Services\MaintenanceService;
 use App\Services\Notifier;
@@ -104,6 +109,50 @@ class AppServiceProvider extends ServiceProvider
             directory: (string) config('dormitory.maintenance.photo_directory'),
             maximum: (int) config('dormitory.maintenance.max_photos'),
         ));
+
+        /*
+         * FR-24 … FR-26. The service takes no configuration at all, and the
+         * emptiness is worth a line: every number the other modules read from
+         * `config/dormitory.php` — a confirmation window, an overdue
+         * threshold, a daily quota — is a house rule, and this module has
+         * none. The one period it will one day count is the six months of
+         * Civil Code art. 228 cl. 1, which is a statute rather than a setting
+         * and which FR-27 puts outside the MVP.
+         */
+        $this->app->bind(LostFoundService::class, fn ($app) => new LostFoundService(
+            items: $app->make(LostFoundItemStateMachine::class),
+            claims: $app->make(LostFoundClaimStateMachine::class),
+            audit: $app->make(AuditRecorder::class),
+            notifier: $app->make(Notifier::class),
+        ));
+
+        $this->app->bind(LostFoundFeed::class, fn ($app) => new LostFoundFeed(
+            pageSize: (int) config('dormitory.lost_found.feed_page_size'),
+        ));
+
+        /*
+         * FR-24's photograph, on a disk of its own.
+         *
+         * A contextual binding rather than a second class: `PhotoStore` is
+         * written to be configured, and the two modules differ only in where
+         * they put the file and how large a file they take. It is contextual
+         * and not a plain binding because the maintenance module already holds
+         * the default one, and it names a controller because a contextual
+         * binding reaches constructor injection — which is why
+         * `LostFoundController` takes its store through a constructor while
+         * `MaintenanceRequestController` takes its through a method parameter.
+         *
+         * `maximum: 1` is FR-24's «the photograph» in the singular, applied
+         * where a caller that is not a form — a seeder, a later import — runs
+         * into it as well.
+         */
+        $this->app->when(LostFoundController::class)
+            ->needs(PhotoStore::class)
+            ->give(fn ($app) => new PhotoStore(
+                disk: (string) config('dormitory.lost_found.photo_disk'),
+                directory: (string) config('dormitory.lost_found.photo_directory'),
+                maximum: 1,
+            ));
 
         $this->app->bind(AuditLogReader::class, fn ($app) => new AuditLogReader(
             audit: $app->make(AuditRecorder::class),

@@ -13,6 +13,7 @@ use App\Exceptions\InvalidCredentialsException;
 use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
 use App\Exceptions\MandatoryNotificationCategoryException;
+use App\Exceptions\NoAcceptedClaimException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Exceptions\ResidentOfAnotherDormitoryException;
@@ -216,6 +217,25 @@ return Application::configure(basePath: dirname(__DIR__))
          * the date it closed so the client can say which.
          */
         $exceptions->render(fn (ConfirmationWindowClosedException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 409));
+
+        /*
+         * FR-26's «only», and the one refusal of the lost-and-found module a
+         * transition table cannot express. An entry was offered for closure
+         * with no claim on it accepted — the entry is `claimed` and
+         * `claimed → resolved` is a move the table admits, correctly, because
+         * that is the move FR-26 is about. What is missing is a row in another
+         * table, and a transition table that knew about those would be a
+         * transition table with a query in it.
+         *
+         * 409 for the same reason the illegal transition above is: the body is
+         * well formed and the caller is the person holding the object, and the
+         * same call after an acceptance would succeed. The body carries how
+         * many claims are still waiting for an answer, so the client can say
+         * which.
+         */
+        $exceptions->render(fn (NoAcceptedClaimException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ] + $exception->context(), 409));
 
