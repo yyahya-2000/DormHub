@@ -50,7 +50,7 @@ final class LostFoundPublicationTest extends TestCase
 
         $this->building = $this->dormitory('Block A');
         $this->finder = $this->residentOf($this->building, 'finder@example.test', '412');
-        $this->officer = $this->consentingStaff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
+        $this->officer = $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
     }
 
     protected function tearDown(): void

@@ -68,7 +68,7 @@ final class LostFoundRetentionDatesTest extends TestCase
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 09:30:00'));
 
         $this->building = $this->dormitory('Block A');
-        $this->officer = $this->consentingStaff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
+        $this->officer = $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
     }
 
     protected function tearDown(): void

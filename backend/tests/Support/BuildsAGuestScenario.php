@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
-use App\Enums\ConsentDocument;
 use App\Enums\RoleCode;
 use App\Models\Bed;
 use App\Models\Building;
-use App\Models\ConsentRecord;
-use App\Models\GuestRequest;
 use App\Models\Residency;
 use App\Models\Role;
 use App\Models\Room;
@@ -70,25 +67,6 @@ trait BuildsAGuestScenario
             'moved_in_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
         ]);
 
-        /*
-         * FR-35 and FR-34 meet on this line. The notification of a decision is
-         * an optional category and rests on the resident's consent, so a
-         * resident created without one would silently receive nothing — and a
-         * test of FR-17's third criterion would then be asserting the absence
-         * of a message for the wrong reason. A resident on a working stand has
-         * consented; one who has withdrawn is a case of its own and is
-         * asserted as such.
-         */
-        ConsentRecord::query()->create([
-            'user_id' => $resident->getKey(),
-            'document_code' => ConsentDocument::ResidentPersonalData->value,
-            'document_revision' => (string) config(
-                'dormitory.consent.revisions.'.ConsentDocument::ResidentPersonalData->value
-            ),
-            'accepted_at' => now(),
-            'ip_address' => '192.0.2.5',
-        ]);
-
         return $resident->fresh() ?? $resident;
     }
 
@@ -111,29 +89,5 @@ trait BuildsAGuestScenario
         $user->unsetRelation('roleGrants');
 
         return $user;
-    }
-
-    protected function guestConsentRevision(): string
-    {
-        return (string) config(
-            'dormitory.consent.revisions.'.ConsentDocument::GuestPersonalData->value
-        );
-    }
-
-    /**
-     * The consent the guest gives at the desk, written directly, for tests
-     * whose subject is something else. The route that produces it properly is
-     * exercised on its own in `CheckpointTest`.
-     */
-    protected function guestHasConsented(GuestRequest $request): ConsentRecord
-    {
-        return ConsentRecord::query()->create([
-            'user_id' => null,
-            'guest_request_id' => $request->getKey(),
-            'document_code' => ConsentDocument::GuestPersonalData->value,
-            'document_revision' => $this->guestConsentRevision(),
-            'accepted_at' => now(),
-            'ip_address' => '192.0.2.7',
-        ]);
     }
 }

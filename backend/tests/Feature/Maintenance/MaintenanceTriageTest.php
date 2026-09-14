@@ -53,7 +53,7 @@ final class MaintenanceTriageTest extends TestCase
 
         $this->building = $this->dormitory('Block A');
         $this->resident = $this->residentInRoom412($this->building);
-        $this->warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
 
         $this->request = MaintenanceRequest::factory()
             ->forBuilding($this->building)
@@ -262,7 +262,7 @@ final class MaintenanceTriageTest extends TestCase
      */
     public function test_the_acceptance_may_name_a_responsible_party_and_change_the_priority(): void
     {
-        $manager = $this->consentingStaff(RoleCode::Manager, $this->building, 'manager@example.test');
+        $manager = $this->staff(RoleCode::Manager, $this->building, 'manager@example.test');
 
         Sanctum::actingAs($this->warden);
 
@@ -287,7 +287,7 @@ final class MaintenanceTriageTest extends TestCase
      */
     public function test_the_manager_of_the_building_triages_as_the_warden_does(): void
     {
-        $manager = $this->consentingStaff(RoleCode::Manager, $this->building, 'manager@example.test');
+        $manager = $this->staff(RoleCode::Manager, $this->building, 'manager@example.test');
 
         Sanctum::actingAs($manager);
 

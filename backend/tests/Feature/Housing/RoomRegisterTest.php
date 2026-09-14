@@ -343,6 +343,70 @@ final class RoomRegisterTest extends TestCase
             ->assertJsonPath('data.0.id', $free->id);
     }
 
+    /**
+     * The other half of the floor card of FR-02: the summary says how many
+     * rooms a storey holds, and this is how the storey itself is read.
+     *
+     * Without the parameter the screen fetched the whole register a page at a
+     * time and dropped every room on another floor, which is a query per
+     * hundred rooms for an answer the `(building_id, floor)` index gives in
+     * one. The filter is asked of the database, so a floor whose rooms fall on
+     * the third page still comes back whole.
+     */
+    public function test_the_room_register_is_narrowed_to_one_floor(): void
+    {
+        Room::factory()->for($this->first)->withBeds(2)->create([
+            'number' => '301', 'floor' => 3, 'capacity' => 2,
+        ]);
+        Room::factory()->for($this->first)->withBeds(2)->create([
+            'number' => '302', 'floor' => 3, 'capacity' => 2,
+        ]);
+        $onTheFourth = Room::factory()->for($this->first)->withBeds(1)->create([
+            'number' => '401', 'floor' => 4, 'capacity' => 1,
+        ]);
+
+        // A room of the same floor number in the neighbouring dormitory: the
+        // filter narrows inside one building and never across two.
+        Room::factory()->for($this->second)->withBeds(1)->create([
+            'number' => '402', 'floor' => 4, 'capacity' => 1,
+        ]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=3")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonCount(2, 'data');
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=4")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $onTheFourth->id);
+
+        // A storey the dormitory has no rooms on is an empty page, not an
+        // error: the floor card of a block still being filled in draws the
+        // same screen with nothing on it.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=9")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 0);
+
+        // The filters compose, because both are asked of the database.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=3&q=302")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.number', '302');
+
+        // And an empty value is the same as no filter at all — a client that
+        // clears the field sends the parameter back empty.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 3);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?floor=third")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('floor');
+    }
+
     public function test_the_floor_summary_counts_the_rooms_and_the_places_of_each_floor(): void
     {
         $occupied = Room::factory()->for($this->first)->withBeds(2)->create([

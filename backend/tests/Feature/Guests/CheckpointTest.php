@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Guests;
 
 use App\Enums\AuditAction;
-use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
 use App\Enums\RoleCode;
 use App\Exceptions\EntryNotPermittedException;
 use App\Models\AuditLog;
 use App\Models\Building;
-use App\Models\ConsentRecord;
 use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use App\Models\User;
@@ -151,8 +149,6 @@ final class CheckpointTest extends TestCase
             // available with a mandatory reason field».
             ->assertJsonPath('data.0.admission.override_available', true)
             ->assertJsonPath('data.0.admission.override_requires_reason', true);
-
-        $this->guestHasConsented($this->request);
 
         // Blocked: the entry record is refused while no reason is given.
         $this->postJson('/api/v1/checkpoint/check-in', [
@@ -313,10 +309,15 @@ final class CheckpointTest extends TestCase
         $this->assertStringNotContainsString((string) $this->resident->full_name, $body);
         $this->assertStringNotContainsString('305', $body);
 
-        // The entry keeps being refused, which it always was.
+        // And the entry is refused on the state of the request, which is the
+        // refusal that always mattered: a withdrawn request admits nobody, and
+        // there is no reason the officer could give that would set it aside.
         $this->postJson('/api/v1/checkpoint/check-in', [
             'guest_request_id' => $this->request->getKey(),
-        ])->assertStatus(409);
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('reason_code', EntryNotPermittedException::NOT_APPROVED)
+            ->assertJsonPath('override_available', false);
     }
 
     /**
@@ -391,124 +392,6 @@ final class CheckpointTest extends TestCase
     }
 
     /**
-     * FR-35, first criterion, guest half, and §2.7.1's whole argument: the
-     * request is filed by the resident while the data belong to the guest, so
-     * the consent is taken at the post before the entry is recorded — and
-     * without it there is nothing lawful to record.
-     */
-    public function test_no_entry_is_recorded_until_the_guest_has_consented_at_the_post(): void
-    {
-        $this->atTwentyPastTwo();
-
-        Sanctum::actingAs($this->guard);
-
-        $this->postJson('/api/v1/checkpoint/check-in', [
-            'guest_request_id' => $this->request->getKey(),
-        ])
-            ->assertStatus(409)
-            ->assertJsonPath('document', ConsentDocument::GuestPersonalData->value)
-            ->assertJsonPath('revision', $this->guestConsentRevision());
-
-        $this->assertSame(0, GuestVisit::query()->count());
-
-        $this->postJson('/api/v1/checkpoint/guest-consent', [
-            'guest_request_id' => $this->request->getKey(),
-            'revision' => $this->guestConsentRevision(),
-        ])
-            ->assertStatus(201)
-            ->assertJsonPath('data.document', ConsentDocument::GuestPersonalData->value)
-            ->assertJsonPath('data.in_force', true);
-
-        $this->postJson('/api/v1/checkpoint/check-in', [
-            'guest_request_id' => $this->request->getKey(),
-        ])->assertStatus(201);
-    }
-
-    /**
-     * The guest's consent hangs on the request and on no account, which is the
-     * whole reason `consent_records.user_id` had to become nullable — and the
-     * CHECK says exactly one subject, never both and never neither.
-     */
-    public function test_the_guests_consent_names_the_request_and_no_account(): void
-    {
-        $this->atTwentyPastTwo();
-
-        Sanctum::actingAs($this->guard);
-
-        $this->postJson('/api/v1/checkpoint/guest-consent', [
-            'guest_request_id' => $this->request->getKey(),
-            'revision' => $this->guestConsentRevision(),
-        ])->assertStatus(201);
-
-        $record = ConsentRecord::query()
-            ->where('guest_request_id', $this->request->getKey())
-            ->sole();
-
-        $this->assertNull($record->user_id);
-        $this->assertTrue($record->belongsToAGuest());
-
-        $this->expectException(QueryException::class);
-
-        DB::table('consent_records')->insert([
-            'user_id' => $this->resident->getKey(),
-            'guest_request_id' => $this->request->getKey(),
-            'document_code' => ConsentDocument::GuestPersonalData->value,
-            'document_revision' => $this->guestConsentRevision(),
-            'accepted_at' => now(),
-        ]);
-    }
-
-    /**
-     * A revision the repository cannot produce is a malformed field, and 422
-     * is the answer to input (§3.3.3).
-     *
-     * `ConsentRegistry::recordForGuest()` refuses to write such a record — art.
-     * 9 part 3 of Federal Law No. 152-FZ puts the burden of proof on the
-     * operator, and a record naming a wording nobody can show proves nothing —
-     * but it refuses by raising a `RuntimeException`, which reached the post as
-     * a 500. The resident half of FR-35 has always answered 422 here; the
-     * guest half now does too.
-     */
-    public function test_a_consent_naming_a_revision_the_repository_has_never_held_is_refused_as_input(): void
-    {
-        $this->atTwentyPastTwo();
-
-        Sanctum::actingAs($this->guard);
-
-        $this->postJson('/api/v1/checkpoint/guest-consent', [
-            'guest_request_id' => $this->request->getKey(),
-            'revision' => '2099.12',
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('revision');
-
-        $this->assertSame(
-            0,
-            ConsentRecord::query()->where('guest_request_id', $this->request->getKey())->count(),
-        );
-    }
-
-    /**
-     * The revision becomes a path under `resources/consent`, so its shape is
-     * asserted before the repository is asked anything at all. Without the
-     * rule the traversal reached `ConsentTexts::path()`, which refuses it by
-     * raising — a 500 on a field a client controls.
-     */
-    public function test_a_revision_shaped_like_a_path_is_refused_before_the_repository_is_asked(): void
-    {
-        $this->atTwentyPastTwo();
-
-        Sanctum::actingAs($this->guard);
-
-        $this->postJson('/api/v1/checkpoint/guest-consent', [
-            'guest_request_id' => $this->request->getKey(),
-            'revision' => '../../../etc/passwd',
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('revision');
-    }
-
-    /**
      * FR-19, first criterion, and the state change it carries: the entry is
      * recorded, the request moves to `in_progress`, and the deadline is frozen
      * on the visit.
@@ -516,7 +399,6 @@ final class CheckpointTest extends TestCase
     public function test_the_entry_is_recorded_and_the_request_moves_to_in_progress(): void
     {
         $this->atTwentyPastTwo();
-        $this->guestHasConsented($this->request);
 
         Sanctum::actingAs($this->guard);
 
@@ -539,7 +421,6 @@ final class CheckpointTest extends TestCase
     public function test_a_second_entry_on_the_same_request_is_refused(): void
     {
         $this->atTwentyPastTwo();
-        $this->guestHasConsented($this->request);
 
         Sanctum::actingAs($this->guard);
 
@@ -563,8 +444,6 @@ final class CheckpointTest extends TestCase
             ->forBuilding($this->building)
             ->from($this->resident)
             ->create(['visit_date' => '2026-09-14']);
-
-        $this->guestHasConsented($pending);
 
         Sanctum::actingAs($this->guard);
 
@@ -672,7 +551,6 @@ final class CheckpointTest extends TestCase
     private function guestIsInside(): GuestVisit
     {
         $this->atTwentyPastTwo();
-        $this->guestHasConsented($this->request);
 
         Sanctum::actingAs($this->guard);
 

@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
-use App\Enums\ConsentDocument;
 use App\Enums\MaintenanceCategory;
 use App\Enums\MaintenanceLocation;
 use App\Enums\MaintenanceUrgency;
-use App\Enums\RoleCode;
 use App\Models\Building;
-use App\Models\ConsentRecord;
 use App\Models\MaintenanceRequest;
 use App\Models\Room;
 use App\Models\User;
@@ -43,32 +40,6 @@ trait BuildsAMaintenanceScenario
     protected function residentInRoom412(Building $building, string $email = 'resident@example.test'): User
     {
         return $this->residentOf($building, $email, '412');
-    }
-
-    /**
-     * A member of staff who will actually receive the module's notifications.
-     *
-     * `maintenance_status` is an optional category, so it rests on the
-     * person's consent (§2.7.1) and `User::notify()` silences it for an
-     * account that has never given one. A warden created without it would
-     * receive nothing, and a test of FR-36's last Gherkin line would then be
-     * asserting the absence of a message for entirely the wrong reason.
-     */
-    protected function consentingStaff(RoleCode $code, ?Building $building, string $email): User
-    {
-        $person = $this->staff($code, $building, $email);
-
-        ConsentRecord::query()->create([
-            'user_id' => $person->getKey(),
-            'document_code' => ConsentDocument::ResidentPersonalData->value,
-            'document_revision' => (string) config(
-                'dormitory.consent.revisions.'.ConsentDocument::ResidentPersonalData->value
-            ),
-            'accepted_at' => now(),
-            'ip_address' => '192.0.2.11',
-        ]);
-
-        return $person->fresh() ?? $person;
     }
 
     protected function roomOf(User $resident): Room

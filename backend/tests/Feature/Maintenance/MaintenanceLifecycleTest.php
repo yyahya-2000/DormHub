@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature\Maintenance;
 
 use App\Enums\AuditAction;
-use App\Enums\ConsentDocument;
 use App\Enums\MaintenanceRequestStatus;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
@@ -13,7 +12,6 @@ use App\Models\Building;
 use App\Models\MaintenanceRequest;
 use App\Models\User;
 use App\Notifications\MaintenanceRequestStatusChanged;
-use App\Services\ConsentRegistry;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -53,7 +51,7 @@ final class MaintenanceLifecycleTest extends TestCase
 
         $this->building = $this->dormitory('Block A');
         $this->resident = $this->residentInRoom412($this->building);
-        $this->warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
     }
 
     protected function tearDown(): void
@@ -162,7 +160,7 @@ final class MaintenanceLifecycleTest extends TestCase
     public function test_a_warden_of_another_building_cannot_triage_this_request(): void
     {
         $other = $this->dormitory('Block B');
-        $stranger = $this->consentingStaff(RoleCode::Warden, $other, 'warden-b@example.test');
+        $stranger = $this->staff(RoleCode::Warden, $other, 'warden-b@example.test');
 
         $request = $this->requestInStatus();
 
@@ -229,31 +227,6 @@ final class MaintenanceLifecycleTest extends TestCase
         $this->postJson("/api/v1/maintenance-requests/{$request->id}/confirmation")->assertOk();
 
         Notification::assertNotSentTo($this->resident, MaintenanceRequestStatusChanged::class);
-    }
-
-    /**
-     * A resident who has withdrawn the consent the category rests on receives
-     * nothing, and the request still moves. The gate is `User::notify()` and
-     * this module adds no second one.
-     */
-    public function test_a_submitter_whose_consent_is_withdrawn_is_not_written_to(): void
-    {
-        Notification::fake();
-
-        $request = $this->requestInStatus();
-
-        app(ConsentRegistry::class)->withdraw(
-            $this->resident,
-            ConsentDocument::ResidentPersonalData,
-        );
-
-        Sanctum::actingAs($this->warden);
-        $this->postJson("/api/v1/maintenance-requests/{$request->id}/accept", [
-            'target_date' => '2026-09-18',
-        ])->assertOk();
-
-        Notification::assertNotSentTo($this->resident, MaintenanceRequestStatusChanged::class);
-        $this->assertSame(MaintenanceRequestStatus::Accepted, $request->fresh()?->status);
     }
 
     /**

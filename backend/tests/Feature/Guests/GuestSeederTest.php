@@ -6,7 +6,6 @@ namespace Tests\Feature\Guests;
 
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
-use App\Models\ConsentRecord;
 use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use Database\Seeders\DatabaseSeeder;
@@ -20,9 +19,7 @@ use Tests\TestCase;
  * relies on at the demonstration, which is where it is discovered to be
  * broken. Three things are worth pinning down: that it produces the states the
  * demonstration walks through, that a second run does not double them, and
- * that no entry in the register stands without the consent §2.7.1 requires
- * behind it — a stand that demonstrated unlawful entries would be
- * demonstrating the wrong thing.
+ * that nothing it writes is a real person's data.
  */
 final class GuestSeederTest extends TestCase
 {
@@ -64,37 +61,13 @@ final class GuestSeederTest extends TestCase
     }
 
     /**
-     * §2.7.1: consent is the sole ground for processing a guest's data, so
-     * every entry the stand shows has one behind it.
-     */
-    public function test_every_visit_on_the_stand_has_the_guests_consent_behind_it(): void
-    {
-        $this->seed(DatabaseSeeder::class);
-
-        foreach (GuestVisit::query()->get() as $visit) {
-            $this->assertTrue(
-                ConsentRecord::query()
-                    ->forGuestRequest((int) $visit->guest_request_id)
-                    ->inForce()
-                    ->exists(),
-                sprintf('Visit %d is recorded with no consent from the guest.', $visit->getKey()),
-            );
-        }
-    }
-
-    /**
      * C-05: no real personal data anywhere in the repository, fixtures and
-     * seeders included. The addresses the stand writes are from RFC 5737's
-     * documentation range and the accounts are on `example.test`, a name that
-     * cannot resolve.
+     * seeders included. The accounts the stand writes are on `example.test`, a
+     * name that cannot resolve.
      */
-    public function test_the_stand_carries_no_real_address_and_no_real_account(): void
+    public function test_the_stand_carries_no_real_account(): void
     {
         $this->seed(DatabaseSeeder::class);
-
-        foreach (ConsentRecord::query()->whereNotNull('guest_request_id')->get() as $record) {
-            $this->assertStringStartsWith('192.0.2.', (string) $record->ip_address);
-        }
 
         foreach (GuestRequest::query()->with('student')->get() as $request) {
             $this->assertStringEndsWith('@example.test', (string) $request->student?->email);

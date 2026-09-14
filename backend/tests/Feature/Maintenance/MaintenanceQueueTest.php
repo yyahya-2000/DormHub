@@ -54,7 +54,7 @@ final class MaintenanceQueueTest extends TestCase
         $this->building = $this->dormitory('Block A');
         $this->other = $this->dormitory('Block B');
         $this->resident = $this->residentInRoom412($this->building);
-        $this->warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
     }
 
     protected function tearDown(): void

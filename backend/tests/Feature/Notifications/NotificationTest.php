@@ -7,9 +7,7 @@ namespace Tests\Feature\Notifications;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\Building;
-use App\Models\ConsentRecord;
 use App\Models\User;
-use App\Notifications\DocumentAwaitingSignature;
 use App\Notifications\EventNotification;
 use App\Notifications\GuestRequestDecided;
 use App\Notifications\GuestVisitOverdue;
@@ -31,13 +29,13 @@ use Tests\TestCase;
  * the enqueue is the last moment the application controls. What happens after
  * it belongs to the worker and to the mail server.
  *
- * The second criterion — a switch per category — is withdrawn. Nothing a
- * person sets stops a message any more, and the tests below say so rather than
- * leaving it to be inferred from the absence of a settings test: one of them
- * dispatches a notification class that exists nowhere in the application,
- * declared inside the test, and shows that it is delivered on the strength of
- * its category alone. The one gate that remains is FR-35's, and it is asserted
- * where it belongs — in the consent tests.
+ * The second criterion — a switch per category — is withdrawn, and so is the
+ * consent of FR-35 that used to silence part of the list. Nothing stands
+ * between a dispatched message and the person it names, and the tests below
+ * say so rather than leaving it to be inferred from the absence of a settings
+ * test: one of them dispatches a notification class that exists nowhere in the
+ * application, declared inside the test, and shows that it is delivered on the
+ * strength of its category alone.
  */
 final class NotificationTest extends TestCase
 {
@@ -58,13 +56,6 @@ final class NotificationTest extends TestCase
         $this->resident = User::factory()
             ->withRole(RoleCode::Resident, $this->building)
             ->create(['email' => 'resident@example.test']);
-
-        // Most of the categories rest on consent (§2.7.1), so a resident who
-        // has given none would be silenced for a reason that has nothing to do
-        // with this file. Consent in force is the ordinary state, and it is the
-        // state these tests start from; the effect of withdrawing it is
-        // asserted in the FR-35 tests, where it belongs.
-        ConsentRecord::factory()->for($this->resident)->create();
     }
 
     /**
@@ -152,12 +143,13 @@ final class NotificationTest extends TestCase
     }
 
     /**
-     * The switch is gone, and this is the assertion that says so.
+     * The switch is gone, the consent gate is gone, and this is the assertion
+     * that says so.
      *
-     * Every category of the enumeration is dispatched to a resident who has set
-     * nothing and every one of them arrives. Without this the removal would be
-     * invisible: a dispatch that had kept a filter with nothing to read would
-     * pass every other test in this file.
+     * Every category of the enumeration is dispatched to a resident who has
+     * set nothing and signed nothing, and every one of them arrives. Without
+     * this the removal would be invisible: a dispatch that had kept a filter
+     * with nothing to read would pass every other test in this file.
      */
     public function test_every_category_reaches_a_resident_who_has_set_nothing(): void
     {
@@ -237,10 +229,10 @@ final class NotificationTest extends TestCase
 
     public function test_the_personal_account_reads_its_own_messages_and_marks_them_read(): void
     {
-        $this->resident->notify(new DocumentAwaitingSignature(
-            documentCode: 'accommodation_agreement',
-            revision: '2026-08-15',
-            title: 'Accommodation agreement, annexe 2',
+        $this->resident->notify(new MaintenanceRequestStatusChanged(
+            requestId: 73,
+            fromStatus: 'assigned',
+            toStatus: 'done',
         ));
 
         Sanctum::actingAs($this->resident);
@@ -248,7 +240,7 @@ final class NotificationTest extends TestCase
         $listed = $this->getJson('/api/v1/notifications')->assertOk();
 
         $this->assertCount(1, $listed->json('data'));
-        $listed->assertJsonPath('data.0.category', NotificationCategory::DocumentSignature->value);
+        $listed->assertJsonPath('data.0.category', NotificationCategory::MaintenanceStatus->value);
         $listed->assertJsonPath('data.0.read_at', null);
         $listed->assertJsonPath('meta.unread_count', 1);
 
@@ -257,7 +249,7 @@ final class NotificationTest extends TestCase
         $this->postJson("/api/v1/notifications/{$id}/read")
             ->assertOk()
             ->assertJsonPath('data.id', $id)
-            ->assertJsonPath('data.payload.document_code', 'accommodation_agreement');
+            ->assertJsonPath('data.payload.maintenance_request_id', 73);
 
         $this->assertNotNull($this->resident->notifications()->sole()->read_at);
 
@@ -310,10 +302,10 @@ final class NotificationTest extends TestCase
      */
     public function test_one_account_does_not_read_or_mark_read_the_messages_of_another(): void
     {
-        $this->resident->notify(new DocumentAwaitingSignature(
-            documentCode: 'accommodation_agreement',
-            revision: '2026-08-15',
-            title: 'Accommodation agreement, annexe 2',
+        $this->resident->notify(new MaintenanceRequestStatusChanged(
+            requestId: 73,
+            fromStatus: 'assigned',
+            toStatus: 'done',
         ));
 
         $id = $this->resident->notifications()->sole()->id;

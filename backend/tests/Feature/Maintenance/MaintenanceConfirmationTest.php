@@ -51,7 +51,7 @@ final class MaintenanceConfirmationTest extends TestCase
 
         $this->building = $this->dormitory('Block A');
         $this->resident = $this->residentInRoom412($this->building);
-        $this->warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
     }
 
     protected function tearDown(): void
@@ -120,7 +120,7 @@ final class MaintenanceConfirmationTest extends TestCase
 
         foreach ([
             'the warden who accepted it' => $this->warden,
-            'the manager' => $this->consentingStaff(RoleCode::Manager, $this->building, 'manager@example.test'),
+            'the manager' => $this->staff(RoleCode::Manager, $this->building, 'manager@example.test'),
             'the administrator' => $this->staff(RoleCode::Administrator, null, 'admin@example.test'),
             'a neighbour' => $this->residentOf($this->building, 'neighbour@example.test', '413'),
         ] as $who => $account) {

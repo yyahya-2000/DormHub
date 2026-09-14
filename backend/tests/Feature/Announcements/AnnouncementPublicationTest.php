@@ -6,7 +6,6 @@ namespace Tests\Feature\Announcements;
 
 use App\Enums\AnnouncementCategory;
 use App\Enums\AuditAction;
-use App\Enums\ConsentDocument;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\Announcement;
@@ -14,7 +13,6 @@ use App\Models\AuditLog;
 use App\Models\Building;
 use App\Models\User;
 use App\Notifications\AnnouncementPublished;
-use App\Services\ConsentRegistry;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -398,36 +396,28 @@ final class AnnouncementPublicationTest extends TestCase
      * FR-09 reaching the resident, and the line FR-34 draws through the
      * module.
      *
-     * The fan-out runs through `User::notify()` — the one gate — so a resident
-     * who has withdrawn the consent the announcement category rests on
-     * receives nothing, and a resident of another dormitory hears about none
-     * of it either. There is one announcement category now: the second,
+     * Everybody the announcement was addressed to is written to, and nobody
+     * else is: the audience is the dormitory, and a resident of another block
+     * hears nothing. There is one announcement category now — the second,
      * unsilenceable one existed only for the notices FR-12 required a resident
      * to acknowledge.
      */
-    public function test_the_audience_is_notified_and_a_withdrawal_silences_it(): void
+    public function test_the_audience_is_notified_and_nobody_outside_it_is(): void
     {
         Notification::fake();
-
-        app(ConsentRegistry::class)->withdraw(
-            $this->residentOfA,
-            ConsentDocument::ResidentPersonalData,
-        );
 
         Sanctum::actingAs($this->wardenOfA);
 
         $this->postJson('/api/v1/announcements', $this->payload())->assertStatus(201);
 
-        Notification::assertNotSentTo($this->residentOfA, AnnouncementPublished::class);
+        foreach ([$this->residentOfA, $this->neighbourOfA] as $resident) {
+            Notification::assertSentTo(
+                $resident,
+                fn (AnnouncementPublished $notification): bool => $notification->category()
+                    === NotificationCategory::Announcement,
+            );
+        }
 
-        // The neighbour, whose consent stands, is told.
-        Notification::assertSentTo(
-            $this->neighbourOfA,
-            fn (AnnouncementPublished $notification): bool => $notification->category()
-                === NotificationCategory::Announcement,
-        );
-
-        // And nobody outside the audience hears about it.
         Notification::assertNotSentTo($this->residentOfB, AnnouncementPublished::class);
     }
 

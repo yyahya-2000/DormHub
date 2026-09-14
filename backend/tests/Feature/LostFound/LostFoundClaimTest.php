@@ -294,7 +294,7 @@ final class LostFoundClaimTest extends TestCase
         $others = [
             'the claimant' => $this->owner,
             'another resident' => $this->residentOf($this->building, 'third@example.test', '210'),
-            'the warden' => $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test'),
+            'the warden' => $this->staff(RoleCode::Warden, $this->building, 'warden@example.test'),
             'the administrator' => $this->staff(RoleCode::Administrator, null, 'admin@example.test'),
         ];
 
@@ -463,8 +463,8 @@ final class LostFoundClaimTest extends TestCase
     {
         Notification::fake();
 
-        $officer = $this->consentingStaff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
-        $warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $officer = $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test');
+        $warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
 
         $deposited = $this->depositedFind($officer, $this->building);
 

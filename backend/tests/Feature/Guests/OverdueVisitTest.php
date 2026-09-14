@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Guests;
 
 use App\Enums\AuditAction;
-use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
-use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
 use App\Models\Building;
@@ -16,8 +14,6 @@ use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use App\Models\User;
 use App\Notifications\GuestVisitOverdue;
-use App\Services\ConsentRegistry;
-use App\Services\Notifier;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Database\QueryException;
@@ -127,32 +123,6 @@ final class OverdueVisitTest extends TestCase
         Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
         Notification::assertSentTo($this->guard, GuestVisitOverdue::class);
         Notification::assertSentTimes(GuestVisitOverdue::class, 2);
-    }
-
-    /**
-     * The notice rests on the rules of internal order and not on anybody's
-     * agreement, so a withdrawal of the consent of FR-35 does not silence it.
-     * There is no switch any more; this is the only thing that could have.
-     */
-    public function test_the_overdue_notice_survives_a_withdrawal_of_consent(): void
-    {
-        $this->assertFalse(NotificationCategory::VisitOverdue->restsOnConsent());
-
-        app(ConsentRegistry::class)->withdraw(
-            $this->resident,
-            ConsentDocument::ResidentPersonalData,
-        );
-
-        Notification::fake();
-
-        app(Notifier::class)->send($this->resident->fresh(), new GuestVisitOverdue(
-            visitId: 41,
-            guestName: 'Agafya Sviridova',
-            buildingName: $this->building->name,
-            dueAt: now()->setTime(23, 0),
-        ));
-
-        Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
     }
 
     /**

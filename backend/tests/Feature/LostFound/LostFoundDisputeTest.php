@@ -56,7 +56,7 @@ final class LostFoundDisputeTest extends TestCase
         $this->building = $this->dormitory('Block A');
         $this->finder = $this->residentOf($this->building, 'finder@example.test', '412');
         $this->owner = $this->residentOf($this->building, 'owner@example.test', '305');
-        $this->warden = $this->consentingStaff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $this->warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
     }
 
     protected function tearDown(): void
@@ -495,7 +495,7 @@ final class LostFoundDisputeTest extends TestCase
 
         // And the manager of that dormitory does hold it, which is what
         // §1.1.4's revision 2 puts with the register work.
-        $manager = $this->consentingStaff(RoleCode::Manager, $this->building, 'manager@example.test');
+        $manager = $this->staff(RoleCode::Manager, $this->building, 'manager@example.test');
 
         Sanctum::actingAs($manager);
 
