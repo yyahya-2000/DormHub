@@ -6,7 +6,6 @@ namespace App\Models;
 
 use App\Enums\GuestVisitStatus;
 use App\Exceptions\ImmutableRecordException;
-use Carbon\CarbonInterface;
 use Database\Factories\GuestVisitFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -112,18 +111,6 @@ class GuestVisit extends Model
     public function isOpen(): bool
     {
         return $this->checked_out_at === null;
-    }
-
-    /**
-     * Whether the control time has passed with no exit recorded. The question
-     * FR-20 asks; `overdue_notified_at` is the separate question of whether
-     * anybody has been told.
-     */
-    public function isOverdueAt(CarbonInterface $moment): bool
-    {
-        return $this->isOpen()
-            && $this->due_at !== null
-            && $this->due_at->lessThanOrEqualTo($moment);
     }
 
     /**

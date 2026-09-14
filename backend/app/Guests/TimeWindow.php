@@ -23,8 +23,8 @@ use Carbon\CarbonInterface;
  * The rule is one line and it is the whole class: **a closing time at or
  * before the opening time belongs to the next day.** A window from 08:00 to
  * 08:00 is therefore twenty-four hours and not nothing, which is the reading
- * that lets a dormitory with no curfew be configured without a flag of its
- * own.
+ * that lets a dormitory open around the clock be configured without a flag
+ * of its own.
  */
 final readonly class TimeWindow
 {

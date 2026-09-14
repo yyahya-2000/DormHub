@@ -156,14 +156,14 @@ final class OverdueVisitTest extends TestCase
      * FR-20, first criterion: «the control time is set in configuration
      * without code changes (23:00 by default, configurable per building)».
      *
-     * The verification asks for exactly this: «changing `curfew_at` in the
-     * BUILDING row to 22:00 moves the sweep without a code change».
+     * Changing `visiting_to` in the BUILDING row to 22:00 moves the sweep
+     * without a code change.
      */
-    public function test_changing_the_curfew_on_the_building_row_moves_the_sweep(): void
+    public function test_changing_the_closing_hour_on_the_building_row_moves_the_sweep(): void
     {
         Notification::fake();
 
-        $this->building->update(['curfew_at' => '22:00:00']);
+        $this->building->update(['visiting_to' => '22:00:00']);
 
         $visit = $this->openVisitEnteredAt('2026-09-14 18:00:00');
 
@@ -185,17 +185,17 @@ final class OverdueVisitTest extends TestCase
      * hour — and the visit each of them is judged by is its own.
      *
      * Block A closes at 21:00 and the guest was approved to 23:00, so the
-     * curfew caps the deadline at 21:00. Block B closes at 23:00 and the guest
-     * was approved only to 20:00, so the **interval** is the deadline: the
-     * duty officer approved until eight and the resident answers for that hour
-     * whatever the building's curfew says. At 21:15 both are past their own
+     * closing hour caps the deadline at 21:00. Block B closes at 23:00 and the
+     * guest was approved only to 20:00, so the **interval** is the deadline:
+     * the duty officer approved until eight and the resident answers for that
+     * hour however late the building closes. At 21:15 both are past their own
      * deadline and both are reported.
      */
     public function test_each_dormitory_is_swept_by_the_deadline_of_its_own_visits(): void
     {
         Notification::fake();
 
-        $quiet = $this->dormitory('Block B', ['curfew_at' => '23:00:00']);
+        $quiet = $this->dormitory('Block B', ['visiting_to' => '23:00:00']);
         $theirResident = $this->residentOf($quiet, 'other@example.test', '101');
 
         $theirRequest = GuestRequest::factory()
@@ -220,7 +220,7 @@ final class OverdueVisitTest extends TestCase
             'The end of the approved interval is a deadline in its own right.',
         );
 
-        $this->building->update(['curfew_at' => '21:00:00']);
+        $this->building->update(['visiting_to' => '21:00:00']);
         $mine = $this->openVisitEnteredAt('2026-09-14 18:00:00');
 
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 21:15:00'));
@@ -258,13 +258,14 @@ final class OverdueVisitTest extends TestCase
      *
      * A guest approved until 14:00 in a dormitory that closes at 23:00 is
      * overdue at 14:00. `GuestRequest::dueAt()` says so — it takes the earlier
-     * of the interval and the curfew, which makes the end of the interval a
-     * deadline of its own — and `CheckpointService::checkOut()` agrees, since
-     * it closes such a visit `closed_late`. The sweep used to pick the
-     * dormitories past their curfew first and look inside only those, so the
-     * resident answerable under clause 2.2 heard nothing for nine hours.
+     * of the interval and the closing hour, which makes the end of the
+     * interval a deadline of its own — and `CheckpointService::checkOut()`
+     * agrees, since it closes such a visit `closed_late`. The sweep used to
+     * pick the dormitories past their closing hour first and look inside only
+     * those, so the resident answerable under clause 2.2 heard nothing for
+     * nine hours.
      */
-    public function test_a_visit_past_the_end_of_its_interval_is_reported_long_before_the_curfew(): void
+    public function test_a_visit_past_the_end_of_its_interval_is_reported_long_before_the_closing_hour(): void
     {
         Notification::fake();
 
@@ -286,7 +287,7 @@ final class OverdueVisitTest extends TestCase
             ->create(['due_at' => $short->dueAt($this->building)]);
 
         $this->assertSame('14:00', $visit->due_at->format('H:i'));
-        $this->assertSame('23:00:00', (string) $this->building->curfew_at);
+        $this->assertSame('23:00:00', (string) $this->building->visiting_to);
 
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 14:15:00'));
 
@@ -300,62 +301,6 @@ final class OverdueVisitTest extends TestCase
 
         Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
         Notification::assertSentTo($this->guard, GuestVisitOverdue::class);
-    }
-
-    /**
-     * A control time at or before the start of the interval belongs to the
-     * next day, and a visit is never born overdue.
-     *
-     * A dormitory open 08:00–23:00 whose `curfew_at` reads 08:00 — a plausible
-     * way of writing «it closes in the morning» — gave every visit a deadline
-     * seven and a half hours before the guest walked in, and the first sweep
-     * reported it. `TimeWindow` already states the rule for the window; the
-     * deadline now applies the same one to the curfew.
-     */
-    public function test_a_control_time_before_the_interval_belongs_to_the_next_day(): void
-    {
-        Notification::fake();
-
-        $morning = $this->dormitory('Block C', [
-            'visiting_from' => '08:00:00',
-            'visiting_to' => '23:00:00',
-            'curfew_at' => '08:00:00',
-        ]);
-
-        $theirResident = $this->residentOf($morning, 'morning@example.test', '201');
-
-        $request = GuestRequest::factory()
-            ->forBuilding($morning)
-            ->from($theirResident)
-            ->approved()
-            ->create([
-                'visit_date' => '2026-09-14',
-                'planned_from' => '14:00:00',
-                'planned_to' => '20:00:00',
-                'status' => GuestRequestStatus::InProgress,
-            ]);
-
-        $this->assertSame(
-            '2026-09-14 20:00:00',
-            $request->dueAt($morning)->format('Y-m-d H:i:s'),
-            'The deadline is the end of the interval; the curfew is tomorrow morning.',
-        );
-
-        $visit = GuestVisit::factory()
-            ->forRequest($request, $this->guard)
-            ->enteredAt('2026-09-14 14:05:00')
-            ->create(['due_at' => $request->dueAt($morning)]);
-
-        // The clock stands at 18:00, two hours inside the interval and ten
-        // hours past the hour the column reads.
-        $this->artisan('guests:sweep-overdue-visits')->assertSuccessful();
-
-        $this->assertSame(GuestVisitStatus::InBuilding, $visit->fresh()->status);
-
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 20:15:00'));
-        $this->artisan('guests:sweep-overdue-visits')->assertSuccessful();
-
-        $this->assertSame(GuestVisitStatus::Overdue, $visit->fresh()->status);
     }
 
     /**

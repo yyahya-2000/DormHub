@@ -23,7 +23,7 @@ use Illuminate\Support\Collection;
  * one nightly run at the control time, and it is wrong for a reason NFR-09
  * makes concrete: 23:00 is *this* university's hour. Clause 2.2 of the HSE
  * rules sets it, Table 1.1 shows the sector spread around it, and the column
- * `BUILDING.curfew_at` exists so that a dormitory closing at 22:00 needs no
+ * `BUILDING.visiting_to` exists so that a dormitory closing at 22:00 needs no
  * code change. A single cron entry would put this deployment's hour into the
  * deployment itself — the setting would still be editable and would no longer
  * do anything, which is the worst of the two failures because it looks like
@@ -36,13 +36,13 @@ use Illuminate\Support\Collection;
  *
  * **The deadline is the visit's and not the dormitory's, and this is the whole
  * of the selection.** `GUEST_VISIT.due_at` is frozen at the moment of entry as
- * the earlier of the end of the approved interval and the building's control
- * time (`GuestRequest::dueAt()`), so the curfew is already inside the column
- * the query reads — and so is the other half of it. An earlier version of this
- * command took the buildings past their curfew first and looked at `due_at`
- * only within them, which quietly made the curfew the *only* deadline: a guest
- * approved until 14:00 in a dormitory closing at 23:00 was overdue at 14:00 and
- * nobody was told until 23:00. Nine hours in which the resident answerable for
+ * the earlier of the end of the approved interval and the hour the dormitory
+ * stops admitting guests (`GuestRequest::dueAt()`), so the closing hour is
+ * already inside the column the query reads — and so is the other half of it.
+ * An earlier version of this command took the buildings past their closing
+ * hour first and looked at `due_at` only within them, which quietly made that
+ * hour the *only* deadline: a guest approved until 14:00 in a dormitory
+ * closing at 23:00 was overdue at 14:00 and nobody was told until 23:00. Nine hours in which the resident answerable for
  * the departure under clause 2.2 was not asked about it, on a fact the
  * `check-out` route already knew — it closes such a visit `closed_late`. One
  * condition, `due_at <= now`, is what makes the two agree.
