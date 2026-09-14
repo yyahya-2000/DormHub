@@ -28,5 +28,12 @@ export function RequireSession() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
+  // FR-42. An account signed in with the password the office printed for it
+  // owes a change before it may do anything else. The server says so on
+  // `GET /auth/me` and clears the flag when the password is replaced.
+  if (session.user.password_change_required && location.pathname !== '/password') {
+    return <Navigate to="/password" replace />
+  }
+
   return <Outlet />
 }

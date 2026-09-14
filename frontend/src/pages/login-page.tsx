@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { useLogin } from '@/api/generated/dormitory'
@@ -303,18 +303,11 @@ export function LoginPage() {
             </Button>
 
             {/*
-              FR-42 leaves a resident whose account was issued minutes ago with
-              a one-time code and no password, and this screen is where they
-              arrive. Without this link the only way to the form that spends the
-              code would be the address in the letter, and a letter that has
-              been closed is gone.
+              FR-42 no longer starts with a code in a letter: the office prints
+              the password it was given once, the resident signs in with it, and
+              the change of password happens inside the session. There is
+              nothing on this screen for an account that has never signed in.
             */}
-            <p className="m-0">
-              <Link className="text-prussian underline" to="/set-password">
-                {t('login.firstPassword')}
-              </Link>
-            </p>
-
             <p className="text-steel">{t('login.note')}</p>
           </form>
         </div>
