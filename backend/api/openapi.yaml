@@ -30,10 +30,17 @@ info:
     an important announcement, is Could priority and outside the MVP — there is
     no route for it and no column behind one.
 
-    The remaining routes of §3.3.6 — lost-and-found and maintenance — belong to
-    later increments and are deliberately absent from this document rather than
-    described as unimplemented: the file is the input for client generation, and
-    a generated client should not carry methods that answer 404.
+    The seventh is the maintenance module of increment 3: FR-36 (the resident
+    files a defect), FR-37 (the warden's triage), FR-38 (the status lifecycle),
+    FR-39 (confirmation and reopening) and FR-40 (the dormitory's queue and its
+    export). Two of its requirements have no route at all and are scheduled
+    passes: FR-39's automatic closure of a request nobody confirmed, and FR-40's
+    nightly flagging of the requests past the configured threshold.
+
+    The remaining routes of §3.3.6 — lost-and-found — belong to a later increment
+    and are deliberately absent from this document rather than described as
+    unimplemented: the file is the input for client generation, and a generated
+    client should not carry methods that answer 404.
 
     Nine properties of the contract are worth reading before the paths.
 
@@ -156,6 +163,13 @@ tags:
       FR-21. The journal clause 2.1.2 of the HSE rules of internal order makes
       the security service keep by hand, with the pen removed. Append-only; a
       correction is a correcting entry.
+  - name: Maintenance
+    description: >-
+      FR-36 … FR-40. The resident reports a defect; the warden or the manager of
+      that dormitory triages it and carries it as far as «completed»; the
+      resident who reported it is the only person who can close it. A request
+      nobody confirms closes itself after a configurable window, marked as
+      automatically closed rather than as confirmed.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -2423,6 +2437,581 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+
+  /maintenance-requests:
+    get:
+      tags: [Maintenance]
+      summary: The caller's own maintenance requests
+      description: |
+        FR-36. **The route takes no parameter by which one person could name
+        another**, and that absence is the protection: the list is filtered by
+        the identifier of the token. The warden's queue is a different route, a
+        sub-resource of the building, decided on the building object.
+
+        This is where the module parts company with the guest one, which puts
+        both lists behind a single route. There, the two lists are the same rows
+        read with a different scope. Here they are not: the queue carries
+        filters, an age, an overdue flag and an export, none of which means
+        anything on «my own three requests».
+      operationId: listMyMaintenanceRequests
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MaintenanceRequestStatus'
+        - name: category
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MaintenanceCategory'
+      responses:
+        '200':
+          description: The caller's own requests, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Maintenance]
+      summary: File a maintenance request
+      description: |
+        FR-36, `multipart/form-data` because of the photographs.
+
+        **The room is never in the body.** For `location: own_room` the request
+        is bound to the room of the submitter's *active residency record*, read
+        from the housing register — a client that could name the room could name
+        somebody else's. A common area has no row in the register, so it is
+        named in words through `location_note`, and `room_id` comes back null.
+
+        **A resident without an active residency record cannot file**, and the
+        answer is 403 rather than 422: nothing about the body is wrong. The
+        check is a policy question put to the register, and the same 403 answers
+        a resident of block A filing against block B.
+
+        Up to three photographs. The ceiling is configuration, is stated by this
+        route's validation as a 422 naming `photos`, and is stated again as a
+        CHECK constraint in the database.
+
+        On success the request is created in `submitted`, the first row of its
+        work log is written in the same transaction with a null `from_status` —
+        the request did not move, it came into being — and the staff who triage
+        in that dormitory are notified after the commit.
+      operationId: fileMaintenanceRequest
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRequestInput'
+            encoding:
+              photos:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '201':
+          description: Filed, with the room resolved from the register and the history opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: >-
+            The account holds no active residency record in that dormitory, so
+            it is not a resident of it today (FR-36, second criterion).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}:
+    get:
+      tags: [Maintenance]
+      summary: One maintenance request with its history
+      description: |
+        The resident who filed it always reads it; the staff of that dormitory
+        read it if their capability covers the queue. Another resident of the
+        same dormitory does not — a defect in somebody's room is not theirs.
+
+        The card carries `work_log`, which is where the reason for a refusal and
+        the comment on each move actually live (§3.4.1, decision 6). There is no
+        `rejection_reason` on the request itself to disagree with the history.
+      operationId: showMaintenanceRequest
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      responses:
+        '200':
+          description: The request, with the history and the photographs' paths.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /maintenance-requests/{maintenanceRequest}/accept:
+    post:
+      tags: [Maintenance]
+      summary: Accept a request into work, with a planned completion date
+      description: |
+        FR-37. **The warden or the manager of this dormitory**, and nobody else:
+        not the duty officer, who decides on guest requests and has nothing to
+        do with these; not the administrator, who reads every queue and promises
+        no dates; and never the resident who filed it.
+
+        «Acceptance without a planned completion date is impossible» — so
+        `target_date` is required by this route, is a required argument of the
+        service behind it, and is a CHECK constraint on the table. A date
+        already in the past is refused: the resident is told that date the
+        moment this succeeds.
+
+        `assigned_to` and `urgency` are optional. FR-37 names a responsible
+        party and a reassignment of priority beside the date; a dormitory whose
+        warden does the work himself has nobody else to name, and a required
+        field would be filled in with his own name on every row.
+
+        The resident is notified, and the message carries the planned date.
+      operationId: acceptMaintenanceRequest
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceAcceptanceInput'
+      responses:
+        '200':
+          description: Accepted, with the planned date on the request.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            The request is no longer `submitted` — usually because a second
+            member of staff moved it first. The body names the state it is in
+            and the state that was asked for (FR-38).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}/reject:
+    post:
+      tags: [Maintenance]
+      summary: Refuse a request, with a stated reason
+      description: |
+        FR-37, first criterion: «rejection without a reason is impossible». The
+        reason is required by this route and is a required argument of the
+        service behind it, so there is no path by which a refusal is recorded
+        without one.
+
+        The reason is stored as the comment of the work-log row this transition
+        writes, and not as a column on the request (§3.4.1, decision 6).
+
+        Only a `submitted` request can be refused. A request already taken into
+        work and then found to be somebody else's business is not withdrawn
+        afterwards — FR-38's graph has no such edge.
+      operationId: rejectMaintenanceRequest
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRejectionInput'
+      responses:
+        '200':
+          description: Refused, with the reason in the history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request is no longer `submitted`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}/start:
+    post:
+      tags: [Maintenance]
+      summary: Report that the work has begun
+      description: |
+        FR-38, `accepted → in progress`. The staff who triage in this dormitory.
+
+        FR-38's chain is kept strict: there is no `accepted → completed` edge,
+        so work cannot be reported complete on a request nobody started. The
+        convenience is real — a dripping tap is mended before anybody would
+        press a second button — and it is refused because the graph is the
+        requirement's, and because the history would otherwise have no answer to
+        «when was it begun».
+      operationId: startMaintenanceWork
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceCommentInput'
+      responses:
+        '200':
+          description: In progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request is not `accepted`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}/completion:
+    post:
+      tags: [Maintenance]
+      summary: Report the work done — which does not close the request
+      description: |
+        FR-38, `in progress → completed`, and the line the whole module turns
+        on (§3.5.2): **the request is closed by the person who reported it, not
+        by the person who fixed it**. A status set by whoever did the work
+        proves nothing; confirmation by the resident produces a two-sided
+        record.
+
+        So `completed` is a waiting state and not an ending. The only ways out
+        of it are the reporter's word — `/confirmation` or `/reopening` — and
+        the clock, which closes the request after the configurable window of
+        FR-39 and marks it as automatically closed.
+
+        `completed_at` is rewritten on each completion, which is what restarts
+        the confirmation window after a reopening.
+      operationId: completeMaintenanceWork
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceCommentInput'
+      responses:
+        '200':
+          description: Completed, and waiting for the reporter.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request is not `in_progress`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}/confirmation:
+    post:
+      tags: [Maintenance]
+      summary: The reporter confirms the work and the request closes
+      description: |
+        FR-39. **The reporter, and nobody else** — not the warden who accepted
+        it, not the manager who marked it complete, not the administrator. This
+        is not a capability some role holds over a class of objects; it is the
+        fact that one particular person filed one particular request, so the
+        policy is an identity comparison.
+
+        A warden who believes a resident unreasonable does not close the request
+        over their head: the confirmation window runs out and the request closes
+        marked `auto_closed`, which is a different and honest record.
+
+        On success `confirmed_at` is set and `auto_closed` stays false. A CHECK
+        constraint refuses a row that claims both.
+      operationId: confirmMaintenanceWork
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceCommentInput'
+      responses:
+        '200':
+          description: Closed, on the reporter's word.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: The account is not the person who filed this request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request is not `completed`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /maintenance-requests/{maintenanceRequest}/reopening:
+    post:
+      tags: [Maintenance]
+      summary: The reporter says the defect is not fixed
+      description: |
+        FR-39, first criterion: «reopening within the configurable window
+        returns the request to accepted and increments a reopen counter».
+
+        Back to `accepted` and not to `submitted`, which is the requirement's
+        word and the right one: the dormitory has already agreed the defect is
+        theirs and has already named a date. The planned date stays on the row —
+        it is now visibly missed, which is what FR-40's overdue flag is for.
+
+        The reason is optional. FR-37 makes a refusal without one impossible and
+        FR-39 makes no such demand; the resident who has already waited through
+        one repair is the wrong person to put a form in front of. The history
+        gets a sentence either way.
+
+        **Two different 409s.** The request is not `completed` at all — the
+        state machine refuses it. Or it is completed and the window has run out
+        before the nightly pass reached the row: what has expired is the clock
+        rather than the state, which no transition table can express, so the
+        body carries `confirmation_window_days` and `window_closed_on` instead
+        of two statuses.
+      operationId: reopenMaintenanceRequest
+      parameters:
+        - $ref: '#/components/parameters/MaintenanceRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceCommentInput'
+      responses:
+        '200':
+          description: Back to `accepted`, with the reopen counter one higher.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: The account is not the person who filed this request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            Either the request is not `completed`, or the confirmation window
+            has closed. The two are told apart by the fields the body carries.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/IllegalTransitionError'
+                  - $ref: '#/components/schemas/ConfirmationWindowClosedError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/maintenance-queue:
+    get:
+      tags: [Maintenance]
+      summary: The maintenance queue of one dormitory, filtered and exported
+      description: |
+        FR-40. The warden or the manager of this dormitory, and the
+        administrator, who reads every queue — FR-40 names the campus
+        directorate among the people the queue is for.
+
+        **A sub-resource of the building, and that is the whole of the
+        horizontal boundary.** The dormitory is a path parameter, the policy
+        decides on the object, and every query begins from it: there is no code
+        path in which a request of another dormitory is in the result set to be
+        filtered out afterwards. A warden of block 1 asking for block 2 is 403,
+        recorded as `access.denied`.
+
+        With no filter the answer is the **open** requests, because FR-40's
+        fourth criterion says the warden sees «all open requests» and a screen
+        opening on three years of closed ones would be a different screen.
+        Naming a status — `closed` included — says otherwise.
+
+        The order is the one a queue is worked in: most pressing urgency first,
+        oldest first inside one urgency. Sorting by age alone would bury an
+        emergency reported this morning under a wobbly chair from March.
+
+        **`age_days` is counted from submission and from nothing else**, as the
+        Gherkin of §2.4.3 words it. Restarting the clock on acceptance would
+        measure the warden rather than the wait.
+
+        **`overdue` is configuration and not code** (FR-40, second criterion).
+        A request is overdue when its planned completion date has passed — a
+        promise broken to a named resident — or when it is older than
+        `meta.overdue_after_days`, which catches the request nobody has triaged
+        at all and has no date to be late against. Changing the setting changes
+        the flag and the nightly digest together, with no code edit.
+
+        The export is this route with `format=csv` rather than a route of its
+        own: two routes would be two queries with the same chance of disagreeing
+        about what «open» means. Either format is an audited action — an export
+        discloses who reported what and when.
+      operationId: showMaintenanceQueue
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+        - name: status
+          in: query
+          required: false
+          description: Omit for the open requests; name one to see that state alone.
+          schema:
+            $ref: '#/components/schemas/MaintenanceRequestStatus'
+        - name: category
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MaintenanceCategory'
+        - name: min_age_days
+          in: query
+          required: false
+          description: >-
+            «At least this old», in days since submission — the question a
+            warden asks, «what has been sitting here more than a week».
+          schema: { type: integer, minimum: 0, maximum: 3650 }
+        - name: overdue
+          in: query
+          required: false
+          description: Only the requests past their planned date or past the configured threshold.
+          schema: { type: boolean }
+        - name: from
+          in: query
+          required: false
+          description: Start of the period, measured on the submission. Omit for the whole queue.
+          schema: { type: string, format: date }
+        - name: until
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: |
+            One page of the queue. As CSV when `format=csv`, with the header
+            line naming the columns `meta.columns` lists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceQueuePage'
+            text/csv:
+              schema: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
 components:
 
   securitySchemes:
@@ -2482,6 +3071,11 @@ components:
       schema: { type: integer, format: int64, minimum: 1 }
     GuestRequestId:
       name: guestRequest
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    MaintenanceRequestId:
+      name: maintenanceRequest
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
@@ -2607,6 +3201,13 @@ components:
         - guest_visit.corrected
         - visit_register.viewed
         - visit_register.exported
+        - maintenance_request.accepted
+        - maintenance_request.rejected
+        - maintenance_request.reopened
+        - maintenance_request.auto_closed
+        - maintenance_request.overdue
+        - maintenance_request.reopening_refused
+        - maintenance_queue.exported
 
     AuditResult:
       type: string
@@ -3947,6 +4548,325 @@ components:
         message: { type: string }
         guest_visit_id: { type: integer, format: int64 }
         checked_out_at: { type: string, format: date-time }
+
+    MaintenanceRequestStatus:
+      type: string
+      description: |
+        FR-38's six states: «submitted → accepted → in progress → completed →
+        closed; and submitted → rejected», plus FR-39's one edge back from
+        `completed` to `accepted`.
+
+        The values are FR-38's words and not §3.5.2's. That sequence diagram
+        was drawn before the requirement was worded this way and labels the
+        same states `new`, `assigned` and `done`; the requirement is what the
+        module is accepted against and a client reads the stored value, so the
+        requirement wins.
+
+        `closed` carries both endings and does not split them: which of the two
+        it was is the difference between `confirmed_at` being set and
+        `auto_closed` being true. A seventh state would have to be handled by
+        every reader of the queue and would tell the reporter nothing those two
+        columns do not.
+      enum: [submitted, accepted, in_progress, completed, closed, rejected]
+
+    MaintenanceCategory:
+      type: string
+      description: |
+        FR-36's categories. Six values fixed by the requirement, not a lookup
+        table: nobody administers the list from a screen and a category carries
+        no attributes of its own.
+
+        `other` is present on purpose. A resident who cannot find their defect
+        in five words abandons the form, and the queue then holds a tidy
+        taxonomy of the defects that were easy to classify.
+      enum: [plumbing, electrical, furniture, heating, network, other]
+
+    MaintenanceLocation:
+      type: string
+      description: |
+        FR-36's location: «own room or a named common area».
+
+        The two behave differently at the moment the request is written.
+        `own_room` binds to the room of the submitter's active residency
+        record, read from the register; `common_area` names the place in
+        `location_note`, because the register holds rooms and beds and knows
+        nothing about the kitchen on the fourth floor. `room_id` is null for a
+        common area.
+      enum: [own_room, common_area]
+
+    MaintenanceUrgency:
+      type: string
+      description: |
+        FR-36's urgency, in the three values §3.4.3 gives
+        `MAINTENANCE_REQUEST.priority`.
+
+        The resident sets it and the warden may change it on triage. A scale
+        nobody can move is a scale everybody maximises: the resident's choice
+        is what they know — water on the floor now, a wobbly chair whenever —
+        and the warden's is what the queue is ordered by. The change is a row
+        in the work log like any other.
+      enum: [routine, urgent, emergency]
+
+    MaintenanceRequest:
+      type: object
+      description: |
+        One maintenance request as the resident and the warden read it.
+
+        Three fields are computed and none of them stored: `age_days`,
+        `overdue` and `confirmation_window_open` are questions about the clock,
+        and a column holding the answer would be wrong between two runs of
+        whatever updated it. The threshold and the window arrive from
+        configuration, so moving either changes what the client reads on the
+        next request.
+
+        `photo_paths` carries paths and not URLs. A signed URL expires, so one
+        embedded in a list is stale by the time somebody scrolls to it; the
+        client asks for a link when it is about to show the image, and a path
+        is meaningless without the object store's credentials.
+
+        `work_log` is where the reason for a refusal and the comment on every
+        move actually live (§3.4.1, decision 6). There is deliberately no
+        `rejection_reason` on the request to disagree with the history.
+      required: [id, building_id, reporter_id, category, location, description, status]
+      properties:
+        id: { type: integer, format: int64 }
+        building_id: { type: integer, format: int64 }
+        building_name: { type: string }
+        room_id:
+          type: [integer, 'null']
+          format: int64
+          description: Null for a common area (§3.4.3, «NULL for common areas»).
+        room_number: { type: [string, 'null'] }
+        reporter_id: { type: integer, format: int64 }
+        reporter_name: { type: string }
+        category:
+          $ref: '#/components/schemas/MaintenanceCategory'
+        category_label: { type: string }
+        location:
+          $ref: '#/components/schemas/MaintenanceLocation'
+        location_note: { type: [string, 'null'] }
+        place:
+          type: string
+          description: Where the defect is, in words — «Room 412», or the named common area.
+        title: { type: [string, 'null'] }
+        description: { type: string }
+        urgency:
+          $ref: '#/components/schemas/MaintenanceUrgency'
+        urgency_label: { type: string }
+        photo_paths:
+          type: array
+          maxItems: 3
+          items: { type: string }
+        photo_count: { type: integer, minimum: 0, maximum: 3 }
+        status:
+          $ref: '#/components/schemas/MaintenanceRequestStatus'
+        status_label: { type: string }
+        assigned_to: { type: [integer, 'null'], format: int64 }
+        assignee_name: { type: [string, 'null'] }
+        assigned_at: { type: [string, 'null'], format: date-time }
+        target_date:
+          type: [string, 'null']
+          format: date
+          description: >-
+            The planned completion date. Never null past `submitted` and
+            outside `rejected` — FR-37's second criterion, kept by a CHECK
+            constraint as well as by the form rule.
+        completed_at: { type: [string, 'null'], format: date-time }
+        confirmed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Set only when the reporter closed it themselves.
+        closed_at: { type: [string, 'null'], format: date-time }
+        auto_closed:
+          type: boolean
+          description: >-
+            FR-39. True when the confirmation window ran out with no answer. A
+            request the resident confirmed is evidence the defect was fixed; one
+            that closed for want of an answer is evidence of nothing but that
+            the dormitory stopped waiting, and the two must not be confused.
+        reopen_count: { type: integer, minimum: 0 }
+        age_days:
+          type: integer
+          minimum: 0
+          description: FR-40's «age since submission», in whole days.
+        overdue: { type: boolean }
+        overdue_after_days: { type: integer }
+        confirmation_window_days: { type: integer }
+        confirmation_window_open:
+          type: boolean
+          description: >-
+            Whether the reporter may still confirm or dispute. The screen reads
+            it so as to offer the two buttons only while they would work.
+        work_log:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceWorkLogEntry'
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    MaintenanceWorkLogEntry:
+      type: object
+      description: |
+        One entry of the append-only work log (§3.4.1, decision 6; §4.4.4).
+
+        `from_status` null means the row records a submission rather than a
+        move: the request did not change state, it came into being.
+        `actor_id` null means nobody decided — the scheduled closure of FR-39 —
+        and `by_the_scheduler` says so plainly, so that no client fills the gap
+        with an author the record deliberately does not have.
+      required: [id, to_status, recorded_at]
+      properties:
+        id: { type: integer, format: int64 }
+        from_status:
+          oneOf:
+            - $ref: '#/components/schemas/MaintenanceRequestStatus'
+            - type: 'null'
+        to_status:
+          $ref: '#/components/schemas/MaintenanceRequestStatus'
+        summary: { type: string }
+        comment: { type: [string, 'null'] }
+        actor_id: { type: [integer, 'null'], format: int64 }
+        actor_name: { type: [string, 'null'] }
+        by_the_scheduler: { type: boolean }
+        recorded_at: { type: string, format: date-time }
+
+    MaintenanceRequestInput:
+      type: object
+      description: |
+        FR-36's submission. Multipart, because of the photographs.
+
+        There is no `room_id` and that is the design: an «own room» request is
+        bound to the room of the submitter's active residency record, read from
+        the housing register. A client that could name the room could name
+        somebody else's.
+      required: [building_id, category, location, description]
+      properties:
+        building_id: { type: integer, format: int64, minimum: 1 }
+        category:
+          $ref: '#/components/schemas/MaintenanceCategory'
+        location:
+          $ref: '#/components/schemas/MaintenanceLocation'
+        location_note:
+          type: string
+          maxLength: 255
+          description: >-
+            Required when `location` is `common_area` and ignored otherwise —
+            a note beside a room resolved from the register would be a second,
+            unreliable answer to «where».
+        title: { type: string, maxLength: 255 }
+        description: { type: string, minLength: 10, maxLength: 2000 }
+        urgency:
+          $ref: '#/components/schemas/MaintenanceUrgency'
+        photos:
+          type: array
+          maxItems: 3
+          description: >-
+            Up to three. The ceiling is configuration, is refused here as a 422
+            naming `photos`, and is refused again by a CHECK constraint.
+          items: { type: string, format: binary }
+
+    MaintenanceAcceptanceInput:
+      type: object
+      required: [target_date]
+      properties:
+        target_date:
+          type: string
+          format: date
+          description: >-
+            The planned completion date, and mandatory: FR-37 makes acceptance
+            without one impossible. A date in the past is refused — the resident
+            is told this date the moment the acceptance succeeds.
+        assigned_to:
+          type: integer
+          format: int64
+          description: The responsible party FR-37 names beside the date. Optional.
+        urgency:
+          $ref: '#/components/schemas/MaintenanceUrgency'
+        comment: { type: string, maxLength: 1000 }
+
+    MaintenanceRejectionInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          description: >-
+            FR-37, first criterion: «rejection without a reason is impossible».
+            Stored as the comment of the work-log row the transition writes.
+
+    MaintenanceCommentInput:
+      type: object
+      description: >-
+        The optional sentence a transition carries into the work log. On
+        `/reopening` it is the resident's «what is still wrong»; FR-39 does not
+        demand one, and the history gets a sentence of its own when it is empty.
+      properties:
+        comment: { type: string, maxLength: 1000 }
+
+    MaintenanceQueuePage:
+      type: object
+      description: FR-40. One page of a dormitory's queue, as rows of scalars.
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceQueueRow'
+        meta:
+          type: object
+          properties:
+            building_id: { type: integer, format: int64 }
+            page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+            overdue_after_days:
+              type: integer
+              description: >-
+                The configured threshold this page's `overdue` column was
+                measured against (FR-40, second criterion).
+            columns:
+              type: object
+              description: The column keys and their headings, in the order the CSV writes them.
+              additionalProperties: { type: string }
+
+    MaintenanceQueueRow:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: integer, format: int64 }
+        submitted_at: { type: string, format: date-time }
+        age_days: { type: integer, minimum: 0 }
+        category: { type: string }
+        urgency: { type: string }
+        place: { type: string }
+        status:
+          $ref: '#/components/schemas/MaintenanceRequestStatus'
+        target_date: { type: [string, 'null'], format: date }
+        overdue: { type: boolean }
+        reporter: { type: string }
+        assignee: { type: [string, 'null'] }
+        reopen_count: { type: integer, minimum: 0 }
+
+    ConfirmationWindowClosedError:
+      type: object
+      description: |
+        FR-39, and the one refusal of this module a transition table cannot
+        express. Once the nightly pass has run, the request is `closed` and the
+        state machine refuses the reopening on its own; between the window
+        closing and that run the request is still `completed` and
+        `completed → accepted` is a move the table admits — correctly, because
+        that is the move FR-39 is about. What has run out is the clock.
+
+        409 rather than 422: the body is well formed and the caller is the right
+        person, and the same call a day earlier would have succeeded.
+      required: [message]
+      properties:
+        message: { type: string }
+        maintenance_request_id: { type: integer, format: int64 }
+        confirmation_window_days: { type: integer }
+        window_closed_on: { type: [string, 'null'], format: date }
 
     Error:
       type: object
