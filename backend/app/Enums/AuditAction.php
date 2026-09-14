@@ -73,19 +73,6 @@ enum AuditAction: string
     case ResidentAccountIssued = 'resident.account_issued';
     case PasswordSet = 'auth.password_set';
 
-    // FR-35. Consent to the processing of personal data, given and withdrawn.
-    //
-    // These two are in the log for a reason none of the others share. Art. 19
-    // part 2 cl. 8 of Federal Law No. 152-FZ requires the operator to keep a
-    // registration and accounting of the actions performed with personal data,
-    // and art. 9 part 3 puts on the operator the burden of proving that
-    // consent was given. The consent record itself is the primary evidence;
-    // the log entry is what says who gave it, from where and at what moment,
-    // and — for the withdrawal — from which point the processing that rested
-    // on it had to stop.
-    case ConsentGranted = 'consent.granted';
-    case ConsentWithdrawn = 'consent.withdrawn';
-
     // FR-16, FR-17. The request, and every decision taken on it. §3.9.6 puts
     // «every decision on a guest request» in the minimum event set without
     // qualification, so the refusal is recorded as fully as the approval and
@@ -97,21 +84,6 @@ enum AuditAction: string
     case GuestRequestCancelled = 'guest_request.cancelled';
     case GuestRequestExpired = 'guest_request.expired';
     case GuestRequestDecisionRefused = 'guest_request.decision_refused';
-
-    /*
-     * FR-17, third criterion: «the applicant is notified of the decision» — and
-     * the case in which they are not.
-     *
-     * The notice of a decision rests on consent (§2.7.1), so a resident who
-     * has withdrawn that consent receives nothing. That silence is correct and
-     * it was also invisible: the message was dropped inside `User::notify()`
-     * and the log recorded the decision as though it had been delivered. A
-     * criterion phrased «the applicant is notified» cannot be audited against a
-     * log that says nothing about the times it was not. The entry names the
-     * reason, so «why did I hear nothing» has an answer that does not require
-     * reading the code.
-     */
-    case GuestRequestDecisionNotDelivered = 'guest_request.decision_not_delivered';
 
     // FR-18. A lookup at the post reads a guest's name and document; art. 19
     // part 2 cl. 8 of Federal Law No. 152-FZ asks the operator to keep a
