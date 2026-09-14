@@ -2134,11 +2134,30 @@ paths:
           description: >-
             Nothing in this dormitory answers to that code or surname. A
             distinct answer from an empty list, because a terminal must not
-            show «no such code» and «none today» the same way.
+            show «no such code» and «none today» the same way — and the two
+            misses are told apart in `message`, since they are not the same
+            news at the desk.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                type: object
+                required: [message, data, meta]
+                description: >-
+                  The shape of the 200 with a `message` added, so that one
+                  parser reads both answers and the officer has a sentence to
+                  read off the screen.
+                properties:
+                  message: { type: string }
+                  data:
+                    type: array
+                    maxItems: 0
+                    items:
+                      $ref: '#/components/schemas/CheckpointCard'
+                  meta:
+                    type: object
+                    properties:
+                      matches: { type: integer, enum: [0] }
+                      read_only: { type: boolean }
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
@@ -3820,6 +3839,7 @@ components:
         - guest_request.cancelled
         - guest_request.expired
         - guest_request.decision_refused
+        - guest_request.decision_not_delivered
         - guest_request.document_viewed
         - checkpoint.guest_verified
         - checkpoint.entry_recorded
@@ -3952,6 +3972,16 @@ components:
         curfew_at:
           type: string
           examples: ['23:00:00']
+        guest_lead_time_hours:
+          type: integer
+          minimum: 0
+          maximum: 720
+          description: >-
+            FR-16, first criterion: the notice this dormitory wants before a
+            guest arrives. Zero — the default — means none, which is what the
+            HSE rules of internal order say; clause 2.2 fixes the hours and is
+            silent about how far ahead a resident must ask.
+          examples: [0]
         is_active: { type: boolean }
 
     RoomType:
@@ -4019,6 +4049,15 @@ components:
         curfew_at:
           type: string
           examples: ['23:00:00']
+        guest_lead_time_hours:
+          type: integer
+          minimum: 0
+          maximum: 720
+          description: >-
+            FR-16, first criterion. Hours of notice required before a visit may
+            begin; zero means none. The cap is a month, past which the setting
+            stops being a notice period and becomes a refusal to admit guests.
+          examples: [0]
         is_active: { type: boolean }
 
     RoomInput:
@@ -4968,14 +5007,32 @@ components:
 
     CheckpointCard:
       type: object
-      description: >-
+      description: |
         FR-18's five fields — guest, inviting resident, room, departure
         deadline, status — with the verdict on admission beside them.
+
+        **A card does not always name anybody.** A withdrawn, refused or
+        expired request still answers to its access code, deliberately: a guest
+        who turns up anyway is told the visit was cancelled rather than that no
+        such code exists. But there is then no visit about to be recorded and
+        therefore no ground for showing the guest's name, the host's name or
+        the host's room (§2.7.1, NFR-06). `disclosed` is false on such a card
+        and `guest`, `inviting_resident`, `room`, `due_at`,
+        `permitted_interval` and `access_code` are all null; `status`,
+        `status_label` and `admission` still say what the officer has to tell
+        the person at the desk.
+      required: [guest_request_id, disclosed, status, status_label, admission, checked_at]
       properties:
         guest_request_id: { type: integer, format: int64 }
+        disclosed:
+          type: boolean
+          description: >-
+            Whether this card names anybody. False for a request that can no
+            longer lead to an entry and never led to one.
         access_code: { type: string, nullable: true }
         guest:
           type: object
+          nullable: true
           properties:
             full_name: { type: string }
             document_type:
@@ -4985,6 +5042,7 @@ components:
             is_foreign_document: { type: boolean }
         inviting_resident:
           type: object
+          nullable: true
           properties:
             id: { type: integer, format: int64, nullable: true }
             full_name: { type: string, nullable: true }
@@ -4993,10 +5051,10 @@ components:
           nullable: true
           description: >-
             Null when the housing register holds no bed for the host — an
-            account issued before a place was assigned. Shown as absent rather
-            than guessed at.
-        due_at: { type: string, format: date-time }
-        permitted_interval: { type: string, example: '14:00–23:00' }
+            account issued before a place was assigned — and on a card that
+            names nobody. Shown as absent rather than guessed at.
+        due_at: { type: string, format: date-time, nullable: true }
+        permitted_interval: { type: string, nullable: true, example: '14:00–23:00' }
         status:
           $ref: '#/components/schemas/GuestRequestStatus'
         status_label: { type: string }
