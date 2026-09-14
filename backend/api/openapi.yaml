@@ -20,11 +20,10 @@ info:
 
     The fifth is the guest module of increment 1, which is what the work is
     built around: FR-16 (the request), FR-17 (the duty officer's decision),
-    FR-18 (verification at the security post), FR-19 (entry and exit), FR-21
-    (the visitor register) and FR-23 (the foreign-guest flag). FR-20, the
-    control of the departure deadline, is in this increment too and has no
-    route at all: it is a quarter-hourly sweep that reads each dormitory's own
-    control time.
+    FR-18 (verification at the security post), FR-19 (entry and exit) and
+    FR-21 (the visitor register). FR-20, the control of the departure deadline,
+    is in this increment too and has no route at all: it is a quarter-hourly
+    sweep that reads the deadline frozen on each visit.
 
     The sixth is the announcement module of increment 2: FR-09 (publication),
     FR-11 (the feed) and FR-12 (the acknowledgement of reading). FR-10, pinning
@@ -104,7 +103,7 @@ info:
     guest has none.
 
     The visiting regime is a property of each dormitory and never a constant.
-    `visiting_from`, `visiting_to`, `curfew_at` and `guest_lead_time_hours` sit
+    `visiting_from`, `visiting_to` and `guest_lead_time_hours` sit
     on the BUILDING row, and they are what the submission validator, the card at
     the post and the overdue sweep all read. A university whose rules close the
     dormitory at 22:00 changes a column, which is what NFR-09 asks for. The
@@ -261,48 +260,48 @@ paths:
   /auth/password:
     post:
       tags: [Authentication]
-      summary: Set a password with a one-time code
+      summary: Replace the password of the signed-in account
       description: |
         FR-42, third criterion. An account issued to an incoming resident is
-        created with a secret nobody holds; what the resident receives, at their
-        own contact and never on the screen of the person who created the
-        account, is a one-time code. This route spends that code and puts a
-        password of the resident's own in its place.
+        created with a password the server generates; the office reads it once,
+        out of the answer that created the account, prints it and hands it over.
+        This route is the other end: the resident signs in with what they were
+        given and puts a password of their own in its place.
 
-        Unauthenticated, of necessity: the account has no password to sign in
-        with yet. The code takes the place of a session, works once, and expires
-        an hour after it is issued. Every API token the account already held is
-        revoked with the change.
+        Behind the session, and the old password is presented with the new one —
+        a stolen token must not be enough to take an account over. Every API
+        token the account holds is revoked with the change, the one making it
+        included, so the client signs in again afterwards.
 
-        The refusal says nothing about which of the four causes it was — no such
-        address, a code that never existed, one already spent, one expired — for
-        the same reason the sign-in route never says whether a login exists.
-      operationId: setPassword
-      security: []
+        `password_change_required` on the account says the change is still owed.
+        It is cleared here and nowhere else.
+      operationId: changePassword
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetPasswordInput'
+              $ref: '#/components/schemas/ChangePasswordInput'
       responses:
         '204':
-          description: The password is set and the code is spent. The event is in the audit log.
+          description: The password is replaced. The event is in the audit log, the value is not.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
         '422':
           description: |
-            Either the payload failed validation, or the code did not resolve.
+            The payload failed validation — `current_password` did not match the
+            account's own, the confirmation did not match, or the new password
+            is too short.
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/ValidationError'
-                  - $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ValidationError'
         '429':
           description: >-
             The address sent more requests to this route than it admits per
             minute. A limiter of its own, counted apart from the sign-in route:
             both are keyed by network address and a dormitory is one address, so
-            a shared counter meant a handful of guesses at a code locked
+            a shared counter meant a handful of guesses at a password locked
             everybody behind that address out of signing in. `reason` is
             `rate_limited`, and the message names this route rather than the
             sign-in one.
@@ -408,35 +407,6 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
-  /buildings/{building}/archive:
-    post:
-      tags: [Buildings]
-      summary: Archive a dormitory
-      description: |
-        FR-01, first criterion. The row survives and `is_active` becomes false, so
-        that the residency history of a closed dormitory stays readable. The
-        administrator alone.
-      operationId: archiveBuilding
-      parameters:
-        - $ref: '#/components/parameters/BuildingId'
-      responses:
-        '200':
-          description: The dormitory is archived.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Building'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   /buildings/{building}/rooms:
     get:
       tags: [Rooms]
@@ -450,9 +420,24 @@ paths:
 
         The administrator, and the warden, manager or duty officer **of this
         building**. A resident does not read the occupancy of the whole dormitory.
+        The list is paged, and both filters are applied by the database rather
+        than by the client: `free=1` narrows it to the rooms holding a place
+        somebody could move into today, and `q` matches part of a room number.
       operationId: listBuildingRooms
       parameters:
         - $ref: '#/components/parameters/BuildingId'
+        - name: q
+          in: query
+          required: false
+          description: Part of a room number.
+          schema: { type: string, maxLength: 32 }
+        - name: free
+          in: query
+          required: false
+          description: Keep only the rooms with at least one free place.
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
       responses:
         '200':
           description: The rooms, by floor and then by number.
@@ -466,12 +451,18 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Room'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
     post:
       tags: [Rooms]
       summary: Register a room
@@ -506,6 +497,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+
+  /buildings/{building}/floors:
+    get:
+      tags: [Rooms]
+      summary: The floors of one dormitory, with the occupancy of each
+      description: |
+        FR-02, the register added up. Per floor: how many rooms stand on it, how
+        many of those still hold a free place, how many places are registered and
+        how many of them nobody holds.
+
+        One aggregate over rooms and places, grouped by floor, so a twelve-storey
+        block costs what a single floor does. The same circle as the room
+        register — the summary cannot be readable by anybody the register is not.
+      operationId: listBuildingFloors
+      parameters:
+        - $ref: '#/components/parameters/BuildingId'
+      responses:
+        '200':
+          description: The floors, lowest first. A floor with no rooms is absent.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Floor'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /rooms/{room}:
     get:
@@ -688,7 +714,7 @@ paths:
         '422':
           description: |
             Either the payload failed validation, or the place cannot receive
-            anybody — a blocked bed, or a room under repair or withdrawn.
+            anybody — a place the warden has withdrawn from use.
           content:
             application/json:
               schema:
@@ -774,8 +800,8 @@ paths:
         warden of building 1 requesting a card of building 2 gets 403, at the API
         and not merely in the interface.
 
-        The card carries the name, the study status, the citizenship, the contact,
-        the current place, the whole residency history and the open obligations.
+        The card carries the name, the citizenship, the contact, the current
+        place, the whole residency history and the open obligations.
         `current_bed` and `open_obligations` are read as «resident today», not as
         «no departure date written»: somebody leaving at the end of December has
         a current place until the end of December. Reading the card is recorded in
@@ -882,10 +908,9 @@ paths:
         code that forgot to ask.
 
         The way out depends on which it was. A staff grant is revoked through
-        `DELETE /buildings/{building}/staff/{user}/{role}`. Rooms are not:
-        this API has no route that deletes or moves one, so the message points at
-        archiving instead, which keeps the rooms and their residency history
-        readable.
+        `DELETE /buildings/{building}/staff/{user}/{role}`. Rooms are not: this
+        API has no route that deletes or moves one, so the message names them and
+        advises nothing.
       operationId: deleteBuilding
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -917,9 +942,28 @@ paths:
         building**. A resident of the building gets 403, and so does the warden of
         any other building. The answer never carries a person attached to a different
         dormitory.
+        The list is paged, and `q` searches it by part of a name — which is how
+        the accommodation form of FR-03 finds a candidate, rather than by
+        fetching the roll and filtering it in the browser. `role` keeps one kind
+        of grant: `student` for the residents, the staff codes for the staff.
+        Neither parameter widens the answer, because the query starts from the
+        grants naming **this** building whatever they say.
       operationId: listBuildingUsers
       parameters:
         - $ref: '#/components/parameters/BuildingId'
+        - name: q
+          in: query
+          required: false
+          description: Part of a name.
+          schema: { type: string, maxLength: 120 }
+        - name: role
+          in: query
+          required: false
+          description: Keep only the people holding this role in this building.
+          schema:
+            $ref: '#/components/schemas/RoleCode'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
       responses:
         '200':
           description: The roll of the building. The read is recorded in the audit log.
@@ -933,12 +977,18 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/User'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
 
   /buildings/{building}/staff:
     post:
@@ -946,14 +996,25 @@ paths:
       summary: Appoint a member of staff in this dormitory
       description: |
         FR-41. The warden of **this** building grants the manager, duty officer
-        or security role inside it. Three refusals are worth telling apart, and
-        all three are 403 because all three are a question of who the caller is:
+        or security role inside it.
+
+        **The chain is one level deep at each step.** The administrator grants
+        the warden and stops there; the staff beneath the warden are the
+        warden's own appointments, made inside the building he answers for. An
+        administrator asking for `security` directly is refused — otherwise
+        there would be a road into a dormitory's staff that goes past the person
+        who answers for it. The same list decides revocation, so a grant the
+        administrator may not write he may not take back either: a dormitory
+        that has lost its warden gets a new one appointed first.
+
+        Four refusals are worth telling apart, and all four are 403 because all
+        four are a question of who the caller is:
 
         - the same call against another dormitory — the scope of the caller's own
           grant is what decides, and the path is what it is compared against;
-        - a grant of the administrator or the warden role — the chain of
-          appointment runs downwards only, and the administrator's grant is
-          issued outside the application entirely;
+        - a grant of the administrator role — nobody grants it, and the
+          administrator's own is issued outside the application entirely;
+        - a grant of the warden role by anyone but the administrator;
         - any staff grant at all attempted by a manager — the one capability
           revision 2 of the role model withheld from him.
 
@@ -1048,7 +1109,7 @@ paths:
       summary: Issue an account to an incoming resident
       description: |
         FR-42. The warden or the manager of **this** dormitory creates the
-        account of a person moving in: name, contact, study status, citizenship.
+        account of a person moving in: name, contact, citizenship.
 
         There is no `role` field and no `password` field, and both absences are
         the requirement rather than an omission.
@@ -1057,21 +1118,17 @@ paths:
         scoped to the building in the path, so no staff role can be issued this
         way — there is no parameter through which one could be asked for.
 
-        The address is typed here and is not confirmed before the first message
-        goes to it. What confirms it is the code being spent: the account is
-        marked as having a proved address at the moment `POST /auth/password`
-        succeeds, and until then nobody has shown that anyone reads it.
+        **The password is generated by the server and returned once.** It is in
+        `data.password` of this answer and in no other response of the API: the
+        account is read back through `User`, which has no such field. Nothing is
+        sent anywhere — no mail, no queue, no audit entry carries the value. The
+        office prints this answer and hands the sheet to the person it belongs
+        to, which is what `data.user`, `data.building` and the role grant are
+        there for.
 
-        The credential does not travel in this response. The account is created
-        with a secret that is generated, hashed and forgotten in the same step;
-        what reaches the resident is a one-time code, sent to the address on the
-        account and spent at `POST /auth/password`. The response describes the
-        account and carries `password_change_required: true`, which is how a
-        client knows the account is still waiting for its first password.
-
-        Constraint C-03 leaves one delivery channel in this iteration, and it is
-        mail. The message is queued rather than sent inline: creating an account
-        must not wait on a mail server.
+        The account is created with `password_change_required: true`, so the
+        resident replaces the printed password at `POST /auth/password` on first
+        sign-in.
       operationId: issueResidentAccount
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -1085,8 +1142,8 @@ paths:
         '201':
           description: >-
             The account exists, the resident role is granted in this dormitory,
-            and the one-time code is on its way to the contact. The issue is in
-            the audit log.
+            and the generated password is in the body — for the only time. The
+            issue is in the audit log; the password is not.
           content:
             application/json:
               schema:
@@ -1094,7 +1151,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/User'
+                    $ref: '#/components/schemas/IssuedAccount'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1104,70 +1161,34 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
-  /buildings/{building}/residents/{resident}/credential:
-    post:
+  /citizenships:
+    get:
       tags: [Residents]
-      summary: Send a resident a fresh one-time code
+      summary: The closed list of citizenships
       description: |
-        FR-42, the way back out of a lost code.
-
-        A code lives an hour. Before this route existed, an account whose code
-        expired unspent was finished: the password could not be set, no second
-        code could be issued, the account could not be removed, and `users.email`
-        is unique — so the address stayed held by a row nobody could use. One
-        road in, an hour wide, and no way back.
-
-        The same circle of callers as issuing the account, and for the same
-        reason: sending a second code is the same act as sending the first. The
-        code goes to the address on the account, never into this response, and
-        the person who asks for it never sees it.
-
-        Issuing a second code is also the revocation of the first. The token
-        store keeps one code per account, so the replacement is what stops the
-        one that went astray, and two live codes for one account never exist.
-
-        Two refusals are particular to this route:
-
-        - **404** — the account is not a resident of the dormitory in the path.
-          The caller may work here; there is no such resident here.
-        - **409** — the account already carries a password of its own. Sending it
-          a fresh code would be a password reset performed by a member of staff,
-          which is a far larger power than FR-42 grants: it would let a manager
-          take over any resident of his building. Recovery for an account in use
-          is a separate requirement and is not in this iteration.
-
-        The event reaches the audit log as `resident.credential_issued` with
-        `reissue: true`, so an administrator can see how many codes an account
-        was sent and by whom. The record is written after the delivery has been
-        accepted and never before.
-      operationId: reissueResidentCredential
-      parameters:
-        - $ref: '#/components/parameters/BuildingId'
-        - $ref: '#/components/parameters/ResidentId'
+        The values `citizenship` is validated against, with the name beside each
+        code, so that the form draws its dropdown from the same source the rule
+        decides on. The order is the order the list is meant to be shown in.
+      operationId: listCitizenships
       responses:
-        '202':
-          description: >-
-            The delivery was accepted and the code is on its way to the address
-            on the account. Accepted rather than done: whether a mail server
-            takes it is not this application's fact to assert. No body.
+        '200':
+          description: The list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [value, label]
+                      properties:
+                        value: { $ref: '#/components/schemas/Citizenship' }
+                        label: { type: string, example: Russia }
         '401':
           $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: No such dormitory, or no such resident in this dormitory.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: >-
-            The account already has a password of its own. A one-time code is
-            issued only to an account that has never set one.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /notifications:
     get:
@@ -1774,9 +1795,18 @@ paths:
           in: query
           required: false
           schema: { type: string, format: date }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          required: false
+          description: Rows per page. Capped at 100; a larger value is a 422.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         '200':
-          description: The requests, newest visit first.
+          description: One page of the requests, newest visit first.
           content:
             application/json:
               schema:
@@ -1787,6 +1817,10 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/GuestRequest'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1809,14 +1843,9 @@ paths:
         route changes with it, which is what NFR-09 asks for — the window is
         never a constant in code.
 
-        `is_foreign_document` is **derived** from `guest_doc_type` and is not
-        accepted from the client (FR-23): a client able to set it could clear
-        it, and the warning would then be attached at the client's discretion.
-
-        The document number is stored encrypted (NFR-06). It never comes back
-        in a response; `guest_doc_number_masked` carries its last four
-        characters, and the number in full has a route of its own that records
-        the reading.
+        The request carries the guest's name and nothing else about them. No
+        document, no purpose of the visit: the paper is compared with the
+        person at the desk and the register keeps no copy of it (§2.7.1).
       operationId: submitGuestRequest
       requestBody:
         required: true
@@ -1891,15 +1920,6 @@ paths:
         `decided_at` are written, the audit record is written in the same
         transaction, and the applicant is notified after the commit
         (`request_decision`, an optional category the resident may switch off).
-
-        **`responsible_officer_mark` is FR-23's second criterion.** It is
-        required — 422 — when the guest carries a foreign document *and* the
-        interval runs past midnight. Both halves matter: a foreign document on
-        a visit that ends the same evening creates no place of stay under art.
-        2 cl. 4 of Federal Law No. 109-FZ, and demanding the mark for it would
-        overstate the norm. The mark records that the officer responsible for
-        migration registration has been told; the system submits no arrival
-        notification of its own (FR-W2).
       operationId: approveGuestRequest
       parameters:
         - $ref: '#/components/parameters/GuestRequestId'
@@ -1936,15 +1956,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/IllegalTransitionError'
         '422':
-          description: >-
-            The daily quota is spent, or FR-23's mark is missing. The two are
-            told apart by the fields the body carries.
+          description: The daily quota is spent.
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/QuotaError'
-                  - $ref: '#/components/schemas/OfficerMarkRequiredError'
                   - $ref: '#/components/schemas/ValidationError'
 
   /guest-requests/{guestRequest}/reject:
@@ -2028,50 +2045,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IllegalTransitionError'
-
-  /guest-requests/{guestRequest}/document-number:
-    get:
-      tags: [Guest requests]
-      summary: The guest's document number in full
-      description: |
-        NFR-06 and §3.9.6. The column is stored encrypted and shown masked
-        everywhere else; this route is the only way to the number itself, and
-        every call writes `guest_request.document_viewed` to the audit log.
-
-        The circle is narrower than the request's own readers and does not
-        include the security post: at the desk the document is in the officer's
-        hand, and the last four characters are what a comparison needs. The
-        warden of that dormitory and the administrator may ask.
-
-        A route rather than a field on the request, deliberately: a field would
-        be sent on every list and every refresh, and the log would fill with
-        readings nobody performed.
-      operationId: showGuestDocumentNumber
-      parameters:
-        - $ref: '#/components/parameters/GuestRequestId'
-      responses:
-        '200':
-          description: The number, once, recorded.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: object
-                    required: [guest_request_id, guest_doc_type, guest_doc_number]
-                    properties:
-                      guest_request_id: { type: integer, format: int64 }
-                      guest_doc_type:
-                        $ref: '#/components/schemas/GuestDocumentType'
-                      guest_doc_number: { type: string }
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /checkpoint/verify:
     post:
@@ -2330,32 +2303,24 @@ paths:
       description: |
         FR-21 and §3.9.6. The journal clause 2.1.2 of the HSE rules of internal
         order makes the security service keep by hand — guest, time of arrival,
-        time of departure, premises, whom they are visiting, details of the
-        document — plus the operator who recorded each entry, which a paper
-        page carried by existing and an electronic one has to say in words.
-
-        Constraint C-04 makes this export the substitute for the access-control
-        integration this iteration does not build. **The format is a
-        presentational template and carries no claim to satisfy any particular
-        reporting obligation** (§3.9.6).
+        time of departure, premises, whom they are visiting — plus the officers
+        who recorded the entry and the exit, which a paper page carried by
+        existing and an electronic one has to say in words. The details of the
+        document are the one thing the clause asks for that the register no
+        longer keeps.
 
         Available to the administrator and to the warden of the building
-        concerned, and to nobody else. The export is itself an audited action.
+        concerned, and to nobody else. Reading it is itself an audited action.
+        There is no file to download: the register is read where it lives.
 
-        **The document number is exported masked**, which is a departure from
-        the paper journal and is deliberate: an export is a file that leaves
-        the system and is copied. The type and the last four characters
-        identify the entry against the original document, and the number in
-        full is available one request at a time on an audited route.
-
-        Corrections travel with the rows they correct: an export that showed
-        the entries and hid the corrections would present a record the register
-        itself does not stand behind.
+        Corrections travel with the rows they correct: a register that showed
+        the entries and hid the corrections would present a record it does not
+        itself stand behind.
 
         The period is taken against the **entry**: a guest admitted at 23:50 on
         the 30th and recorded leaving at 00:20 belongs to the 30th, which is
         the day the officer would have written them down on.
-      operationId: exportVisitRegister
+      operationId: listVisitRegister
       parameters:
         - $ref: '#/components/parameters/BuildingId'
         - name: from
@@ -2368,17 +2333,15 @@ paths:
           required: false
           description: Last day of the period, inclusive. Defaults to today.
           schema: { type: string, format: date }
-        - name: format
-          in: query
-          required: false
-          description: >-
-            `json` for the register as data, `csv` for the file. §3.9.6 also
-            asks for PDF; this iteration produces the two above.
-          schema: { type: string, enum: [json, csv], default: json }
         - name: page
           in: query
           required: false
           schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          required: false
+          description: Rows per page. Capped at 100; a larger value is a 422.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         '200':
           description: One page of the register.
@@ -2398,19 +2361,10 @@ paths:
                       building_id: { type: integer, format: int64 }
                       from: { type: string, format: date }
                       until: { type: string, format: date }
-                      page: { type: integer }
+                      current_page: { type: integer }
+                      last_page: { type: integer }
                       per_page: { type: integer }
                       total: { type: integer }
-                      columns:
-                        type: object
-                        additionalProperties: { type: string }
-                        description: The seven columns, in the order clause 2.1.2 lists them.
-            text/csv:
-              schema:
-                type: string
-                description: >-
-                  The same rows with a header line. Written through `fputcsv`,
-                  so a guest's name containing a comma does not break the file.
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -2429,9 +2383,9 @@ paths:
         as a correcting entry».
 
         This route writes **nothing** to the visit. It writes a row to the
-        audit log naming it, and the register export carries the two side by
-        side — which is what a numbered paper journal gives and an editable row
-        does not.
+        audit log naming it, and the register carries the two side by side —
+        which is what a numbered paper journal gives and an editable row does
+        not.
 
         The correction is free text and has to say something. There is no
         structured «change this field to that value», and that is the point: a
@@ -2470,7 +2424,6 @@ paths:
                     properties:
                       guest_visit_id: { type: integer, format: int64 }
                       correction: { type: string }
-                      note: { type: string }
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -2491,36 +2444,37 @@ paths:
         the identifier of the token. The warden's queue is a different route, a
         sub-resource of the building, decided on the building object.
 
-        This is where the module parts company with the guest one, which puts
-        both lists behind a single route. There, the two lists are the same rows
-        read with a different scope. Here they are not: the queue carries
-        filters, an age, an overdue flag and an export, none of which means
-        anything on «my own three requests».
+        Two lists and one parameter to choose between them, the same division
+        the warden's queue has: the open requests, and the archive of the ones
+        that are finished with.
       operationId: listMyMaintenanceRequests
       parameters:
-        - name: status
+        - name: scope
           in: query
           required: false
-          schema:
-            $ref: '#/components/schemas/MaintenanceRequestStatus'
-        - name: category
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/MaintenanceCategory'
+          description: >-
+            `open` (the default) for the requests still somebody's work,
+            `archive` for the closed and rejected ones.
+          schema: { type: string, enum: [open, archive], default: open }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
       responses:
         '200':
-          description: The caller's own requests, newest first.
+          description: One page of the caller's own requests, newest first.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/MaintenanceRequest'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '422':
@@ -2955,7 +2909,7 @@ paths:
   /buildings/{building}/maintenance-queue:
     get:
       tags: [Maintenance]
-      summary: The maintenance queue of one dormitory, filtered and exported
+      summary: The maintenance queue of one dormitory, and its archive
       description: |
         FR-40. The warden or the manager of this dormitory, and the
         administrator, who reads every queue — FR-40 names the campus
@@ -2968,14 +2922,20 @@ paths:
         filtered out afterwards. A warden of block 1 asking for block 2 is 403,
         recorded as `access.denied`.
 
-        With no filter the answer is the **open** requests, because FR-40's
-        fourth criterion says the warden sees «all open requests» and a screen
-        opening on three years of closed ones would be a different screen.
-        Naming a status — `closed` included — says otherwise.
+        **Two lists and one parameter to choose between them.** The default is
+        the open requests, because FR-40's fourth criterion says the warden sees
+        «all open requests» and a screen opening on three years of closed ones
+        would be a different screen; `scope=archive` is that other screen. Every
+        request is in exactly one of the two, so none can be lost between them.
 
-        The order is the one a queue is worked in: most pressing urgency first,
-        oldest first inside one urgency. Sorting by age alone would bury an
-        emergency reported this morning under a wobbly chair from March.
+        The status, category, age, overdue and period filters are gone, and so
+        is the CSV export they were read by. None of them was the question a
+        warden asks of a queue.
+
+        The queue is ordered the way a queue is worked — most pressing urgency
+        first, oldest first inside one urgency. Sorting by age alone would bury
+        an emergency reported this morning under a wobbly chair from March. The
+        archive is ordered newest first: nobody works an archive.
 
         **`age_days` is counted from submission and from nothing else**, as the
         Gherkin of §2.4.3 words it. Restarting the clock on acceptance would
@@ -2983,69 +2943,29 @@ paths:
 
         **`overdue` is configuration and not code** (FR-40, second criterion).
         A request is overdue when its planned completion date has passed — a
-        promise broken to a named resident — or when it is older than
-        `meta.overdue_after_days`, which catches the request nobody has triaged
-        at all and has no date to be late against. Changing the setting changes
-        the flag and the nightly digest together, with no code edit.
-
-        The export is this route with `format=csv` rather than a route of its
-        own: two routes would be two queries with the same chance of disagreeing
-        about what «open» means. Either format is an audited action — an export
-        discloses who reported what and when.
+        promise broken to a named resident — or when it is older than the
+        configured threshold, which catches the request nobody has triaged at
+        all and has no date to be late against. Changing the setting changes the
+        flag and the nightly digest together, with no code edit.
       operationId: showMaintenanceQueue
       parameters:
         - $ref: '#/components/parameters/BuildingId'
-        - name: status
-          in: query
-          required: false
-          description: Omit for the open requests; name one to see that state alone.
-          schema:
-            $ref: '#/components/schemas/MaintenanceRequestStatus'
-        - name: category
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/MaintenanceCategory'
-        - name: min_age_days
+        - name: scope
           in: query
           required: false
           description: >-
-            «At least this old», in days since submission — the question a
-            warden asks, «what has been sitting here more than a week».
-          schema: { type: integer, minimum: 0, maximum: 3650 }
-        - name: overdue
-          in: query
-          required: false
-          description: Only the requests past their planned date or past the configured threshold.
-          schema: { type: boolean }
-        - name: from
-          in: query
-          required: false
-          description: Start of the period, measured on the submission. Omit for the whole queue.
-          schema: { type: string, format: date }
-        - name: until
-          in: query
-          required: false
-          schema: { type: string, format: date }
-        - name: format
-          in: query
-          required: false
-          schema: { type: string, enum: [json, csv], default: json }
-        - name: page
-          in: query
-          required: false
-          schema: { type: integer, minimum: 1, default: 1 }
+            `open` (the default) for the requests still somebody's work,
+            `archive` for the closed and rejected ones.
+          schema: { type: string, enum: [open, archive], default: open }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
       responses:
         '200':
-          description: |
-            One page of the queue. As CSV when `format=csv`, with the header
-            line naming the columns `meta.columns` lists.
+          description: One page of the queue, or of the archive.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MaintenanceQueuePage'
-            text/csv:
-              schema: { type: string }
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3664,6 +3584,20 @@ components:
       description: The plain-text token returned by `POST /auth/login`, issued by Laravel Sanctum.
 
   parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      description: The page of a paged list, counted from one.
+      schema: { type: integer, minimum: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      description: >-
+        Rows per page. The default is twenty and the ceiling a hundred; a larger
+        figure is refused rather than silently lowered.
+      schema: { type: integer, minimum: 1, maximum: 100 }
     BuildingId:
       name: building
       in: path
@@ -3822,7 +3756,6 @@ components:
         - audit_log.viewed
         - building.created
         - building.updated
-        - building.archived
         - building.deleted
         - building.deletion_blocked
         - building.rooms_viewed
@@ -3838,7 +3771,6 @@ components:
         - staff.appointed
         - staff.revoked
         - resident.account_issued
-        - resident.credential_issued
         - auth.password_set
         - consent.granted
         - consent.withdrawn
@@ -3849,7 +3781,6 @@ components:
         - guest_request.expired
         - guest_request.decision_refused
         - guest_request.decision_not_delivered
-        - guest_request.document_viewed
         - checkpoint.guest_verified
         - checkpoint.entry_recorded
         - checkpoint.entry_refused
@@ -3858,14 +3789,12 @@ components:
         - guest_visit.overdue
         - guest_visit.corrected
         - visit_register.viewed
-        - visit_register.exported
         - maintenance_request.accepted
         - maintenance_request.rejected
         - maintenance_request.reopened
         - maintenance_request.auto_closed
         - maintenance_request.overdue
         - maintenance_request.reopening_refused
-        - maintenance_queue.exported
         - announcement.published
         - announcement.readers_viewed
         - lost_found_item.published
@@ -3950,10 +3879,10 @@ components:
         password_change_required:
           type: boolean
           description: >-
-            True while the account is waiting for its first password — an
-            account issued under FR-42 whose one-time code has not been spent
-            yet. It says that much and carries no secret; setting a password at
-            `POST /auth/password` clears it.
+            True while the account still owes a change — an account issued under
+            FR-42 whose resident is still signing in with the password the
+            office printed for them. It says that much and carries no secret;
+            replacing the password at `POST /auth/password` clears it.
         consent_required:
           type: array
           description: >-
@@ -3974,7 +3903,7 @@ components:
 
     Building:
       type: object
-      required: [id, name, address, is_active]
+      required: [id, name, address]
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
@@ -3987,9 +3916,6 @@ components:
         visiting_to:
           type: string
           examples: ['23:00:00']
-        curfew_at:
-          type: string
-          examples: ['23:00:00']
         guest_lead_time_hours:
           type: integer
           minimum: 0
@@ -4000,7 +3926,6 @@ components:
             HSE rules of internal order say; clause 2.2 fixes the hours and is
             silent about how far ahead a resident must ask.
           examples: [0]
-        is_active: { type: boolean }
 
     RoomType:
       type: string
@@ -4008,13 +3933,6 @@ components:
         The three layouts FR-01 names. The layout belongs to the room and not to
         the dormitory as a whole, because one building routinely mixes them.
       enum: [corridor, block, apartment]
-
-    RoomStatus:
-      type: string
-      description: |
-        A room that is not `in_service` holds no new residency, however many of
-        its places are free.
-      enum: [in_service, under_repair, withdrawn]
 
     BedStatus:
       type: string
@@ -4038,9 +3956,17 @@ components:
         has arrived — never before it, however long ago the notice was written.
       enum: [active, ended]
 
-    StudyStatus:
+    Citizenship:
       type: string
-      enum: [enrolled, academic_leave, graduated, expelled]
+      description: |
+        The closed list `citizenship` is validated against. It was a free
+        string, which made «RU», «Россия» and «russian» three citizenships as
+        far as any query was concerned.
+
+        The Russian Federation, the CIS states the university admits from, and
+        one bucket for everybody else. The codes are ISO 3166-1 alpha-2. The
+        names to show beside them are at `GET /citizenships`.
+      enum: [RU, BY, KZ, UZ, KG, TJ, AM, AZ, MD, TM, OTHER]
 
     BuildingInput:
       type: object
@@ -4064,9 +3990,6 @@ components:
         visiting_to:
           type: string
           examples: ['23:00:00']
-        curfew_at:
-          type: string
-          examples: ['23:00:00']
         guest_lead_time_hours:
           type: integer
           minimum: 0
@@ -4076,7 +3999,6 @@ components:
             begin; zero means none. The cap is a month, past which the setting
             stops being a notice period and becomes a refusal to admit guests.
           examples: [0]
-        is_active: { type: boolean }
 
     RoomInput:
       type: object
@@ -4097,8 +4019,6 @@ components:
           description: How many places the room may hold. The ceiling FR-02 checks against.
         type:
           $ref: '#/components/schemas/RoomType'
-        status:
-          $ref: '#/components/schemas/RoomStatus'
 
     Bed:
       type: object
@@ -4128,9 +4048,6 @@ components:
         type:
           $ref: '#/components/schemas/RoomType'
         type_label: { type: string }
-        status:
-          $ref: '#/components/schemas/RoomStatus'
-        status_label: { type: string }
         beds_count:
           type: integer
           description: Places registered. Never greater than `capacity`.
@@ -4159,6 +4076,20 @@ components:
           items:
             $ref: '#/components/schemas/Bed'
 
+    Floor:
+      type: object
+      description: |
+        One floor of a dormitory, counted. `rooms_with_free_beds` and `free_beds`
+        answer different questions — a floor may have one room with four free
+        places, or four rooms with one each — and a floor card shows both.
+      required: [floor, rooms_count, rooms_with_free_beds, beds_count, free_beds]
+      properties:
+        floor: { type: integer }
+        rooms_count: { type: integer, minimum: 0 }
+        rooms_with_free_beds: { type: integer, minimum: 0 }
+        beds_count: { type: integer, minimum: 0 }
+        free_beds: { type: integer, minimum: 0 }
+
     ResidencyInput:
       type: object
       required: [user_id, bed_id, contract_number, moved_in_at]
@@ -4172,10 +4103,6 @@ components:
             building this bed stands in is the one allowed to write the row.
         contract_number: { type: string, maxLength: 64 }
         moved_in_at: { type: string, format: date }
-        ground:
-          type: [string, 'null']
-          maxLength: 255
-          description: The ground for the accommodation, recorded verbatim.
 
     Residency:
       type: object
@@ -4201,7 +4128,6 @@ components:
         building_name: { type: [string, 'null'] }
         contract_number: { type: string }
         moved_in_at: { type: string, format: date }
-        moved_in_ground: { type: [string, 'null'] }
         moved_out_at: { type: [string, 'null'], format: date }
         moved_out_ground: { type: [string, 'null'] }
         status:
@@ -4225,19 +4151,18 @@ components:
     ResidentCard:
       type: object
       description: |
-        FR-06. `study_status` and `citizenship` are nullable by design: a staff
-        account is not a student and has neither, and the card renders what is
-        known rather than a default that looks like a fact.
+        FR-06. `citizenship` is nullable by design: a staff account was not
+        created through the resident route and may have none, and the card
+        renders what is known rather than a default that looks like a fact.
       required: [id, full_name, contact, residency_history, open_obligations]
       properties:
         id: { type: integer, format: int64 }
         full_name: { type: string }
-        study_status:
+        citizenship:
           oneOf:
-            - $ref: '#/components/schemas/StudyStatus'
+            - $ref: '#/components/schemas/Citizenship'
             - type: 'null'
-        study_status_label: { type: [string, 'null'] }
-        citizenship: { type: [string, 'null'] }
+        citizenship_label: { type: [string, 'null'] }
         contact:
           type: object
           properties:
@@ -4293,9 +4218,12 @@ components:
           description: The account receiving the role. It need not exist in this dormitory yet.
         role:
           description: >-
-            One of the roles the caller may grant. A warden may grant `manager`,
-            `duty_officer` and `security`; the administrator may grant `warden`.
-            Anything else is 403.
+            One of the roles the caller may grant, and the chain is one level
+            deep at each step: the administrator grants `warden` and nothing
+            below it, the warden grants `manager`, `duty_officer` and
+            `security` inside his own dormitory, and the manager grants
+            nothing. Anything else is 403 — an administrator asking for
+            `security` directly included.
           allOf:
             - $ref: '#/components/schemas/RoleCode'
 
@@ -4304,9 +4232,12 @@ components:
       description: |
         FR-42. The fields of an incoming resident, and nothing else. There is no
         `role` — it is always the resident role in the dormitory named by the
-        path — and no `password`: a password the caller could set is a password
-        the caller knows.
-      required: [full_name, email]
+        path — and no `password`: the server generates one and returns it once.
+
+        All four are required. The telephone is how the office reaches the
+        resident and there is no confirmation of it; the citizenship comes from
+        a closed list.
+      required: [full_name, email, phone, citizenship]
       properties:
         full_name: { type: string, maxLength: 255 }
         email:
@@ -4314,28 +4245,52 @@ components:
           format: email
           maxLength: 255
           description: >-
-            The confirmed contact the one-time code is delivered to, which is
-            why it is the one field that can be neither omitted nor duplicated.
-        phone: { type: [string, 'null'], maxLength: 32 }
-        study_status:
-          oneOf:
-            - $ref: '#/components/schemas/StudyStatus'
-            - type: 'null'
-        citizenship: { type: [string, 'null'], maxLength: 64 }
+            The address the account signs in with, which is why it is the one
+            field that can be neither omitted nor duplicated.
+        phone: { type: string, maxLength: 32 }
+        citizenship:
+          $ref: '#/components/schemas/Citizenship'
 
-    SetPasswordInput:
+    IssuedAccount:
       type: object
       description: |
-        FR-42. The one-time code, and the password replacing it. The address is
-        validated for shape and not for existence: a rule that checked it
-        against the table would tell an unauthenticated caller which addresses
-        hold an account.
-      required: [email, token, password, password_confirmation]
+        FR-42. The account that has just been created and the password that was
+        generated for it — the one place in the API where a password is
+        readable.
+
+        Everything the office has to print is here: the person, the address they
+        sign in with, the password, the dormitory and the role. The client draws
+        the sheet; the server renders nothing. The room is not among the fields
+        because the account does not have one yet — a place is assigned by
+        `POST /residencies`, which is a later step.
+      required: [password, user, building]
       properties:
-        email: { type: string, format: email, maxLength: 255 }
-        token:
+        password:
           type: string
-          description: The one-time code delivered to the account's contact. Works once.
+          description: >-
+            The generated password, in plain text, for the only time it is ever
+            returned. Twelve characters, letters and digits, so it can be read
+            off a printed sheet and typed by hand.
+        user:
+          $ref: '#/components/schemas/User'
+        building:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer, format: int64 }
+            name: { type: string }
+
+    ChangePasswordInput:
+      type: object
+      description: |
+        FR-42. The password being replaced, and the one replacing it.
+        `current_password` is checked against the signed-in account's own hash:
+        a stolen token must not be enough to take an account over.
+      required: [current_password, password, password_confirmation]
+      properties:
+        current_password:
+          type: string
+          description: The password the account signs in with today.
         password: { type: string, minLength: 8 }
         password_confirmation: { type: string, minLength: 8 }
 
@@ -4454,11 +4409,10 @@ components:
       description: |
         FR-34's occasions, as the categories delivery is decided against.
 
-        `account_issued` is the one-time credential of FR-42. `request_decision`
-        is a decision on a guest request, `visit_overdue` a guest still recorded
-        inside after the hour clause 2.2 of the rules of internal order sets,
-        `maintenance_status` a movement of a maintenance request, and
-        `document_signature` a document waiting to be signed.
+        `request_decision` is a decision on a guest request, `visit_overdue` a
+        guest still recorded inside after the hour clause 2.2 of the rules of
+        internal order sets, `maintenance_status` a movement of a maintenance
+        request, and `document_signature` a document waiting to be signed.
 
         `announcement` and `mandatory_announcement` are FR-09 reaching the
         resident. They are two categories for one kind of object because the
@@ -4477,10 +4431,9 @@ components:
         whose messages name another resident: no telephone number, no address
         and no e-mail travels in either direction.
 
-        Four of them are mandatory and cannot be switched off — see
+        Three of them are mandatory and cannot be switched off — see
         `NotificationSetting.mandatory` for the ground the line is drawn on.
       enum:
-        - account_issued
         - request_decision
         - visit_overdue
         - maintenance_status
@@ -4537,9 +4490,9 @@ components:
 
             The line is drawn by the ground the message rests on. A mandatory
             category carries what the accommodation contract or the rules of
-            internal order oblige the dormitory to tell the person — the
-            credential without which the account cannot be used, a guest overdue
-            at the post, a document with a deadline — and declining it would be
+            internal order oblige the dormitory to tell the person — a guest
+            overdue at the post, a document with a deadline — and declining it
+            would be
             a refusal of the service rather than a preference. The rest are
             conveniences whose only ground is consent, and they stop when the
             consent of FR-35 is withdrawn even while this flag says `enabled`.
@@ -4847,53 +4800,20 @@ components:
         decision: the guest left, after the control time.
       enum: [in_building, closed, overdue, closed_late]
 
-    GuestDocumentType:
-      type: string
-      description: >-
-        `foreign_passport` and `residence_permit` mark the guest as a foreign
-        national and raise FR-23's warning. Both, because a residence permit is
-        issued to a foreign national as well and the warning is about the
-        procedure rather than about the booklet.
-      enum:
-        - internal_passport
-        - foreign_passport
-        - residence_permit
-        - student_card
-        - driving_licence
-
     GuestRequestInput:
       type: object
-      required: [building_id, guest_full_name, guest_doc_type, guest_doc_number, visit_date, planned_from, planned_to]
+      required: [building_id, guest_full_name, visit_date, planned_from, planned_to]
       properties:
         building_id: { type: integer, format: int64, minimum: 1 }
         guest_full_name: { type: string, minLength: 2, maxLength: 255 }
-        guest_doc_type:
-          $ref: '#/components/schemas/GuestDocumentType'
-        guest_doc_number:
-          type: string
-          minLength: 4
-          maxLength: 64
-          description: >-
-            Stored encrypted and never returned. Deliberately shapeless: §2.7.1's
-            minimisation means the type and the number and no scan of the page,
-            and the formats of five kinds of document across as many countries
-            are not something a dormitory's validator should claim to know.
         visit_date: { type: string, format: date }
         planned_from: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', example: '14:00' }
         planned_to: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', example: '18:00' }
-        purpose: { type: string, maxLength: 255, nullable: true }
 
     GuestApprovalInput:
       type: object
       properties:
         comment: { type: string, maxLength: 1000, nullable: true }
-        responsible_officer_mark:
-          type: string
-          maxLength: 255
-          nullable: true
-          description: >-
-            FR-23. Required when the guest carries a foreign document and the
-            interval runs past midnight; ignored otherwise.
 
     GuestRejectionInput:
       type: object
@@ -4914,43 +4834,31 @@ components:
         building_name: { type: string }
         student_id: { type: integer, format: int64 }
         student_name: { type: string }
+        inviting_resident:
+          type: object
+          description: >-
+            The resident who invited, as the client draws them: a link to their
+            card and the room beside it. Present when the request was loaded
+            with its student, which every route that returns one does.
+          properties:
+            id: { type: integer, format: int64, nullable: true }
+            full_name: { type: string, nullable: true }
+            room:
+              type: string
+              nullable: true
+              description: >-
+                The room they held on the day of the visit. Null when the
+                housing register holds no bed for them.
         guest_full_name: { type: string }
-        guest_doc_type:
-          $ref: '#/components/schemas/GuestDocumentType'
-        guest_doc_type_label: { type: string }
-        guest_doc_number_masked:
-          type: string
-          description: >-
-            The last four characters, everything before them hidden (NFR-06).
-            The number itself is on an audited route of its own.
-          example: '•••••••3456'
-        is_foreign_document:
-          type: boolean
-          description: Derived from the document type, never accepted from the client.
-        foreign_guest_warning:
-          type: string
-          nullable: true
-          description: >-
-            FR-23, first criterion. Attached by the server when the document is
-            a foreign one, null otherwise. The text is configuration, because
-            the procedure is the university's and §2.7.4 leaves open which of
-            two deadlines under art. 20 of Federal Law No. 109-FZ applies.
-        purpose: { type: string, nullable: true }
         visit_date: { type: string, format: date }
         planned_from: { type: string, example: '14:00' }
         planned_to: { type: string, example: '23:00' }
-        spans_more_than_one_day:
-          type: boolean
-          description: >-
-            True when the interval runs past midnight, which is only possible
-            where the dormitory's own regime admits it. FR-23's second
-            criterion turns on this.
         due_at:
           type: string
           format: date-time
           description: >-
             The departure deadline: the earlier of the end of the interval and
-            the building's control time.
+            the hour the dormitory stops admitting guests (`visiting_to`).
         status:
           $ref: '#/components/schemas/GuestRequestStatus'
         status_label: { type: string }
@@ -4971,10 +4879,14 @@ components:
             Null on a request the scheduler closed. FR-17's fourth criterion
             treats an undecided request as rejected, and nobody decided it — so
             the row does not claim an officer did.
+        decided_by_name:
+          type: string
+          nullable: true
+          description: >-
+            The officer who approved or refused, by name. Null on a request the
+            scheduler closed, for the same reason `decided_by` is.
         decided_at: { type: string, format: date-time, nullable: true }
         decision_comment: { type: string, nullable: true }
-        responsible_officer_mark: { type: string, nullable: true }
-        responsible_officer_mark_at: { type: string, format: date-time, nullable: true }
         visit:
           allOf:
             - $ref: '#/components/schemas/GuestVisit'
@@ -4989,8 +4901,13 @@ components:
         guest_request_id: { type: integer, format: int64 }
         checked_in_at: { type: string, format: date-time }
         checked_in_by: { type: integer, format: int64 }
+        checked_in_by_name: { type: string, nullable: true }
         checked_out_at: { type: string, format: date-time, nullable: true }
         checked_out_by: { type: integer, format: int64, nullable: true }
+        checked_out_by_name:
+          type: string
+          nullable: true
+          description: The officer who recorded the exit — often a later shift.
         due_at:
           type: string
           format: date-time
@@ -5001,14 +4918,6 @@ components:
         status:
           $ref: '#/components/schemas/GuestVisitStatus'
         status_label: { type: string }
-        overdue_notified_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: >-
-            Written once, by the quarter-hourly sweep, and refused a second
-            time by the database. It is what keeps a repeat run from sending a
-            second notification.
         admitted_on_decision: { type: boolean }
         admission_note: { type: string, nullable: true }
 
@@ -5045,7 +4954,7 @@ components:
         who turns up anyway is told the visit was cancelled rather than that no
         such code exists. But there is then no visit about to be recorded and
         therefore no ground for showing the guest's name, the host's name or
-        the host's room (§2.7.1, NFR-06). `disclosed` is false on such a card
+        the host's room (§2.7.1). `disclosed` is false on such a card
         and `guest`, `inviting_resident`, `room`, `due_at`,
         `permitted_interval` and `access_code` are all null; `status`,
         `status_label` and `admission` still say what the officer has to tell
@@ -5062,13 +4971,11 @@ components:
         guest:
           type: object
           nullable: true
+          description: >-
+            A name and no more. The document itself is in the officer's hand
+            and the register keeps no copy of it.
           properties:
             full_name: { type: string }
-            document_type:
-              $ref: '#/components/schemas/GuestDocumentType'
-            document_type_label: { type: string }
-            document_number_masked: { type: string }
-            is_foreign_document: { type: boolean }
         inviting_resident:
           type: object
           nullable: true
@@ -5151,17 +5058,10 @@ components:
 
     VisitRegisterEntry:
       type: object
-      description: One row of the journal of clause 2.1.2, plus the operator.
+      description: One row of the journal of clause 2.1.2, plus the officers.
       properties:
         guest_visit_id: { type: integer, format: int64 }
         guest_full_name: { type: string }
-        guest_document:
-          type: string
-          description: The type and the masked number, as one column.
-          example: 'Internal passport •••••••3456'
-        guest_doc_type:
-          $ref: '#/components/schemas/GuestDocumentType'
-        is_foreign_document: { type: boolean }
         inviting_resident: { type: string }
         inviting_resident_id: { type: integer, format: int64, nullable: true }
         room:
@@ -5175,13 +5075,14 @@ components:
         due_at: { type: string, format: date-time }
         status:
           $ref: '#/components/schemas/GuestVisitStatus'
-        operator:
+        recorded_by:
           type: string
-          description: >-
-            The officer who recorded the entry, and the one who recorded the
-            exit when it was a different shift.
-        recorded_by: { type: string, nullable: true }
-        closed_by: { type: string, nullable: true }
+          nullable: true
+          description: The officer who recorded the entry.
+        closed_by:
+          type: string
+          nullable: true
+          description: The officer who recorded the exit — often a later shift.
         admitted_on_decision: { type: boolean }
         admission_note: { type: string, nullable: true }
         corrections:
@@ -5217,17 +5118,6 @@ components:
         quota_limit: { type: integer }
         approved_today: { type: integer }
         visit_date: { type: string, format: date }
-
-    OfficerMarkRequiredError:
-      type: object
-      description: FR-23, second criterion.
-      required: [message]
-      properties:
-        message: { type: string }
-        guest_request_id: { type: integer, format: int64 }
-        guest_doc_type:
-          $ref: '#/components/schemas/GuestDocumentType'
-        required_field: { type: string, enum: [responsible_officer_mark] }
 
     EntryNotPermittedError:
       type: object
@@ -5532,20 +5422,12 @@ components:
             $ref: '#/components/schemas/MaintenanceQueueRow'
         meta:
           type: object
+          required: [current_page, last_page, per_page, total]
           properties:
-            building_id: { type: integer, format: int64 }
-            page: { type: integer }
-            per_page: { type: integer }
-            total: { type: integer }
-            overdue_after_days:
-              type: integer
-              description: >-
-                The configured threshold this page's `overdue` column was
-                measured against (FR-40, second criterion).
-            columns:
-              type: object
-              description: The column keys and their headings, in the order the CSV writes them.
-              additionalProperties: { type: string }
+            current_page: { type: integer, minimum: 1 }
+            last_page: { type: integer, minimum: 1 }
+            per_page: { type: integer, minimum: 1 }
+            total: { type: integer, minimum: 0 }
 
     MaintenanceQueueRow:
       type: object
@@ -5563,7 +5445,6 @@ components:
         overdue: { type: boolean }
         reporter: { type: string }
         assignee: { type: [string, 'null'] }
-        reopen_count: { type: integer, minimum: 0 }
 
     ConfirmationWindowClosedError:
       type: object
