@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\BuildingController;
 use App\Http\Controllers\Api\V1\CheckpointController;
 use App\Http\Controllers\Api\V1\ConsentController;
 use App\Http\Controllers\Api\V1\GuestRequestController;
+use App\Http\Controllers\Api\V1\LostFoundClaimController;
+use App\Http\Controllers\Api\V1\LostFoundController;
 use App\Http\Controllers\Api\V1\MaintenanceQueueController;
 use App\Http\Controllers\Api\V1\MaintenanceRequestController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -55,10 +57,13 @@ use Illuminate\Support\Facades\Route;
 | graph FR-38 fixes, the reporter confirms it or says it is not fixed (FR-39),
 | and the dormitory's queue is read and exported (FR-40).
 |
-| The remaining routes of §3.3.6 — lost-and-found — belong to a later increment
-| and are deliberately absent rather than stubbed: the OpenAPI document beside
-| this file is the input for client generation, and a generated client should
-| not carry methods that answer 404.
+| The eighth is the lost-and-found module of increment 4: the resident who
+| found something publishes it (FR-24), the dormitory reads the list without
+| ever being shown who published an entry (FR-25), and a claim is filed,
+| answered, referred and decided (FR-26). FR-27, the control of the six-month
+| retention period of Civil Code art. 228 cl. 1, is Could priority and outside
+| the MVP — there is no route for it and no scheduled pass behind one, though
+| the two dates it will be counted from are in the table.
 |
 */
 
@@ -437,6 +442,110 @@ Route::middleware('auth:sanctum')->group(function (): void {
      */
     Route::get('buildings/{building}/maintenance-queue', [MaintenanceQueueController::class, 'index'])
         ->name('buildings.maintenance-queue');
+
+    /*
+     |--------------------------------------------------------------------------
+     | The lost-and-found module (increment 4): FR-24, FR-25, FR-26
+     |--------------------------------------------------------------------------
+     |
+     | The scenario of §3.5.3 read as a list of routes, and four arrangements
+     | in them are decisions rather than defaults.
+     |
+     | **There is no moderation route and no state for one to move an entry out
+     | of.** FR-24's fourth criterion is «publication passes through no staff
+     | approval step», and §2.5.4 gives the reason: routing every find through
+     | a member of staff would put back the delay the module exists to remove.
+     | `POST /lost-found` answers 201 and the entry is in the feed.
+     |
+     | **The feed carries no building parameter**, for the reason the
+     | announcement feed does not: the dormitories are computed from the grants
+     | of the token, so FR-25's «their own dormitory» is a missing parameter
+     | rather than a policy somebody has to remember to call.
+     |
+     | **The claims of an entry are a sub-resource of it and the decisions on a
+     | claim are not.** A claim is read and answered by three people — the
+     | claimant, whoever is holding the object, the warden on a referral — and
+     | each of the four acts below asks a different authorisation question. The
+     | claim identifier is enough to find the entry, and a path that repeated
+     | it would invite a client to send a pair that does not match.
+     |
+     | **`referral` is the claimant's route and `decision` is the warden's.**
+     | §2.5.4 has the warden enter in two cases only, and this is the one a
+     | route can express: a claim the two sides could not settle, put to the
+     | warden by the person whose claim was refused. There is no route by which
+     | a member of staff reaches an ordinary claim at all.
+     */
+
+    /*
+     * FR-25. The finds of the caller's own dormitory, newest find first, with
+     * the closed ones gone from the list (FR-26, third criterion).
+     */
+    Route::get('lost-found', [LostFoundController::class, 'index'])
+        ->name('lost-found.index');
+
+    /*
+     * FR-24. The resident who found it, and — for an object handed in at the
+     * post or deposited with the administration — the security officer, the
+     * warden or the manager, on the same form.
+     */
+    Route::post('lost-found', [LostFoundController::class, 'store'])
+        ->name('lost-found.store');
+
+    /*
+     * FR-25, second criterion. The card, which carries neither the name nor
+     * the contacts of the person who published it.
+     */
+    Route::get('lost-found/{lostFoundItem}', [LostFoundController::class, 'show'])
+        ->name('lost-found.show');
+
+    /*
+     * FR-26. «That is mine, and here is how I know.» A claim on one's own
+     * entry is refused as a 422 naming the field, because what is wrong is the
+     * object the request names and not the account that named it.
+     */
+    Route::post('lost-found/{lostFoundItem}/claims', [LostFoundClaimController::class, 'store'])
+        ->name('lost-found.claims.store');
+
+    /*
+     * The claims of one entry: the person who has to answer them, and the
+     * warden who may be asked to review one. Not the rest of the dormitory —
+     * the card carries the count and never the marks.
+     */
+    Route::get('lost-found/{lostFoundItem}/claims', [LostFoundController::class, 'claims'])
+        ->name('lost-found.claims.index');
+
+    /*
+     * FR-26, §2.4.4. The person holding the object decides — the finder on the
+     * ordinary path, the staff of the dormitory for an object deposited with
+     * them. No member of staff reaches an ordinary claim here.
+     */
+    Route::post('lost-found/claims/{lostFoundClaim}/accept', [LostFoundClaimController::class, 'accept'])
+        ->name('lost-found.claims.accept');
+
+    Route::post('lost-found/claims/{lostFoundClaim}/decline', [LostFoundClaimController::class, 'decline'])
+        ->name('lost-found.claims.decline');
+
+    /*
+     * FR-26. The claimant's own route: a refusal they did not accept goes to
+     * the warden, once.
+     */
+    Route::post('lost-found/claims/{lostFoundClaim}/referral', [LostFoundClaimController::class, 'refer'])
+        ->name('lost-found.claims.refer');
+
+    /*
+     * FR-26, first criterion. The warden or the manager of this dormitory, on
+     * a referred claim and on no other.
+     */
+    Route::post('lost-found/claims/{lostFoundClaim}/decision', [LostFoundClaimController::class, 'decide'])
+        ->name('lost-found.claims.decide');
+
+    /*
+     * FR-26. The object changed hands: the entry closes with the time and
+     * leaves the public list. Admitted only where a claim on the entry has
+     * been accepted, which is the «only» of FR-26's first criterion.
+     */
+    Route::post('lost-found/{lostFoundItem}/resolve', [LostFoundController::class, 'resolve'])
+        ->name('lost-found.resolve');
 
     /*
      * FR-21. The register of one dormitory over an arbitrary period, and the
