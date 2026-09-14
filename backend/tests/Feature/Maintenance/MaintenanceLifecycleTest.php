@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Maintenance;
 
 use App\Enums\AuditAction;
+use App\Enums\ConsentDocument;
 use App\Enums\MaintenanceRequestStatus;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
@@ -12,6 +13,7 @@ use App\Models\Building;
 use App\Models\MaintenanceRequest;
 use App\Models\User;
 use App\Notifications\MaintenanceRequestStatusChanged;
+use App\Services\ConsentRegistry;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -230,20 +232,20 @@ final class MaintenanceLifecycleTest extends TestCase
     }
 
     /**
-     * A resident who has switched the category off receives nothing, and the
-     * request still moves. The gate is `User::notify()` and this module adds
-     * no second one.
+     * A resident who has withdrawn the consent the category rests on receives
+     * nothing, and the request still moves. The gate is `User::notify()` and
+     * this module adds no second one.
      */
-    public function test_a_submitter_who_switched_the_category_off_is_not_written_to(): void
+    public function test_a_submitter_whose_consent_is_withdrawn_is_not_written_to(): void
     {
         Notification::fake();
 
         $request = $this->requestInStatus();
 
-        Sanctum::actingAs($this->resident);
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => ['maintenance_status' => false],
-        ])->assertOk();
+        app(ConsentRegistry::class)->withdraw(
+            $this->resident,
+            ConsentDocument::ResidentPersonalData,
+        );
 
         Sanctum::actingAs($this->warden);
         $this->postJson("/api/v1/maintenance-requests/{$request->id}/accept", [

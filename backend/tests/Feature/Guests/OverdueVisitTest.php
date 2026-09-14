@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Guests;
 
 use App\Enums\AuditAction;
+use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
 use App\Enums\NotificationCategory;
@@ -15,6 +16,8 @@ use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use App\Models\User;
 use App\Notifications\GuestVisitOverdue;
+use App\Services\ConsentRegistry;
+use App\Services\Notifier;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Database\QueryException;
@@ -127,29 +130,29 @@ final class OverdueVisitTest extends TestCase
     }
 
     /**
-     * The notice rests on the rules of internal order and not on the
-     * recipient's preference, so neither party can switch it off.
+     * The notice rests on the rules of internal order and not on anybody's
+     * agreement, so a withdrawal of the consent of FR-35 does not silence it.
+     * There is no switch any more; this is the only thing that could have.
      */
-    public function test_the_overdue_notice_is_mandatory_and_cannot_be_switched_off(): void
+    public function test_the_overdue_notice_survives_a_withdrawal_of_consent(): void
     {
-        $this->assertTrue(NotificationCategory::VisitOverdue->isMandatory());
+        $this->assertFalse(NotificationCategory::VisitOverdue->restsOnConsent());
 
-        Sanctum::actingAs($this->resident);
+        app(ConsentRegistry::class)->withdraw(
+            $this->resident,
+            ConsentDocument::ResidentPersonalData,
+        );
 
-        // The body is the one the route takes. An earlier version of this test
-        // sent a shape the form rejects outright, so the 422 it asserted came
-        // from a missing field and the criterion was never exercised at all.
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::VisitOverdue->value => false],
-        ])
-            ->assertStatus(422)
-            ->assertJsonPath('category', NotificationCategory::VisitOverdue->value);
+        Notification::fake();
 
-        // And an optional category on the same account still switches off, so
-        // the refusal is about the category and not about the route.
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::RequestDecision->value => false],
-        ])->assertOk();
+        app(Notifier::class)->send($this->resident->fresh(), new GuestVisitOverdue(
+            visitId: 41,
+            guestName: 'Agafya Sviridova',
+            buildingName: $this->building->name,
+            dueAt: now()->setTime(23, 0),
+        ));
+
+        Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
     }
 
     /**

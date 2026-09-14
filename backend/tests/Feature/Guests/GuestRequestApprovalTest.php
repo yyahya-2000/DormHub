@@ -7,7 +7,6 @@ namespace Tests\Feature\Guests;
 use App\Enums\AuditAction;
 use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
-use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
 use App\Models\Building;
@@ -451,37 +450,6 @@ final class GuestRequestApprovalTest extends TestCase
             'action' => AuditAction::GuestRequestApproved->value,
             'subject_id' => $request->getKey(),
         ]);
-    }
-
-    /**
-     * The switch rather than the consent, so that the entry tells the two
-     * apart — the resident who chose silence and the resident whose ground for
-     * being written to is gone are different situations.
-     */
-    public function test_a_decision_a_resident_switched_off_is_recorded_with_that_reason(): void
-    {
-        Notification::fake();
-
-        Sanctum::actingAs($this->resident);
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::RequestDecision->value => false],
-        ])->assertOk();
-
-        $request = $this->pendingRequest();
-
-        Sanctum::actingAs($this->officer);
-        $this->postJson("/api/v1/guest-requests/{$request->id}/reject", [
-            'reason' => 'The dormitory is closed to visitors that evening.',
-        ])->assertOk();
-
-        Notification::assertNothingSentTo($this->resident);
-
-        $entry = AuditLog::query()
-            ->where('action', AuditAction::GuestRequestDecisionNotDelivered->value)
-            ->sole();
-
-        $this->assertStringContainsString('switched this category off', (string) $entry->payload['reason']);
-        $this->assertFalse($entry->payload['approved']);
     }
 
     /**

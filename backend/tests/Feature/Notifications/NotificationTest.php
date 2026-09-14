@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Notifications;
 
-use App\Contracts\CategorisedNotification;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\Building;
 use App\Models\ConsentRecord;
-use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Notifications\DocumentAwaitingSignature;
 use App\Notifications\EventNotification;
@@ -26,21 +24,20 @@ use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
- * FR-34, «Notifications». One test per acceptance criterion, and the two
- * criteria are the two things that could silently stop being true.
+ * FR-34, «Notifications», as the MVP keeps it.
  *
- * The first is about **when** a message is queued, not about whether it
- * arrives: NFR-02 gives five seconds between the event and the enqueue, and
+ * The first criterion is about **when** a message is queued, not about whether
+ * it arrives: NFR-02 gives five seconds between the event and the enqueue, and
  * the enqueue is the last moment the application controls. What happens after
  * it belongs to the worker and to the mail server.
  *
- * The second is about **whether** it is queued at all, and it is the one that
- * has to hold for categories nobody has written yet. So one of the tests below
- * dispatches a notification class that does not exist anywhere in the
- * application — declared inside the test — and shows that the switch silences
- * it on the strength of its category alone. That is the claim «adding a
- * category requires no change to the dispatch», stated as an assertion rather
- * than as a comment.
+ * The second criterion — a switch per category — is withdrawn. Nothing a
+ * person sets stops a message any more, and the tests below say so rather than
+ * leaving it to be inferred from the absence of a settings test: one of them
+ * dispatches a notification class that exists nowhere in the application,
+ * declared inside the test, and shows that it is delivered on the strength of
+ * its category alone. The one gate that remains is FR-35's, and it is asserted
+ * where it belongs — in the consent tests.
  */
 final class NotificationTest extends TestCase
 {
@@ -62,11 +59,11 @@ final class NotificationTest extends TestCase
             ->withRole(RoleCode::Resident, $this->building)
             ->create(['email' => 'resident@example.test']);
 
-        // The optional categories rest on consent (§2.7.1), so a resident who
+        // Most of the categories rest on consent (§2.7.1), so a resident who
         // has given none would be silenced for a reason that has nothing to do
-        // with the switch this file is about. Consent in force is the ordinary
-        // state, and it is the state these tests start from; the effect of
-        // withdrawing it is asserted in the FR-35 tests, where it belongs.
+        // with this file. Consent in force is the ordinary state, and it is the
+        // state these tests start from; the effect of withdrawing it is
+        // asserted in the FR-35 tests, where it belongs.
         ConsentRecord::factory()->for($this->resident)->create();
     }
 
@@ -155,109 +152,37 @@ final class NotificationTest extends TestCase
     }
 
     /**
-     * Second criterion: «the user can disable non-mandatory categories».
+     * The switch is gone, and this is the assertion that says so.
      *
-     * Both halves in one test, because either alone would pass on a broken
-     * implementation: a dispatch that sends nothing satisfies «the disabled
-     * category does not arrive», and a dispatch that ignores the settings
-     * satisfies «the mandatory one still does».
+     * Every category of the enumeration is dispatched to a resident who has set
+     * nothing and every one of them arrives. Without this the removal would be
+     * invisible: a dispatch that had kept a filter with nothing to read would
+     * pass every other test in this file.
      */
-    public function test_the_user_can_disable_non_mandatory_categories(): void
+    public function test_every_category_reaches_a_resident_who_has_set_nothing(): void
     {
-        Sanctum::actingAs($this->resident);
-
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::MaintenanceStatus->value => false],
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.2.category', NotificationCategory::MaintenanceStatus->value)
-            ->assertJsonPath('data.2.enabled', false)
-            ->assertJsonPath('data.2.mandatory', false);
-
         Notification::fake();
 
         $notifier = app(Notifier::class);
 
-        $notifier->send($this->resident->fresh(), new MaintenanceRequestStatusChanged(
-            requestId: 73,
-            fromStatus: 'assigned',
-            toStatus: 'done',
-        ));
+        foreach (NotificationCategory::cases() as $category) {
+            $notifier->send($this->resident->fresh(), $this->notificationOf($category));
+        }
 
-        $notifier->send($this->resident->fresh(), new GuestVisitOverdue(
-            visitId: 41,
-            guestName: 'Agafya Sviridova',
-            buildingName: $this->building->name,
-            dueAt: now()->setTime(23, 0),
-        ));
-
-        Notification::assertNotSentTo($this->resident, MaintenanceRequestStatusChanged::class);
-        Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
-        Notification::assertCount(1);
-    }
-
-    /**
-     * The other side of the same criterion: a category that is **not**
-     * non-mandatory has no switch, and the refusal says so rather than
-     * pretending to have saved something.
-     */
-    public function test_a_mandatory_category_cannot_be_disabled(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::VisitOverdue->value => false],
-        ])
-            ->assertStatus(422)
-            ->assertJsonPath('category', NotificationCategory::VisitOverdue->value);
-
-        $this->assertDatabaseCount('notification_preferences', 0);
-
-        Notification::fake();
-
-        app(Notifier::class)->send($this->resident->fresh(), new GuestVisitOverdue(
-            visitId: 41,
-            guestName: 'Agafya Sviridova',
-            buildingName: $this->building->name,
-            dueAt: now()->setTime(23, 0),
-        ));
-
-        Notification::assertSentTo($this->resident, GuestVisitOverdue::class);
-    }
-
-    /**
-     * The database refuses the same thing the service does, so a row written
-     * around the service — by an import, a console command, a hand-edited
-     * fixture — cannot switch off a mandatory category either.
-     */
-    public function test_the_database_refuses_a_preference_that_switches_off_a_mandatory_category(): void
-    {
-        $this->expectExceptionMessageMatches('/notification_preferences_optional_only/');
-
-        NotificationPreference::query()->create([
-            'user_id' => $this->resident->getKey(),
-            'category' => NotificationCategory::DocumentSignature->value,
-            'enabled' => false,
-        ]);
+        Notification::assertCount(count(NotificationCategory::cases()));
     }
 
     /**
      * «Adding a category must not require a change to the dispatch.»
      *
      * The notification below is declared in this test file and exists nowhere
-     * in the application, which is the point: nothing in `User::notify()`,
-     * `Notifier` or `NotificationPreferences` knows it, and it is nonetheless
-     * filtered correctly — on the strength of the one method the interface
-     * requires. A later increment's notification is in exactly this position.
+     * in the application, which is the point: nothing in `User::notify()` or
+     * `Notifier` knows it, and it is delivered all the same — on the strength
+     * of the one method the interface requires. A later increment's
+     * notification is in exactly this position.
      */
-    public function test_a_notification_the_dispatch_has_never_heard_of_is_filtered_by_its_category_alone(): void
+    public function test_a_notification_the_dispatch_has_never_heard_of_is_delivered_by_its_category_alone(): void
     {
-        Sanctum::actingAs($this->resident);
-
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => [NotificationCategory::RequestDecision->value => false],
-        ])->assertOk();
-
         Notification::fake();
 
         $stranger = new class extends EventNotification
@@ -268,11 +193,9 @@ final class NotificationTest extends TestCase
             }
         };
 
-        $this->assertInstanceOf(CategorisedNotification::class, $stranger);
-
         app(Notifier::class)->send($this->resident->fresh(), $stranger);
 
-        Notification::assertNothingSent();
+        Notification::assertSentTo($this->resident, $stranger::class);
     }
 
     /**
@@ -312,35 +235,6 @@ final class NotificationTest extends TestCase
         );
     }
 
-    public function test_the_settings_list_every_category_with_its_mandatory_flag(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $response = $this->getJson('/api/v1/notification-settings')->assertOk();
-
-        $this->assertCount(count(NotificationCategory::cases()), $response->json('data'));
-
-        foreach ($response->json('data') as $row) {
-            $category = NotificationCategory::from($row['category']);
-
-            $this->assertSame($category->isMandatory(), $row['mandatory']);
-            $this->assertTrue($row['enabled'], 'A category nobody has decided about is on.');
-            $this->assertNotSame('', $row['label']);
-            $this->assertNotSame('', $row['description']);
-        }
-    }
-
-    public function test_an_unknown_category_in_the_settings_is_a_malformed_request(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $this->putJson('/api/v1/notification-settings', [
-            'categories' => ['parcel_arrived' => false],
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('categories.parcel_arrived');
-    }
-
     public function test_the_personal_account_reads_its_own_messages_and_marks_them_read(): void
     {
         $this->resident->notify(new DocumentAwaitingSignature(
@@ -356,6 +250,7 @@ final class NotificationTest extends TestCase
         $this->assertCount(1, $listed->json('data'));
         $listed->assertJsonPath('data.0.category', NotificationCategory::DocumentSignature->value);
         $listed->assertJsonPath('data.0.read_at', null);
+        $listed->assertJsonPath('meta.unread_count', 1);
 
         $id = $listed->json('data.0.id');
 
@@ -366,9 +261,46 @@ final class NotificationTest extends TestCase
 
         $this->assertNotNull($this->resident->notifications()->sole()->read_at);
 
-        $this->getJson('/api/v1/notifications?unread=1')
-            ->assertOk()
-            ->assertJsonCount(0, 'data');
+        // The message stays on the list — there is no filter that could hide it
+        // — and the badge behind `unread_count` goes out.
+        $reread = $this->getJson('/api/v1/notifications')->assertOk();
+
+        $this->assertCount(1, $reread->json('data'));
+        $reread->assertJsonPath('meta.unread_count', 0);
+        $this->assertNotNull($reread->json('data.0.read_at'));
+    }
+
+    /**
+     * The list is one page, newest first, and it holds read and unread alike.
+     * The `unread` parameter the route used to take is gone; a client still
+     * sending it gets the whole list rather than a filtered one, which is what
+     * an ignored parameter means.
+     */
+    public function test_the_list_is_one_page_newest_first_and_carries_the_unread_count(): void
+    {
+        foreach ([3, 2, 1] as $daysAgo) {
+            $this->travelTo(now()->subDays($daysAgo), function () use ($daysAgo): void {
+                $this->resident->notify(new MaintenanceRequestStatusChanged(
+                    requestId: 70 + $daysAgo,
+                    fromStatus: 'assigned',
+                    toStatus: 'done',
+                ));
+            });
+        }
+
+        $this->resident->notifications()->first()?->markAsRead();
+
+        Sanctum::actingAs($this->resident);
+
+        $listed = $this->getJson('/api/v1/notifications?unread=1')->assertOk();
+
+        $this->assertCount(3, $listed->json('data'), 'The filter is gone: every message is on the page.');
+        $this->assertSame(
+            [71, 72, 73],
+            array_column(array_column($listed->json('data'), 'payload'), 'maintenance_request_id'),
+            'Newest first, and the oldest is the one sent three days ago.',
+        );
+        $listed->assertJsonPath('meta.unread_count', 2);
     }
 
     /**
@@ -392,7 +324,11 @@ final class NotificationTest extends TestCase
 
         Sanctum::actingAs($neighbour);
 
-        $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/notifications')
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.unread_count', 0);
+
         $this->postJson("/api/v1/notifications/{$id}/read")->assertStatus(404);
 
         $this->assertNull($this->resident->notifications()->sole()->read_at);
@@ -401,24 +337,33 @@ final class NotificationTest extends TestCase
     public function test_the_messages_of_the_personal_account_need_a_session(): void
     {
         $this->getJson('/api/v1/notifications')->assertStatus(401);
-        $this->getJson('/api/v1/notification-settings')->assertStatus(401);
-        $this->putJson('/api/v1/notification-settings', ['categories' => []])->assertStatus(401);
     }
 
     /**
-     * Every category is a complete entry: a case added without a label or a
-     * description would leave a blank switch on the settings screen, and the
-     * mandatory flag decides whether the switch is there at all.
+     * The settings screen is gone, and so are its routes. A client built
+     * against the old contract is answered 404 rather than being quietly
+     * served something that looks like a saved preference.
      */
-    public function test_every_category_is_complete_enough_to_be_drawn(): void
+    public function test_the_settings_routes_are_gone(): void
     {
-        foreach (NotificationCategory::cases() as $category) {
-            $this->assertNotSame('', $category->label(), $category->value);
-            $this->assertNotSame('', $category->description(), $category->value);
-            $this->assertSame(! $category->isMandatory(), $category->restsOnConsent(), $category->value);
-        }
+        Sanctum::actingAs($this->resident);
 
-        $this->assertNotSame([], NotificationCategory::optional());
-        $this->assertNotSame(NotificationCategory::cases(), NotificationCategory::optional());
+        $this->getJson('/api/v1/notification-settings')->assertStatus(404);
+        $this->putJson('/api/v1/notification-settings', [
+            'categories' => [NotificationCategory::MaintenanceStatus->value => false],
+        ])->assertStatus(404);
+    }
+
+    private function notificationOf(NotificationCategory $category): EventNotification
+    {
+        return new class($category) extends EventNotification
+        {
+            public function __construct(private readonly NotificationCategory $chosen) {}
+
+            public function category(): NotificationCategory
+            {
+                return $this->chosen;
+            }
+        };
     }
 }
