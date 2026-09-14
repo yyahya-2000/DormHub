@@ -76,25 +76,24 @@ Route::post('auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:login')
     ->name('auth.login');
 
-/*
- * FR-42, the resident's end of it. Unauthenticated by necessity — the account
- * has no password yet — and behind a per-address limiter of its own, because a
- * one-time code is a secret and guessing at it is the same kind of attempt.
- *
- * A limiter of its own and not the sign-in one. Both are keyed by address, and
- * a dormitory is one address: while they shared a counter, a few guesses at a
- * code locked everybody behind that address out of signing in.
- */
-Route::post('auth/password', [ResidentAccountController::class, 'setPassword'])
-    ->middleware('throttle:password-setup')
-    ->name('auth.password.set');
-
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
     /*
-     * FR-01. Create, edit and archive are the administrator's; the delete is
+     * FR-42, the resident's end of it. Behind the session, because the account
+     * is created with a password the office hands over on paper and the person
+     * changing it signs in with it first. The limiter of its own stays: the old
+     * password is checked here, and guessing at it is the same kind of attempt
+     * as guessing at a sign-in — but keyed separately, so that a dormitory
+     * behind one address does not lock itself out of the sign-in route.
+     */
+    Route::post('auth/password', [ResidentAccountController::class, 'changePassword'])
+        ->middleware('throttle:password-setup')
+        ->name('auth.password.change');
+
+    /*
+     * FR-01. Create, edit and delete are the administrator's; the delete is
      * refused with a stated reason while rooms are attached.
      */
     Route::get('buildings', [BuildingController::class, 'index'])
@@ -108,9 +107,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::patch('buildings/{building}', [BuildingController::class, 'update'])
         ->name('buildings.update');
-
-    Route::post('buildings/{building}/archive', [BuildingController::class, 'archive'])
-        ->name('buildings.archive');
 
     Route::delete('buildings/{building}', [BuildingController::class, 'destroy'])
         ->name('buildings.destroy');
@@ -132,20 +128,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('buildings.staff.destroy');
 
     /*
-     * FR-42. The account of an incoming resident. The credential it produces
-     * leaves by the route above the sanctum group, not in this response.
+     * FR-42. The account of an incoming resident. The generated password is in
+     * this answer and in no other: the office prints it and hands it over.
      */
     Route::post('buildings/{building}/residents', [ResidentAccountController::class, 'store'])
         ->name('buildings.residents.store');
 
     /*
-     * FR-42, the way back out of a lost code. The same circle of accounts as
-     * the route above, because sending a second code is the same act as
-     * sending the first; the code goes to the address on the account, and the
-     * person who asks for it never sees it.
+     * The closed list the `citizenship` field is validated against, so that the
+     * form draws a dropdown from the same source the rule decides on.
      */
-    Route::post('buildings/{building}/residents/{resident}/credential', [ResidentAccountController::class, 'reissueCredential'])
-        ->name('buildings.residents.credential');
+    Route::get('citizenships', [ResidentAccountController::class, 'citizenships'])
+        ->name('citizenships.index');
 
     /*
      * FR-02. The register of rooms and places, kept per building.
@@ -155,6 +149,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('buildings/{building}/rooms', [RoomController::class, 'store'])
         ->name('buildings.rooms.store');
+
+    /*
+     * FR-02. The same register added up by floor, which is the screen the
+     * housing stock is entered through: rooms and free places per floor, in one
+     * aggregate rather than in a room-by-room walk done by the client.
+     */
+    Route::get('buildings/{building}/floors', [RoomController::class, 'floors'])
+        ->name('buildings.floors');
 
     Route::get('rooms/{room}', [RoomController::class, 'show'])
         ->name('rooms.show');
@@ -342,13 +344,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
      */
     Route::post('guest-requests/{guestRequest}/cancellation', [GuestRequestController::class, 'cancel'])
         ->name('guest-requests.cancel');
-
-    /*
-     * NFR-06. The document number in full, to somebody who may, one request at
-     * a time, and recorded as an event of its own.
-     */
-    Route::get('guest-requests/{guestRequest}/document-number', [GuestRequestController::class, 'documentNumber'])
-        ->name('guest-requests.document-number');
 
     /*
      * FR-18, FR-19 and the guest's consent between them (FR-35, §2.7.1). The
