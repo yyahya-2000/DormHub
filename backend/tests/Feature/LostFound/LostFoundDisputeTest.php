@@ -533,6 +533,136 @@ final class LostFoundDisputeTest extends TestCase
     }
 
     /**
+     * The acceptance finding of 15.09.2026: a claim answered on a find that
+     * had already gone home.
+     *
+     * `answer()` locked the entry and the claim and asserted the *claim's*
+     * transition, and the claim table has nothing to say about the object:
+     * `new → accepted` is a legal move whatever became of the umbrella. So the
+     * second claimant was told a handover point for something the first had
+     * walked away with two days earlier, the entry stayed `resolved`, and the
+     * audit log recorded an ordinary acceptance.
+     *
+     * 409 and not 403: the person answering is the person holding the object,
+     * which a 403 would deny; what has moved on is the state of the entry.
+     */
+    public function test_a_claim_cannot_be_answered_once_the_find_has_gone_home(): void
+    {
+        Notification::fake();
+
+        $item = $this->findOf($this->finder, $this->building);
+        $neighbour = $this->residentOf($this->building, 'second-claimant@example.test', '118');
+
+        // Two people describe the same umbrella.
+        Sanctum::actingAs($this->owner);
+        $first = $this->postJson('/api/v1/lost-found/'.$item->getKey().'/claims', $this->claimBody())
+            ->assertStatus(201)->json('data.id');
+
+        Sanctum::actingAs($neighbour);
+        $second = $this->postJson('/api/v1/lost-found/'.$item->getKey().'/claims', $this->claimBody([
+            'message' => 'There is a chip near the tip and the fabric is worn along one rib.',
+        ]))->assertStatus(201)->json('data.id');
+
+        // The finder settles with the first of them and hands the object over.
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$first.'/accept', [
+            'handover_point' => 'Room 412, any evening this week',
+        ])->assertStatus(200);
+
+        $this->postJson('/api/v1/lost-found/'.$item->getKey().'/resolve')->assertStatus(200);
+
+        // And the second claim can no longer be answered at all — neither
+        // accepted, which is what used to succeed, nor refused.
+        $this->postJson('/api/v1/lost-found/claims/'.$second.'/accept', [
+            'handover_point' => 'Room 412, tomorrow',
+        ])->assertStatus(409)
+            ->assertJsonPath('status', LostFoundItemStatus::Resolved->value)
+            ->assertJsonPath('attempted_status', LostFoundItemStatus::Claimed->value);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$second.'/decline', [
+            'reason' => 'It has gone already.',
+        ])->assertStatus(409);
+
+        $untouched = LostFoundClaim::query()->findOrFail($second);
+
+        $this->assertSame(LostFoundClaimStatus::New, $untouched->status);
+        $this->assertNull($untouched->decided_by);
+        $this->assertNull($untouched->handover_point);
+
+        // The claimant of the second claim was never told where to collect an
+        // object somebody else has, which is what the 200 used to produce.
+        Notification::assertNotSentTo($neighbour, LostFoundClaimDecided::class);
+    }
+
+    /**
+     * The acceptance finding of 15.09.2026 on the other side of the module:
+     * the manager who decided his own dispute.
+     *
+     * Nothing stopped him. He filed a claim like any resident, the finder
+     * refused it, he referred his own refusal — which is the claimant's own
+     * route and rightly his — and then decided it in his own favour, because
+     * `judge` asked only whether he held the capability in that dormitory. The
+     * row came out with `claimant_id == decided_by`, and the contract for this
+     * route has said «not the claimant» all along.
+     *
+     * 403, because what is wrong is the account and not the state: the same
+     * referred claim is decidable by any other holder of the capability, which
+     * the last step here shows.
+     */
+    public function test_a_member_of_staff_does_not_decide_a_claim_they_filed_themselves(): void
+    {
+        $manager = $this->staff(RoleCode::Manager, $this->building, 'manager@example.test');
+        $item = $this->findOf($this->finder, $this->building);
+
+        Sanctum::actingAs($manager);
+
+        $claimId = $this->postJson('/api/v1/lost-found/'.$item->getKey().'/claims', $this->claimBody([
+            'message' => 'The handle is chipped and there is a strip of blue tape near the tip.',
+        ]))->assertStatus(201)->json('data.id');
+
+        Sanctum::actingAs($this->finder);
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decline', [
+            'reason' => 'The marks you describe are not the ones on this umbrella.',
+        ])->assertStatus(200);
+
+        // The referral is his to make: he is the claimant.
+        Sanctum::actingAs($manager);
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/referral')->assertStatus(200);
+
+        // The decision is not.
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decision', [
+            'upheld' => true,
+            'handover_point' => 'The manager\'s office',
+            'note' => 'I am satisfied by my own description.',
+        ])->assertStatus(403);
+
+        $undecided = LostFoundClaim::query()->findOrFail($claimId);
+
+        $this->assertSame(LostFoundClaimStatus::Referred, $undecided->status);
+
+        // `decided_by` still names the finder, who refused it. What must never
+        // stand on this row is the claimant's own identifier.
+        $this->assertNotSame($manager->getKey(), $undecided->decided_by);
+
+        // Nor does he read the marks on the claims of the entry he is claiming
+        // — the list is the holder's and the deciding warden's, and he is now
+        // neither.
+        $this->getJson('/api/v1/lost-found/'.$item->getKey().'/claims')->assertStatus(403);
+
+        // And the claim is decidable all the same: by the warden, who is not a
+        // party to it.
+        Sanctum::actingAs($this->warden);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decision', [
+            'upheld' => false,
+            'note' => 'The description matches neither the object nor the finder\'s account of it.',
+        ])->assertStatus(200);
+
+        $this->assertSame($this->warden->getKey(), LostFoundClaim::query()->findOrFail($claimId)->decided_by);
+    }
+
+    /**
      * A claim the person holding the object has refused, which is the state
      * the referral starts from.
      *

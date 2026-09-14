@@ -247,7 +247,8 @@ final readonly class LostFoundService
      * the same scenario and is `resolve()`. An acceptance that closed the
      * entry would be the system recording a handover that has not happened.
      *
-     * @throws IllegalTransitionException the claim has already been answered (409)
+     * @throws IllegalTransitionException the claim has already been answered,
+     *                                    or the entry has been closed (409)
      */
     public function accept(
         User $actor,
@@ -281,7 +282,8 @@ final readonly class LostFoundService
      * so a client draws the button from a flag rather than inferring one from
      * a status.
      *
-     * @throws IllegalTransitionException
+     * @throws IllegalTransitionException the claim has already been answered,
+     *                                    or the entry has been closed (409)
      */
     public function decline(
         User $actor,
@@ -429,7 +431,8 @@ final readonly class LostFoundService
      * be recording a handover nobody witnessed, and the record of a handover
      * is the only thing the module produces.
      *
-     * @throws IllegalTransitionException the claim was never referred (409)
+     * @throws IllegalTransitionException the claim was never referred, or the
+     *                                    entry has been closed (409)
      */
     public function decide(
         User $staff,
@@ -603,6 +606,8 @@ final readonly class LostFoundService
         bool $byStaff = false,
         ?string $ipAddress = null,
     ): LostFoundClaim {
+        $this->refuseIfTheEntryHasGoneHome($actor, $claim, $to, $byStaff, $ipAddress);
+
         [$answered, $entry, $from] = DB::transaction(function () use (
             $actor, $claim, $to, $handoverPoint, $note, $byStaff, $ipAddress
         ): array {
@@ -613,6 +618,22 @@ final readonly class LostFoundService
             // against each other.
             $entry = LostFoundItem::query()->lockForUpdate()->findOrFail($claim->lost_found_item_id);
             $locked = LostFoundClaim::query()->lockForUpdate()->findOrFail($claim->getKey());
+
+            /*
+             * The same question as `refuseIfTheEntryHasGoneHome()` asks above,
+             * asked again now that the row is locked. The first asking is the
+             * one that writes the audit record — a refusal recorded inside the
+             * transaction it refuses is carried off by the rollback (§3.9.6) —
+             * and this one closes the window between the two: a closure that
+             * committed in between would otherwise slip past a check made on
+             * an unlocked read.
+             */
+            if ($entry->status === LostFoundItemStatus::Resolved) {
+                throw new IllegalTransitionException(
+                    LostFoundItemStatus::Resolved,
+                    LostFoundItemStatus::Claimed,
+                );
+            }
 
             $from = $locked->status ?? LostFoundClaimStatus::New;
 
@@ -670,6 +691,66 @@ final readonly class LostFoundService
         }
 
         return $answered;
+    }
+
+    /**
+     * A decision on a claim is admissible only while the entry is still open.
+     *
+     * **The acceptance finding of 15.09.2026.** `answer()` locked both rows
+     * and asserted the claim's own transition, and the claim's table has
+     * nothing to say about the entry: `new → accepted` is a legal move on a
+     * claim whatever has become of the object. So a second claim could be
+     * accepted on a find already handed back — the claimant was told a
+     * handover point for an umbrella somebody else had walked away with two
+     * days earlier, and the audit log recorded it as an ordinary acceptance.
+     *
+     * `LostFoundItemPolicy::decideClaims` could not have caught it either: it
+     * asks who is holding the object and not what state the record is in, and
+     * a refusal phrased as a 403 would tell the holder they are not the holder,
+     * which is false. 409 is the right answer and the same one the module
+     * gives every other move made against a state that has moved on — the
+     * caller was entitled to ask, and the entry is simply no longer in the
+     * state the decision starts from.
+     *
+     * The message names the entry's states and not the claim's, which is what
+     * the referral's 409 does for the same reason.
+     *
+     * @throws IllegalTransitionException the entry is closed (409)
+     */
+    private function refuseIfTheEntryHasGoneHome(
+        User $actor,
+        LostFoundClaim $claim,
+        LostFoundClaimStatus $to,
+        bool $byStaff,
+        ?string $ipAddress,
+    ): void {
+        $entry = $claim->relationLoaded('item') ? $claim->item : $claim->item()->first();
+
+        if ($entry?->status !== LostFoundItemStatus::Resolved) {
+            return;
+        }
+
+        $refusal = new IllegalTransitionException(
+            LostFoundItemStatus::Resolved,
+            LostFoundItemStatus::Claimed,
+        );
+
+        // Outside any transaction, for §3.9.6's reason: a refusal written
+        // inside the transaction it refuses is carried off by the rollback.
+        $this->audit->record(
+            action: $this->actionFor($to, $byStaff),
+            actor: $actor,
+            subject: $claim,
+            payload: [
+                'lost_found_item_id' => $entry->getKey(),
+                'building_id' => $entry->building_id,
+                'reason' => $refusal->getMessage(),
+            ] + $refusal->context(),
+            result: AuditResult::Denied,
+            ipAddress: $ipAddress,
+        );
+
+        throw $refusal;
     }
 
     /**
