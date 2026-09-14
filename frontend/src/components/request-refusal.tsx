@@ -10,9 +10,7 @@ import {
   asDeletionBlocked,
   asEntryNotPermitted,
   asIllegalTransition,
-  asMandatoryCategory,
   asNoAcceptedClaim,
-  asOfficerMarkRequired,
   asQuotaSpent,
   asResidencyConflict,
   asVisitAlreadyClosed,
@@ -90,10 +88,8 @@ export function RequestRefusal({
   const blocked = asDeletionBlocked(error)
   const conflict = asResidencyConflict(error)
   const capacity = status === 422 ? asCapacityExceeded(error) : null
-  const mandatory = asMandatoryCategory(error)
   const entry = asEntryNotPermitted(error)
   const quota = asQuotaSpent(error)
-  const officerMark = asOfficerMarkRequired(error)
   const consentNeeded = asConsentRequired(error)
   const transition = asIllegalTransition(error)
   const windowClosed = asConfirmationWindowClosed(error)
@@ -165,27 +161,6 @@ export function RequestRefusal({
           </p>
         </>
       )
-  } else if (mandatory !== null) {
-    /*
-     * FR-34. The server refused to switch a category off, and the answer names
-     * which one. The ground is repeated here rather than only on the settings
-     * screen, because this refusal can also arrive from a stale page whose
-     * switch was drawn before the server changed its mind about the category.
-     */
-    const label = t(`notificationCategory.${mandatory.category}.label`, {
-      defaultValue: mandatory.category_label,
-    })
-    title = t('refusal.mandatoryTitle')
-    body = (
-      <>
-        <p className="m-0">{t('refusal.mandatoryBody', { category: label })}</p>
-        <p className="mt-2 mb-0">
-          {t(`notificationCategory.${mandatory.category}.ground`, {
-            defaultValue: t('notificationSettings.groundUnstated'),
-          })}
-        </p>
-      </>
-    )
   } else if (entry !== null) {
     /*
      * §2.4.2's second scenario. The sentence the officer needs is not «422»:
@@ -217,14 +192,6 @@ export function RequestRefusal({
           defaultValue: quota.message,
         })}
       </p>
-    )
-  } else if (officerMark !== null) {
-    title = t('guestQueue.officerMarkTitle')
-    body = (
-      <>
-        <p className="m-0">{t('guestQueue.officerMarkBody')}</p>
-        <p className="mt-2 mb-0 text-steel">{t('guestQueue.officerMarkGround')}</p>
-      </>
     )
   } else if (consentNeeded !== null) {
     title = t('checkpoint.consent.requiredTitle')
