@@ -285,18 +285,24 @@ class MaintenanceRequest extends Model
     }
 
     /**
-     * Requests submitted inside `[$from, $until]`, both days included. FR-40's
-     * «export for an arbitrary period» is asked of the queue in this shape,
-     * and the period is measured on the submission for the same reason the age
-     * is.
+     * The other half of the table: requests that have run their course, which
+     * is what the archive beside FR-40's queue shows. Closed and rejected are
+     * one list — both are finished, and a warden looking something up after
+     * the fact does not care which ending it had until he opens the card.
      *
      * @param  Builder<MaintenanceRequest>  $query
      */
-    public function scopeSubmittedBetween(Builder $query, CarbonInterface $from, CarbonInterface $until): void
+    public function scopeArchived(Builder $query): void
     {
-        $query->whereBetween('created_at', [
-            $from->copy()->startOfDay(),
-            $until->copy()->endOfDay(),
-        ]);
+        $query->whereIn(
+            'status',
+            array_map(
+                static fn (MaintenanceRequestStatus $status): string => $status->value,
+                array_values(array_filter(
+                    MaintenanceRequestStatus::cases(),
+                    static fn (MaintenanceRequestStatus $status): bool => $status->isFinal(),
+                )),
+            ),
+        );
     }
 }

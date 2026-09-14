@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1;
 
-use App\Enums\MaintenanceCategory;
-use App\Enums\MaintenanceRequestStatus;
+use App\Services\MaintenanceQueue;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -15,10 +14,11 @@ use Illuminate\Foundation\Http\FormRequest;
  * absence is the protection.** The list is filtered by the identifier of the
  * token, so there is no way to phrase a request for somebody else's defects —
  * the boundary is a missing parameter rather than a policy somebody has to
- * remember to call. The warden's queue is a different route, a sub-resource of
- * the building, and it is decided on the building object; the guest module
- * puts both behind one route and this module deliberately does not, because
- * here the two lists have nothing in common but the table they read.
+ * remember to call.
+ *
+ * The parameters are the same two the warden's queue takes, and deliberately:
+ * the resident's screen has the same two lists, his open requests and the ones
+ * that are finished with.
  */
 final class ListMaintenanceRequestsRequest extends FormRequest
 {
@@ -35,22 +35,23 @@ final class ListMaintenanceRequestsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => ['sometimes', 'string', 'in:'.implode(',', MaintenanceRequestStatus::values())],
-            'category' => ['sometimes', 'string', 'in:'.implode(',', MaintenanceCategory::values())],
+            'scope' => ['sometimes', 'string', 'in:open,archive'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.MaintenanceQueue::MAX_PAGE_SIZE],
         ];
     }
 
-    public function status(): ?MaintenanceRequestStatus
+    public function archived(): bool
     {
-        $status = $this->query('status');
-
-        return is_string($status) ? MaintenanceRequestStatus::tryFrom($status) : null;
+        return $this->query('scope') === 'archive';
     }
 
-    public function category(): ?MaintenanceCategory
+    public function perPage(): int
     {
-        $category = $this->query('category');
+        $perPage = $this->query('per_page');
 
-        return is_string($category) ? MaintenanceCategory::tryFrom($category) : null;
+        return is_numeric($perPage)
+            ? min(MaintenanceQueue::MAX_PAGE_SIZE, max(1, (int) $perPage))
+            : (int) config('dormitory.maintenance.queue_page_size');
     }
 }

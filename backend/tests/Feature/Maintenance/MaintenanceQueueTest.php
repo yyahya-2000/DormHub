@@ -6,7 +6,6 @@ namespace Tests\Feature\Maintenance;
 
 use App\Enums\AuditAction;
 use App\Enums\MaintenanceCategory;
-use App\Enums\MaintenanceRequestStatus;
 use App\Enums\MaintenanceUrgency;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
@@ -23,9 +22,8 @@ use Tests\Support\BuildsAMaintenanceScenario;
 use Tests\TestCase;
 
 /**
- * FR-40, «Building maintenance queue»: the three filters, the export over a
- * period, the scoping, and the threshold that is configuration rather than
- * code.
+ * FR-40, «Building maintenance queue»: the two lists, the page, the scoping,
+ * and the threshold that is configuration rather than code.
  *
  * The scoping test is the module's row in the horizontal-access matrix of
  * §4.7.2, and it is asserted from both ends — the warden of block 1 gets 403
@@ -98,82 +96,83 @@ final class MaintenanceQueueTest extends TestCase
     }
 
     /**
-     * FR-40, first criterion: «the queue is filterable by status, category and
-     * age». One test, three filters, because the criterion is one sentence and
-     * the three are the same query narrowed three ways.
+     * The archive, which is the other half of the same route: the finished
+     * requests, and only those. A request is in exactly one of the two lists,
+     * so the warden cannot lose one between them.
      */
-    public function test_the_queue_is_filterable_by_status_by_category_and_by_age(): void
+    public function test_the_archive_holds_the_finished_requests_and_the_queue_holds_the_rest(): void
     {
-        $old = $this->request(daysAgo: 20, category: MaintenanceCategory::Electrical);
-        $fresh = $this->request(daysAgo: 1, category: MaintenanceCategory::Plumbing);
+        $open = $this->request(daysAgo: 2);
 
-        $accepted = MaintenanceRequest::factory()
+        $closed = MaintenanceRequest::factory()
             ->forBuilding($this->building)
             ->from($this->resident)
-            ->accepted()
+            ->confirmed()
+            ->create();
+
+        $rejected = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->rejected()
             ->create();
 
         Sanctum::actingAs($this->warden);
 
         $base = "/api/v1/buildings/{$this->building->id}/maintenance-queue";
 
-        $this->getJson($base.'?status='.MaintenanceRequestStatus::Accepted->value)
+        $this->getJson($base)
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $accepted->id);
+            ->assertJsonPath('data.0.id', $open->id);
 
-        $this->getJson($base.'?category='.MaintenanceCategory::Electrical->value)
+        $archived = $this->getJson($base.'?scope=archive')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $old->id);
+            ->assertJsonCount(2, 'data');
 
-        $this->getJson($base.'?min_age_days=10')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $old->id);
-
-        $this->getJson($base.'?min_age_days=0')
-            ->assertOk()
-            ->assertJsonCount(3, 'data');
-
-        $this->assertNotNull($fresh->id);
+        $this->assertEqualsCanonicalizing(
+            [$closed->id, $rejected->id],
+            collect($archived->json('data'))->pluck('id')->all(),
+        );
     }
 
     /**
-     * FR-40, third criterion: «the queue exports for an arbitrary period».
-     * CSV, with the columns named, and the export itself recorded — an export
-     * discloses who reported what and when.
+     * The page, which is the only parameter beside the scope: a dormitory
+     * accumulates thousands of requests over an academic year and none of the
+     * screens asks for all of them.
      */
-    public function test_the_queue_exports_for_an_arbitrary_period(): void
+    public function test_the_queue_is_read_a_page_at_a_time(): void
     {
-        $inside = $this->request(daysAgo: 5);
-        $outside = $this->request(daysAgo: 40);
+        foreach (range(1, 5) as $daysAgo) {
+            $this->request(daysAgo: $daysAgo);
+        }
 
         Sanctum::actingAs($this->warden);
 
-        $response = $this->get(sprintf(
-            '/api/v1/buildings/%d/maintenance-queue?from=%s&until=%s&format=csv',
-            $this->building->id,
-            CarbonImmutable::now()->subDays(10)->toDateString(),
-            CarbonImmutable::now()->toDateString(),
-        ))->assertOk();
+        $base = "/api/v1/buildings/{$this->building->id}/maintenance-queue";
 
-        $csv = (string) $response->getContent();
+        $first = $this->getJson($base.'?per_page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.last_page', 3)
+            ->assertJsonPath('meta.total', 5);
 
-        $this->assertStringContainsString('Age, days', $csv);
-        $this->assertStringContainsString((string) $inside->id, explode("\n", $csv)[1] ?? '');
-        $this->assertSame(
-            2,
-            substr_count(trim($csv), "\n") + 1,
-            'The export carried a request submitted outside the period.',
-        );
+        $second = $this->getJson($base.'?per_page=2&page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 2);
 
-        $this->assertNotSame($outside->id, $inside->id);
+        // The two pages are two different slices of one ordering.
+        $this->assertEmpty(array_intersect(
+            collect($first->json('data'))->pluck('id')->all(),
+            collect($second->json('data'))->pluck('id')->all(),
+        ));
 
-        $this->assertNotNull(AuditLog::query()
-            ->where('action', AuditAction::MaintenanceQueueExported->value)
-            ->where('user_id', $this->warden->getKey())
-            ->first());
+        // And a client asking for the whole table gets the ceiling instead.
+        $this->getJson($base.'?per_page=5000')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('per_page');
     }
 
     /**
@@ -270,14 +269,12 @@ final class MaintenanceQueueTest extends TestCase
         config(['dormitory.maintenance.overdue_after_days' => 10]);
         $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
             ->assertOk()
-            ->assertJsonPath('data.0.overdue', false)
-            ->assertJsonPath('meta.overdue_after_days', 10);
+            ->assertJsonPath('data.0.overdue', false);
 
         config(['dormitory.maintenance.overdue_after_days' => 3]);
         $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
             ->assertOk()
-            ->assertJsonPath('data.0.overdue', true)
-            ->assertJsonPath('meta.overdue_after_days', 3);
+            ->assertJsonPath('data.0.overdue', true);
     }
 
     /**
@@ -297,7 +294,7 @@ final class MaintenanceQueueTest extends TestCase
 
         Sanctum::actingAs($this->warden);
 
-        $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue?overdue=1")
+        $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.overdue', true);

@@ -10,7 +10,7 @@ use App\Models\Building;
 use App\Services\MaintenanceQueue;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Collection;
 
 /**
  * FR-40, «Building maintenance queue».
@@ -24,9 +24,10 @@ use Symfony\Component\HttpFoundation\Response;
  * in which a request of another dormitory is in the result set to be filtered
  * out afterwards.
  *
- * The export is this route with `format=csv` rather than a route of its own,
- * for the reason `VisitRegisterController` gives: two routes would be two
- * queries with the same chance of disagreeing about what «open» means.
+ * One route and two lists. `scope=archive` reads the finished requests and
+ * everything else reads the open ones, so the two cannot come to disagree
+ * about what «open» means — which is the argument that used to keep the CSV
+ * export on this route, and the export itself is gone.
  */
 final class MaintenanceQueueController extends Controller
 {
@@ -34,78 +35,25 @@ final class MaintenanceQueueController extends Controller
         ShowMaintenanceQueueRequest $request,
         Building $building,
         MaintenanceQueue $queue,
-    ): JsonResponse|Response {
-        $now = CarbonImmutable::now();
-        $format = $request->exportFormat();
-        $page = $request->page();
-        $perPage = $queue->pageSize();
-
-        $requests = $queue->page(
+    ): JsonResponse {
+        $page = $queue->page(
             building: $building,
-            status: $request->status(),
-            category: $request->category(),
-            minimumAgeDays: $request->minimumAgeDays(),
-            onlyOverdue: $request->onlyOverdue(),
-            from: $request->from(),
-            until: $request->until(),
-            page: $page,
-            perPage: $perPage,
+            archived: $request->archived(),
+            perPage: $request->perPage(),
         );
 
-        $rows = $queue->rows($requests, $now);
-
-        $total = $queue->count(
-            building: $building,
-            status: $request->status(),
-            category: $request->category(),
-            minimumAgeDays: $request->minimumAgeDays(),
-            onlyOverdue: $request->onlyOverdue(),
-            from: $request->from(),
-            until: $request->until(),
+        $rows = $queue->rows(
+            new Collection($page->items()),
+            CarbonImmutable::now(),
         );
-
-        /*
-         * The period the export is recorded against. Absent bounds mean «the
-         * whole queue», and the log says so by naming the dormitory's own
-         * span rather than inventing a month nobody asked for.
-         */
-        $from = $request->from() ?? ($requests->last()?->created_at ?? $now);
-        $until = $request->until() ?? $now;
-
-        $queue->recordExport(
-            viewer: $request->user(),
-            building: $building,
-            from: $from,
-            until: $until,
-            format: $format,
-            rows: $rows->count(),
-            ipAddress: $request->ip(),
-        );
-
-        if ($format === 'csv') {
-            return response(
-                $queue->toCsv($rows),
-                200,
-                [
-                    'Content-Type' => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => sprintf(
-                        'attachment; filename="maintenance-queue-%d-%s.csv"',
-                        $building->getKey(),
-                        $now->toDateString(),
-                    ),
-                ],
-            );
-        }
 
         return response()->json([
-            'data' => $rows->values()->all(),
+            'data' => $rows->all(),
             'meta' => [
-                'building_id' => $building->getKey(),
-                'page' => $page,
-                'per_page' => $perPage,
-                'total' => $total,
-                'overdue_after_days' => $queue->overdueAfterDays(),
-                'columns' => MaintenanceQueue::COLUMNS,
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'per_page' => $page->perPage(),
+                'total' => $page->total(),
             ],
         ]);
     }

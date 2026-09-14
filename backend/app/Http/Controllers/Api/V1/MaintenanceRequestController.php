@@ -47,12 +47,15 @@ use Illuminate\Support\Facades\Gate;
 final class MaintenanceRequestController extends Controller
 {
     /**
-     * The caller's own requests, newest first.
+     * The caller's own requests, newest first, a page at a time.
      *
      * Filtered by the identifier of the token and never by one taken from the
      * query: there is no parameter through which one resident could ask about
      * another's defects. The warden's queue is a different route, decided on
      * the building object — see `MaintenanceQueueController`.
+     *
+     * `scope=archive` reads the finished requests; anything else reads the
+     * open ones, which is the list the screen opens on.
      */
     public function index(ListMaintenanceRequestsRequest $request): AnonymousResourceCollection
     {
@@ -60,16 +63,13 @@ final class MaintenanceRequestController extends Controller
             ->with(['building', 'room', 'reporter', 'assignee'])
             ->where('reporter_id', $request->user()?->getKey());
 
-        if (($status = $request->status()) !== null) {
-            $query->withStatus($status);
-        }
-
-        if (($category = $request->category()) !== null) {
-            $query->where('category', $category->value);
-        }
+        $request->archived() ? $query->archived() : $query->open();
 
         return MaintenanceRequestResource::collection(
-            $query->orderByDesc('created_at')->orderByDesc('id')->get()
+            $query
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->paginate($request->perPage())
         );
     }
 

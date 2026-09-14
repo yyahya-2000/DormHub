@@ -93,7 +93,6 @@ class AppServiceProvider extends ServiceProvider
         ));
 
         $this->app->bind(MaintenanceQueue::class, fn ($app) => new MaintenanceQueue(
-            audit: $app->make(AuditRecorder::class),
             overdueAfterDays: (int) config('dormitory.maintenance.overdue_after_days'),
             pageSize: (int) config('dormitory.maintenance.queue_page_size'),
         ));
