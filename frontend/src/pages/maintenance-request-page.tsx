@@ -33,6 +33,7 @@ import {
 } from '@/components/maintenance/maintenance-tags'
 import { WorkLog } from '@/components/maintenance/work-log'
 import { FieldRow, Panel } from '@/components/panel'
+import { MaintenancePhotographs } from '@/components/photograph'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,11 +76,12 @@ import { useMaintenanceRefresh } from '@/lib/maintenance-cache'
  * for a refusal and the comment on each move are read out of the journal below
  * and nowhere else.
  *
- * **The photographs are counted and not shown.** `photo_paths` carries paths
+ * **The photographs are shown, one request each.** `photo_paths` carries paths
  * into the object store rather than URLs — a signed URL embedded in a list is
- * stale by the time somebody scrolls to it — and this iteration has no route
- * that exchanges a path for a link. The card says how many are attached rather
- * than drawing broken images.
+ * stale by the time somebody scrolls to it — so each thumbnail asks for its own
+ * link at the moment it is drawn, under the rule that governs reading the
+ * request itself. A link that does not arrive leaves the card without that
+ * picture and without a warning about it.
  */
 export function MaintenanceRequestPage() {
   const { t } = useTranslation()
@@ -103,15 +105,7 @@ export function MaintenanceRequestPage() {
     <div className="grid grid-cols-1 gap-8">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold break-words text-ink">
-          {request === null
-            ? t('maintenance.cardHeading')
-            : (request.title !== null &&
-              request.title !== undefined &&
-              request.title !== ''
-                ? request.title
-                : t(`maintenanceCategory.${request.category}`, {
-                    defaultValue: request.category_label ?? request.category,
-                  }))}
+          {request === null ? t('maintenance.cardHeading') : subjectOf(request, t)}
         </h1>
         <p className="mt-1 text-steel">
           {t('maintenance.cardLead', { number: requestId })}
@@ -192,9 +186,15 @@ export function MaintenanceRequestPage() {
                 {request.assignee_name ?? t('maintenance.unassigned')}
               </FieldRow>
               <FieldRow label={t('maintenance.fields.photos')}>
-                {t('maintenance.photos.stored', {
-                  count: request.photo_count ?? (request.photo_paths?.length ?? 0),
-                })}
+                {photographsOf(request) === 0 ? (
+                  t('common.empty')
+                ) : (
+                  <MaintenancePhotographs
+                    requestId={request.id}
+                    count={photographsOf(request)}
+                    subject={subjectOf(request, t)}
+                  />
+                )}
               </FieldRow>
               {/*
                 FR-39. `closed_at` is written by three different endings and the
@@ -612,6 +612,32 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
 
 /** The variables of the two transitions that carry only an optional sentence. */
 type MaintenanceMove = { maintenanceRequest: number; data?: MaintenanceCommentInput }
+
+/**
+ * What this request is called on a screen and in the text alternative of its
+ * photographs: the short title the resident gave it, or, when the form was sent
+ * without one, the category it was filed under.
+ */
+function subjectOf(
+  request: MaintenanceRequest,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (request.title !== null && request.title !== undefined && request.title !== '') {
+    return request.title
+  }
+  return t(`maintenanceCategory.${request.category}`, {
+    defaultValue: request.category_label ?? request.category,
+  })
+}
+
+/**
+ * How many photographs the record claims. `photo_count` is the server's own
+ * answer; the length of `photo_paths` is the same number for a reader whose
+ * grant lets them see the paths, and is the fallback for one whose does not.
+ */
+function photographsOf(request: MaintenanceRequest): number {
+  return request.photo_count ?? request.photo_paths?.length ?? 0
+}
 
 /**
  * How a request ended, in one sentence — or in none, when the row does not say.

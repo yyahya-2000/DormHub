@@ -26,6 +26,7 @@ import {
   ItemStatusTag,
 } from '@/components/lost-found/lost-found-tags'
 import { FieldRow, Panel } from '@/components/panel'
+import { LostFoundPhotograph } from '@/components/photograph'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -141,9 +142,11 @@ export function LostFoundItemPage() {
                 })}
               </FieldRow>
               <FieldRow label={t('lostFound.fields.photo')}>
-                {item.has_photograph === true
-                  ? t('lostFound.photograph.attached')
-                  : t('lostFound.photograph.none')}
+                {item.has_photograph === true ? (
+                  <LostFoundPhotograph itemId={item.id} title={item.title} />
+                ) : (
+                  t('lostFound.photograph.none')
+                )}
               </FieldRow>
               {item.claim_count !== undefined && admitsClaims(item) ? (
                 <FieldRow label={t('lostFound.fields.claims')}>
