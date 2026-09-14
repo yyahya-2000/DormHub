@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\BedStatus;
+use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
 use App\Enums\UserStatus;
+use App\Models\Bed;
 use App\Models\Building;
+use App\Models\Residency;
 use App\Models\Role;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -82,7 +87,67 @@ class DemoSeeder extends Seeder
                 ],
                 ['granted_at' => now()],
             );
+
+            /*
+             * **The demo resident is given a bed** (acceptance of 15.09.2026).
+             * A resident grant says what the account is; a residency says
+             * where the person lives, and half the module routes ask the
+             * second question — FR-16's guest request and FR-36's maintenance
+             * request are open to a person who lives there and not to a person
+             * whose account is scoped there. `student@example.test` held the
+             * role and no bed, so the one account a demonstration signs in as
+             * to show the resident's screens was answered 403 by both of them.
+             *
+             * The housing seeder accommodates the residents it invents itself
+             * and knows nothing of this account, which is why the bed is taken
+             * here and not there.
+             */
+            if ($code === RoleCode::Resident && $building !== null) {
+                $this->accommodate($user, $building);
+            }
         }
+    }
+
+    /**
+     * The first free bed of the dormitory, and the register row that says the
+     * person is in it. Idempotent: an account that already lives somewhere is
+     * left where it is.
+     */
+    private function accommodate(User $resident, Building $building): void
+    {
+        if ($resident->openResidency()->exists()) {
+            return;
+        }
+
+        /*
+         * A bed nobody has ever held, and not merely a free one. The housing
+         * seeder leaves one place free because the person who had it moved
+         * out, and `residencies_bed_no_overlap` refuses a second row whose
+         * period overlaps that history — so the obvious «first free bed»
+         * lands on the one bed in the building that cannot take a move-in
+         * dated six months back.
+         */
+        $bed = Bed::query()
+            ->whereHas('room', fn ($query) => $query->where('building_id', $building->getKey()))
+            ->where('status', BedStatus::Free->value)
+            ->whereNotIn('id', Residency::query()->select('bed_id'))
+            ->orderBy('id')
+            ->first();
+
+        if ($bed === null) {
+            return;
+        }
+
+        Residency::query()->create([
+            'user_id' => $resident->getKey(),
+            'bed_id' => $bed->getKey(),
+            'contract_number' => sprintf('DOG-%d-0001', CarbonImmutable::now()->year),
+            'moved_in_at' => CarbonImmutable::now()->subMonths(6)->toDateString(),
+            'status' => ResidencyStatus::Active,
+        ]);
+
+        $bed->status = BedStatus::Occupied;
+        $bed->save();
     }
 
     /**
