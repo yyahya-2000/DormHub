@@ -10,7 +10,6 @@
       "myCard": "My card",
       "audit": "Audit log",
       "notifications": "Notifications",
-      "personalData": "Personal data",
       "checkpoint": "Security post",
       "guestQueue": "Requests",
       "guests": "Guests",
@@ -336,8 +335,6 @@
       "resident.account_issued": "Resident account issued",
       "auth.password_set": "Account password set",
       "resident.credential_issued": "One-time sign-in code issued",
-      "consent.granted": "Consent given",
-      "consent.withdrawn": "Consent withdrawn",
       "guest_request.submitted": "Guest request filed",
       "guest_request.approved": "Guest request approved",
       "guest_request.rejected": "Guest request refused",
@@ -415,9 +412,6 @@
     "maintenanceMoved": "The maintenance request has moved to «{{status}}»",
     "maintenanceFrom": "Was: {{status}}",
     "maintenanceNumber": "Request no. {{number}}",
-    "documentAwaiting": "A document is waiting for your signature: {{title}}",
-    "documentDue": "Due {{date}}",
-    "documentRevision": "Revision {{revision}}",
     "lostFoundClaim": "Somebody says «{{title}}» is theirs",
     "lostFoundReferred": "A disputed claim on «{{title}}» has been referred to you",
     "lostFoundClaimed": "Somebody has claimed an entry of yours",
@@ -440,65 +434,12 @@
     "maintenance_status": {
       "label": "Maintenance request status"
     },
-    "document_signature": {
-      "label": "Document awaiting signature"
-    },
     "announcement": {
       "label": "Announcements of the dormitory"
     },
     "lost_found_claim": {
       "label": "Claims in the lost and found"
     }
-  },
-  "consentDocument": {
-    "resident_personal_data": "Resident's consent",
-    "guest_personal_data": "Guest's consent"
-  },
-  "consent": {
-    "heading": "Consent to the processing of personal data",
-    "lead": "Read the text and decide.",
-    "leadFor": "{{name}}, read the text and decide.",
-    "draftTitle": "This text has not been through legal review",
-    "draftBody": "It is a working placeholder. It states what the system actually does with the data, but the officer responsible for the processing has not approved it. Before the system carries real data the text is replaced by the approved one under a new revision number, and the consent is asked for again.",
-    "draftRevision": "Revision of the text: {{revision}}",
-    "decisionTitle": "Decision",
-    "agree": "I consent",
-    "later": "Decide later",
-    "remaining_one": "{{count, number}} more document is waiting for a decision.",
-    "remaining_other": "{{count, number}} more documents are waiting for a decision.",
-    "recordedTitle": "The consent is recorded",
-    "continue": "Onward",
-    "fields": {
-      "document": "Document",
-      "revision": "Revision",
-      "acceptedAt": "Consented on",
-      "revokedAt": "Withdrawn on",
-      "address": "Given from the address"
-    },
-    "nothingPending": "Nothing to decide: you have read every text that concerns you and answered on each.",
-    "toHistory": "History of consents",
-    "toSystem": "Into the system",
-    "atPostTitle": "This consent is taken at the security post",
-    "atPostBody": "A guest's consent is executed in person, before the security officer records the entry. It is neither given nor withdrawn through the personal account.",
-    "strip": "The consent to the processing of personal data is waiting for your decision.",
-    "stripAction": "Read it and decide"
-  },
-  "consentHistory": {
-    "heading": "Personal data",
-    "pendingTitle_one": "{{count, number}} document is waiting for a decision",
-    "pendingTitle_other": "{{count, number}} documents are waiting for a decision",
-    "pendingAction": "Open the text",
-    "recordsCaption": "History of consents",
-    "recordsCount_one": "{{count, number}} record",
-    "recordsCount_other": "{{count, number}} records",
-    "empty": "No records: consent has never been given.",
-    "inForce": "In force",
-    "withdrawn": "Withdrawn",
-    "withdrawAction": "Withdraw the consent",
-    "withdrawConfirm": "Withdraw",
-    "confirmTitle": "Withdraw the consent: {{title}}?",
-    "nothingStood": "No consent to this document was in force.",
-    "atPostOnly": "Withdrawn at the security post, in person."
   },
   "changePassword": {
     "title": "Change the password",
@@ -654,33 +595,6 @@
       "recordedAt": "Left at {{time}}",
       "alreadyTitle": "The exit is already recorded",
       "alreadyBody": "The exit on this visit was recorded {{time}}."
-    },
-    "consent": {
-      "heading": "The guest's consent",
-      "forGuest": "Given in person by {{name}}",
-      "separate": "A step of its own and not a tick on the entry: art. 9 part 1 of Federal Law No. 152-FZ has consent executed separately from other documents.",
-      "revision": "Revision of the text: {{revision}}",
-      "requiredTitle": "Without consent no entry is recorded",
-      "requiredBody": "The server refused: the guest's consent is not on record. Show the text of revision {{revision}} and take the consent.",
-      "text": {
-        "title": "Consent to the processing of personal data — guest",
-        "draft": "A placeholder text. It states what the system does with the data, but the operator's responsible officer has not approved it: before the system carries real data it is replaced under a new revision identifier.",
-        "purpose": "I consent to the processing by the dormitory of my personal data, for the purpose of admitting me as a guest and of keeping the visitor register that clause 2.1.2 of the rules of internal order requires.",
-        "processedLabel": "What is processed.",
-        "processed": "Surname, name and patronymic; the room I am visiting and the resident who invited me; the time I entered and the time I left.",
-        "notProcessedLabel": "What is not processed.",
-        "notProcessed": "The document is not recorded at all — neither its type, nor its number, nor a copy, scan or photograph of it. The register holds the name and nothing more.",
-        "groundLabel": "The only ground.",
-        "ground": "I am not a party to the accommodation contract, so this consent is the sole ground on which my data may be processed (art. 6 part 1 cl. 1 of Federal Law No. 152-FZ). Without it the dormitory cannot record my entry.",
-        "withdrawalLabel": "Withdrawal.",
-        "withdrawal": "I may withdraw this consent at the security post at any time. Withdrawal ends the visit and stops further processing; the record that the consent was given, and the entries already made in the register, are kept for the period the local act sets."
-      },
-      "whatIsStored": "The record holds the fact, the date and the revision of the text. A guest has no account, so the record names the request instead.",
-      "agree": "The guest agrees",
-      "refuse": "The guest does not agree",
-      "refuseNote": "If the guest does not agree, no entry is recorded and no trace of one is left.",
-      "mismatchTitle": "The text on the screen is a different revision",
-      "mismatchBody": "The server asks for revision {{server}}; the screen carries {{screen}}. Take the consent from the approved text kept at the post: a record naming a wording the guest never read proves nothing."
     },
     "board": {
       "heading": "Recorded at this terminal",
