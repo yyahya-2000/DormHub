@@ -113,7 +113,6 @@ enum RoleCode: string
                 Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
-                Permission::ViewGuestDocument,
                 /*
                  * The maintenance queue read and not triaged, which is the
                  * same shape as the guest queue above and rests on the same
@@ -137,7 +136,6 @@ enum RoleCode: string
                 Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
                 Permission::ViewVisitRegister,
-                Permission::ViewGuestDocument,
                 Permission::ViewMaintenanceRequests,
                 Permission::TriageMaintenanceRequests,
                 /*
@@ -247,17 +245,16 @@ enum RoleCode: string
      * all — which is the difference between the manager and the warden, stated
      * once.
      *
-     * **The administrator's list is the whole staff, not the warden alone
-     * (acceptance of 14.09.2026).** Reading the chain as «each level hands out
-     * exactly the level below» left every grant beneath the warden revocable
-     * by exactly one account — the warden of that building — because the
-     * revocation is asked of this same list. Dismiss the warden and the
-     * manager, duty officer and security grants of his building stood with
-     * nobody able to take them back; the administrator, who may create and
-     * archive the dormitory itself, could not remove a security officer from
-     * it. A chain of appointment that cannot be unwound from the top is not a
-     * chain, it is a set of dead ends, so the administrator holds every role
-     * the warden holds and one more.
+     * **Each level hands out exactly the level below (MVP decision of
+     * 14.09.2026).** The administrator grants the warden and nothing else; the
+     * staff of a dormitory — manager, duty officer, security officer — are the
+     * warden's own appointments, made inside the building he answers for. The
+     * administrator held the whole list for a while, so that a dismissed
+     * warden's appointments could still be unwound from the top; the MVP drops
+     * that in favour of the chain the roles were agreed as. The consequence is
+     * accepted rather than overlooked: to replace a security officer of a
+     * dormitory that has lost its warden, the administrator appoints a warden
+     * first.
      *
      * The resident role is on nobody's list, and that is FR-42's doing rather
      * than an omission: a resident grant is written when an account is issued
@@ -268,7 +265,7 @@ enum RoleCode: string
     public function grantableRoles(): array
     {
         return match ($this) {
-            self::Administrator => [self::Warden, self::Manager, self::DutyOfficer, self::SecurityOfficer],
+            self::Administrator => [self::Warden],
             self::Warden => [self::Manager, self::DutyOfficer, self::SecurityOfficer],
             default => [],
         };

@@ -475,13 +475,13 @@ final class StaffAppointmentTest extends TestCase
     }
 
     /**
-     * The fifth finding of the acceptance: the administrator could appoint a
-     * warden and nothing else, and since revocation is asked of the same list,
-     * a manager's grant in block 1 was revocable by exactly one account in the
-     * system — the warden of block 1. Dismiss him and the grants beneath him
-     * stood with nobody able to take them back.
+     * The MVP chain of 14.09.2026: the administrator hands out the warden's
+     * role and stops there. Manager, duty officer and security officer are the
+     * warden's appointments, made inside the building he answers for, and the
+     * administrator asking for one of them directly is refused — which is the
+     * short way past the warden that must not exist.
      */
-    public function test_the_administrator_appoints_and_dismisses_the_whole_staff_of_any_building(): void
+    public function test_the_administrator_appoints_no_staff_role_beneath_the_warden(): void
     {
         $administrator = User::factory()
             ->withRole(RoleCode::Administrator, null)
@@ -497,39 +497,33 @@ final class StaffAppointmentTest extends TestCase
             $this->postJson("/api/v1/buildings/{$this->second->id}/staff", [
                 'user_id' => $subject->id,
                 'role' => $role->value,
-            ])->assertStatus(201);
+            ])->assertStatus(403);
 
-            $this->deleteJson("/api/v1/buildings/{$this->second->id}/staff/{$subject->id}/{$role->value}")
-                ->assertStatus(204);
-
-            $this->assertFalse($subject->fresh()->hasRoleInBuilding($role, $this->second));
+            $this->assertSame(0, RoleUser::query()->where('user_id', $subject->id)->count());
         }
     }
 
     /**
-     * A dormitory whose warden has gone does not keep its staff for ever. The
-     * grant beneath him is taken back by the administrator, in a building the
-     * administrator holds no scoped grant in at all.
+     * Revocation is asked of the same list as appointment, so the line above
+     * the warden holds in both directions: a grant the administrator may not
+     * write is a grant he may not take back either.
      */
-    public function test_a_grant_outlives_the_warden_who_wrote_it_and_the_administrator_takes_it_back(): void
+    public function test_the_administrator_revokes_no_staff_role_beneath_the_warden(): void
     {
         $manager = User::factory()
             ->withRole(RoleCode::Manager, $this->first)
-            ->create(['email' => 'orphaned-manager@example.test']);
+            ->create(['email' => 'manager-of-first@example.test']);
 
         $administrator = User::factory()
             ->withRole(RoleCode::Administrator, null)
             ->create(['email' => 'admin@example.test']);
 
-        // The warden is gone.
-        $this->wardenOfFirst->roleGrants()->delete();
-
         Sanctum::actingAs($administrator);
 
         $this->deleteJson("/api/v1/buildings/{$this->first->id}/staff/{$manager->id}/manager")
-            ->assertStatus(204);
+            ->assertStatus(403);
 
-        $this->assertFalse($manager->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->first));
+        $this->assertTrue($manager->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->first));
     }
 
     /**
