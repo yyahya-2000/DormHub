@@ -125,28 +125,6 @@ final readonly class BuildingRegistry
     }
 
     /**
-     * Archiving, the third of FR-01's restricted operations. It is the answer
-     * to a dormitory that has closed but whose residency history must stay
-     * readable: the row survives, and `is_active` says it is out of use.
-     */
-    public function archive(User $actor, Building $building, ?string $ipAddress = null): Building
-    {
-        return DB::transaction(function () use ($actor, $building, $ipAddress): Building {
-            $building->is_active = false;
-            $building->save();
-
-            $this->audit->record(
-                action: AuditAction::BuildingArchived,
-                actor: $actor,
-                subject: $building,
-                ipAddress: $ipAddress,
-            );
-
-            return $building;
-        });
-    }
-
-    /**
      * @throws RegistryDeletionBlockedException when anything is attached.
      */
     public function delete(User $actor, Building $building, ?string $ipAddress = null): void
@@ -216,9 +194,9 @@ final readonly class BuildingRegistry
      *
      * The advice is kept to what the API can actually carry out. Revoking a
      * staff grant has a route (`DELETE /buildings/{id}/staff/{user}/{role}`)
-     * and is offered; deleting or moving a room has none, so the reader is
-     * pointed at archiving, which does. Telling somebody to do a thing the
-     * system does not let them do is a worse answer than telling them less.
+     * and is offered; deleting a room has none, so the rooms are named and
+     * nothing is advised. Telling somebody to do a thing the system does not
+     * let them do is a worse answer than telling them less.
      */
     private function explainRefusal(
         Building $building,
@@ -238,12 +216,11 @@ final readonly class BuildingRegistry
         $reason = $byRoleGrants
             ? sprintf(
                 'This dormitory cannot be deleted: %d staff role grant(s) name it. '
-                .'Revoke them first, or archive the dormitory instead.',
+                .'Revoke them first.',
                 $dependants['role_grants'],
             )
             : sprintf(
-                'This dormitory cannot be deleted: %d room(s) are attached to it. '
-                .'Archive the dormitory instead — its rooms and their residency history stay readable.',
+                'This dormitory cannot be deleted: %d room(s) are attached to it.',
                 $dependants['rooms'],
             );
 

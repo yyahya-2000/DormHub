@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\ArchiveBuildingRequest;
 use App\Http\Requests\Api\V1\DeleteBuildingRequest;
 use App\Http\Requests\Api\V1\ListBuildingsRequest;
 use App\Http\Requests\Api\V1\ShowBuildingPeopleRequest;
@@ -62,16 +61,6 @@ final class BuildingController extends Controller
         );
     }
 
-    public function archive(
-        ArchiveBuildingRequest $request,
-        Building $building,
-        BuildingRegistry $registry,
-    ): BuildingResource {
-        return BuildingResource::make(
-            $registry->archive($request->user(), $building, $request->ip())
-        );
-    }
-
     /**
      * FR-01, second criterion. A dormitory holding rooms is refused by the
      * foreign key, and the refusal reaches the client as 409 carrying the
@@ -103,7 +92,14 @@ final class BuildingController extends Controller
         BuildingDirectory $directory,
     ): AnonymousResourceCollection {
         return UserResource::collection(
-            $directory->people($request->user(), $building, $request->ip())
+            $directory->people(
+                viewer: $request->user(),
+                building: $building,
+                search: $request->search(),
+                role: $request->role(),
+                perPage: $request->perPage(),
+                ipAddress: $request->ip(),
+            )
         );
     }
 }

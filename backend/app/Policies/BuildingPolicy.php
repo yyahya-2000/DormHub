@@ -70,12 +70,12 @@ final class BuildingPolicy
     }
 
     /**
-     * FR-01, first criterion: create, edit and archive belong to the
+     * FR-01, first criterion: create, edit and delete belong to the
      * administrator and to nobody else. Three methods rather than one, because
      * the gate is asked by name and a single `manage` would blur which of the
      * three a route actually needs.
      *
-     * These four stay stated as the role and not as a capability on purpose.
+     * These three stay stated as the role and not as a capability on purpose.
      * The register of dormitories is not work done **inside** a building, so
      * there is no building to scope the question to; the administrator is the
      * answer, and the manager beneath the warden must never become one.
@@ -86,11 +86,6 @@ final class BuildingPolicy
     }
 
     public function update(User $user, Building $building): bool
-    {
-        return $user->isAdministrator();
-    }
-
-    public function archive(User $user, Building $building): bool
     {
         return $user->isAdministrator();
     }
