@@ -362,6 +362,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('maintenance-requests.show');
 
     /*
+     * FR-36's photographs, read back one at a time. The schemas of the
+     * contract have always said the client asks for a link when it is about to
+     * show the image; until the acceptance of 15.09.2026 there was nothing to
+     * ask, and an attached photograph could be read by nobody.
+     *
+     * Under the policy of the request itself and not one of its own: whoever
+     * may read the card may see the picture on it, and a request of another
+     * dormitory is a 403. The index is the position in `photo_paths`, so there
+     * is no path in the URL for a client to edit.
+     */
+    Route::get('maintenance-requests/{maintenanceRequest}/photos/{index}', [MaintenanceRequestController::class, 'photo'])
+        ->whereNumber('index')
+        ->name('maintenance-requests.photo');
+
+    /*
      * FR-37, FR-38. The warden or the manager of this dormitory, and nobody
      * else — not the duty officer, not the administrator (see `Permission`).
      */
@@ -447,6 +462,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
      */
     Route::get('lost-found/{lostFoundItem}', [LostFoundController::class, 'show'])
         ->name('lost-found.show');
+
+    /*
+     * FR-24's photograph, read back. No index: the column holds one path, and
+     * an entry published without a picture is a 404 rather than an empty
+     * answer a client would have to tell apart from a link.
+     */
+    Route::get('lost-found/{lostFoundItem}/photo', [LostFoundController::class, 'photo'])
+        ->name('lost-found.photo');
 
     /*
      * FR-26. «That is mine, and here is how I know.» A claim on one's own
