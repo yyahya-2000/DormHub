@@ -6,7 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   asCapacityExceeded,
   asConfirmationWindowClosed,
-  asConsentRequired,
   asDeletionBlocked,
   asEntryNotPermitted,
   asIllegalTransition,
@@ -90,7 +89,6 @@ export function RequestRefusal({
   const capacity = status === 422 ? asCapacityExceeded(error) : null
   const entry = asEntryNotPermitted(error)
   const quota = asQuotaSpent(error)
-  const consentNeeded = asConsentRequired(error)
   const transition = asIllegalTransition(error)
   const windowClosed = asConfirmationWindowClosed(error)
   const visitClosed = asVisitAlreadyClosed(error)
@@ -191,13 +189,6 @@ export function RequestRefusal({
           date: formatters.date(quota.visit_date),
           defaultValue: quota.message,
         })}
-      </p>
-    )
-  } else if (consentNeeded !== null) {
-    title = t('checkpoint.consent.requiredTitle')
-    body = (
-      <p className="m-0">
-        {t('checkpoint.consent.requiredBody', { revision: consentNeeded.revision })}
       </p>
     )
   } else if (visitClosed !== null) {

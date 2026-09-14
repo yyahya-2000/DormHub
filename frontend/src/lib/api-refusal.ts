@@ -1,7 +1,6 @@
 import type {
   CapacityExceeded,
   ConfirmationWindowClosedError,
-  ConsentRequiredError,
   DeletionBlocked,
   EntryNotPermittedError,
   IllegalTransitionError,
@@ -102,31 +101,6 @@ export function asEntryNotPermitted(error: unknown): EntryNotPermittedError | nu
   }
   return typeof body.reason_code === 'string'
     ? (body as unknown as EntryNotPermittedError)
-    : null
-}
-
-/**
- * FR-35 at the point it bites: no consent from the guest is on record, and the
- * entry is therefore not written. 409 and not 403 — the officer's role covers
- * the post perfectly well, and what stands in the way is a missing document.
- *
- * The body names the revision, and the revision is what the consent step then
- * records. It is never a constant in the client: a record naming a wording the
- * repository cannot produce would prove nothing (art. 9 part 3 of Federal Law
- * No. 152-FZ).
- */
-export function asConsentRequired(
-  error: unknown,
-): (ConsentRequiredError & { revision: string }) | null {
-  const body = bodyOf(error)
-  if (body === null || statusOf(error) !== 409) {
-    return null
-  }
-  // The revision is optional in the schema and load bearing here: the consent
-  // step records the one the server named, so a body without it is not a
-  // refusal this screen can answer.
-  return typeof body.document === 'string' && typeof body.revision === 'string'
-    ? (body as unknown as ConsentRequiredError & { revision: string })
     : null
 }
 
