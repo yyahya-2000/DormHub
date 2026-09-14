@@ -3,6 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { RequireSession } from '@/auth/require-session'
 import { SessionProvider } from '@/auth/session-provider'
 import { AppShell } from '@/components/app-shell'
+import { AnnouncementPublishPage } from '@/pages/announcement-publish-page'
+import { AnnouncementReadersPage } from '@/pages/announcement-readers-page'
+import { AnnouncementsPage } from '@/pages/announcements-page'
 import { AuditLogPage } from '@/pages/audit-log-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
@@ -14,6 +17,9 @@ import { FloorPlanPage } from '@/pages/floor-plan-page'
 import { GuestQueuePage } from '@/pages/guest-queue-page'
 import { GuestRequestsPage } from '@/pages/guest-requests-page'
 import { LoginPage } from '@/pages/login-page'
+import { MaintenanceQueuePage } from '@/pages/maintenance-queue-page'
+import { MaintenanceRequestPage } from '@/pages/maintenance-request-page'
+import { MaintenanceRequestsPage } from '@/pages/maintenance-requests-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { NotificationSettingsPage } from '@/pages/notification-settings-page'
 import { NotificationsPage } from '@/pages/notifications-page'
@@ -83,6 +89,39 @@ export default function App() {
               />
               <Route path="guests" element={<GuestRequestsPage />} />
               <Route path="checkpoint" element={<CheckpointPage />} />
+              {/*
+                The maintenance module, and the same split for the same reason.
+                The queue is addressed by building, because it belongs to one
+                dormitory and the capability is held in one. The resident's own
+                list is not: the route filters by the identifier of the token,
+                so there is no parameter by which one person could name another.
+                The card sits outside both — a request is read by the person who
+                filed it and by the staff who triage in that dormitory, and
+                which of the two is looking is not a fact about the address.
+              */}
+              <Route
+                path="buildings/:buildingId/maintenance"
+                element={<MaintenanceQueuePage />}
+              />
+              <Route path="maintenance" element={<MaintenanceRequestsPage />} />
+              <Route
+                path="maintenance/:maintenanceRequestId"
+                element={<MaintenanceRequestPage />}
+              />
+              {/*
+                The announcement feed takes no building either, and there the
+                absence is the horizontal boundary itself (FR-07): the audience
+                is computed from the grants of the token, so no address can ask
+                for another dormitory's feed. The readers report is addressed by
+                announcement and narrowed by the server to the caller's own
+                dormitory.
+              */}
+              <Route path="announcements" element={<AnnouncementsPage />} />
+              <Route path="announcements/new" element={<AnnouncementPublishPage />} />
+              <Route
+                path="announcements/:announcementId/readers"
+                element={<AnnouncementReadersPage />}
+              />
               <Route path="residents/:residentId" element={<ResidentCardPage />} />
               {/*
                 The personal account. Neither route takes a parameter naming a

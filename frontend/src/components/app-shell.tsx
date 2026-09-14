@@ -6,6 +6,7 @@ import {
   buildingsOf,
   buildingsWith,
   guestRequestBuildingsOf,
+  maintenanceBuildingsOf,
   Permission,
   showsAuditLink,
 } from '@/auth/navigation'
@@ -87,6 +88,22 @@ export function AppShell() {
   }
   if (guestRequestBuildingsOf(user).length > 0) {
     tabs.push({ to: '/guests', label: t('app.section.guests') })
+  }
+  /*
+   * The announcement feed is everybody's, and it is the one section here that
+   * asks no question at all before drawing the tab. The route carries no
+   * building parameter — the audience is computed from the grants of the token
+   * — so there is nothing to scope the link to and nobody it could refuse: an
+   * account addressed by nothing gets an empty feed, which is an answer.
+   */
+  tabs.push({ to: '/announcements', label: t('app.section.announcements') })
+  /*
+   * FR-36's form, offered to whoever the mirror believes lives somewhere. The
+   * queue of a dormitory is not here: it is a view of one building and sits
+   * among the building's own tabs.
+   */
+  if (maintenanceBuildingsOf(user).length > 0) {
+    tabs.push({ to: '/maintenance', label: t('app.section.maintenance') })
   }
 
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })

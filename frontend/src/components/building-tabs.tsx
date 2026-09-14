@@ -7,6 +7,7 @@ import {
   may,
   Permission,
   readsGuestRequests,
+  readsMaintenanceQueue,
   readsVisitRegister,
 } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
@@ -35,6 +36,7 @@ export function BuildingTabs({ buildingId }: { buildingId: number }) {
   const issuesAccounts = user !== null && issuesResidentAccounts(user, buildingId)
   const readsGuests = user !== null && readsGuestRequests(user, buildingId)
   const readsRegister = user !== null && readsVisitRegister(user, buildingId)
+  const readsMaintenance = user !== null && readsMaintenanceQueue(user, buildingId)
 
   const views = [
     { to: `/buildings/${buildingId}`, label: t('building.views.card'), end: true },
@@ -63,6 +65,19 @@ export function BuildingTabs({ buildingId }: { buildingId: number }) {
           {
             to: `/buildings/${buildingId}/visit-register`,
             label: t('building.views.visitRegister'),
+            end: false,
+          },
+        ]
+      : []),
+    // FR-40. Three roles read the queue and two of them triage it, and the
+    // difference is not drawn here: the tab leads to a screen that asks the
+    // narrower question itself, so the administrator sees the backlog of any
+    // dormitory without being offered a button that promises a date.
+    ...(readsMaintenance
+      ? [
+          {
+            to: `/buildings/${buildingId}/maintenance`,
+            label: t('building.views.maintenance'),
             end: false,
           },
         ]
