@@ -19,20 +19,34 @@ use Illuminate\Notifications\DatabaseNotification;
  * up **through the relation**, so a message belonging to somebody else is a
  * 404 and not a 403: a 403 would confirm that the identifier exists, which is
  * more than a stranger should learn.
+ *
+ * **One list and no filter.** The listing used to take an `unread` parameter.
+ * It is gone with the settings screen and for the same reason: a person with a
+ * dozen messages does not sort them, they read down the page. Unread is a
+ * colour on the row and reading the message clears it, which is the whole of
+ * the interaction the MVP needs.
+ *
+ * `meta.unread_count` stays, because the number in the menu badge is a
+ * different question from «what is on this page» and the badge is drawn on
+ * every screen. It is one `count` over the rows the listing already scopes
+ * itself to — the same person, the same table, the same request — so it costs
+ * no round trip of its own.
  */
 final class NotificationController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $notifications = $request->user()
-            ->notifications()
-            ->when(
-                $request->boolean('unread'),
-                fn ($query) => $query->whereNull('read_at'),
-            )
+        $user = $request->user();
+
+        $notifications = $user->notifications()
             ->paginate((int) config('dormitory.notifications.page_size'));
 
-        return NotificationResource::collection($notifications);
+        return NotificationResource::collection($notifications)
+            ->additional([
+                'meta' => [
+                    'unread_count' => $user->unreadNotifications()->count(),
+                ],
+            ]);
     }
 
     public function read(Request $request, string $notification): NotificationResource
