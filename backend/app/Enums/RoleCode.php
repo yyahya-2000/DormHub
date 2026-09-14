@@ -140,6 +140,16 @@ enum RoleCode: string
                 Permission::ViewGuestDocument,
                 Permission::ViewMaintenanceRequests,
                 Permission::TriageMaintenanceRequests,
+                /*
+                 * The lost-and-found module's two staff capabilities (§2.5.4).
+                 * Neither is the module's ordinary path: a find stays with the
+                 * resident who found it and is settled between two residents.
+                 * These cover the two exceptions — an object deposited with
+                 * the administration for safekeeping, and a claim the two
+                 * sides could not settle.
+                 */
+                Permission::HoldLostFoundItems,
+                Permission::DecideLostFoundDisputes,
             ],
             /*
              * The manager reads the guest queue, because a request names a
@@ -165,6 +175,14 @@ enum RoleCode: string
                  */
                 Permission::ViewMaintenanceRequests,
                 Permission::TriageMaintenanceRequests,
+                /*
+                 * The same two as the warden's, and for the reason §1.1.4's
+                 * revision 2 gives: keeping an object somebody left at the
+                 * desk, and settling a disagreement between two residents of
+                 * the building, are both day-to-day work of the building.
+                 */
+                Permission::HoldLostFoundItems,
+                Permission::DecideLostFoundDisputes,
             ],
             /*
              * The duty officer approves guest requests, and for that they need
@@ -195,6 +213,17 @@ enum RoleCode: string
             self::SecurityOfficer => [
                 Permission::ViewBuilding,
                 Permission::OperateCheckpoint,
+                /*
+                 * FR-24 names the security officer beside the warden as a
+                 * publisher of finds: an object picked up in the corridor is
+                 * handed in at the desk, which is the only place in the
+                 * dormitory staffed at four in the morning. Taking it in and
+                 * handing it back are one job, so the officer also answers the
+                 * claims made against the entries the post holds. He settles
+                 * no disputes — that is the other capability, and it is not
+                 * here.
+                 */
+                Permission::HoldLostFoundItems,
             ],
             self::Resident => [],
         };

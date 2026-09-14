@@ -196,4 +196,50 @@ enum AuditAction: string
     // assembled for a purpose — and §3.9.6 counts such a reading among the
     // events for the same reason it counts `resident.card_viewed`.
     case AnnouncementReadersViewed = 'announcement.readers_viewed';
+
+    /*
+     |--------------------------------------------------------------------------
+     | The lost-and-found module (increment 4): FR-24, FR-25, FR-26
+     |--------------------------------------------------------------------------
+     |
+     | The module is peer-to-peer and its decisions are taken by residents
+     | rather than by staff (§2.5.4), which is exactly why they are recorded.
+     | Every other decision in this system is taken by somebody holding a role,
+     | and a role is itself a record; here the person who decides who gets an
+     | object back is another resident, and the audit log is the only place the
+     | sequence survives.
+     |
+     | The publication carries `custody` and `declared_on` in its payload,
+     | because those two say which of §2.5.4's paths the find took and whether
+     | a declaration to the authorities was ever recorded against it. Neither
+     | can be reconstructed from the row afterwards if somebody edits it.
+     */
+
+    // FR-24. A find or a loss entered the feed, with no approval step between
+    // (§2.5.4).
+    case LostFoundItemPublished = 'lost_found_item.published';
+
+    // FR-26. «That is mine», with the identifying marks the claimant gave.
+    case LostFoundClaimFiled = 'lost_found_claim.filed';
+
+    // FR-26. The holder of the object says the marks match.
+    case LostFoundClaimAccepted = 'lost_found_claim.accepted';
+
+    // FR-26. The holder says they do not, and the entry goes back into the
+    // feed if nothing else is outstanding on it.
+    case LostFoundClaimDeclined = 'lost_found_claim.declined';
+
+    // FR-26. The claimant did not accept the refusal and has put it to the
+    // warden — the first of §2.5.4's two occasions for a member of staff.
+    case LostFoundClaimReferred = 'lost_found_claim.referred';
+
+    // FR-26, first criterion: «a warden's decision on a referred claim». The
+    // one decision in the module a member of staff takes over the head of the
+    // person holding the object, which is why it is recorded as an act of its
+    // own rather than as another acceptance.
+    case LostFoundClaimDecidedByStaff = 'lost_found_claim.decided_by_staff';
+
+    // FR-26, first criterion: the object changed hands and the entry left the
+    // public list.
+    case LostFoundItemResolved = 'lost_found_item.resolved';
 }

@@ -156,6 +156,45 @@ enum Permission: string
     case TriageMaintenanceRequests = 'maintenance_requests.triage';
 
     /**
+     * Taking a found object into the administration's safekeeping, and
+     * deciding on the claims made against one (FR-24, FR-26).
+     *
+     * **The narrowest thing this capability says is «you are holding it».**
+     * §2.5.4 makes the module peer-to-peer: the finder keeps the object,
+     * publishes it and decides on claims, and no capability is involved at all
+     * on that path. This one covers the other path — the object handed in at
+     * the security post or deposited with the administration, which is the
+     * case Civil Code art. 227 cl. 1 para. 2 addresses. Whoever holds the
+     * object decides who gets it back, so the capability that records the
+     * deposit is the same one that answers a claim against a deposited entry.
+     *
+     * The security officer holds it because a found object is handed in at the
+     * desk, which is the only place in the dormitory open at four in the
+     * morning. The warden and the manager hold it because the safekeeping is
+     * the administration's.
+     */
+    case HoldLostFoundItems = 'lost_found.hold';
+
+    /**
+     * Deciding a claim the finder and the claimant could not settle (FR-26).
+     *
+     * **Held by the warden and the manager, and by nobody else — the
+     * administrator included.** §2.5.4 names the warden, and the manager is
+     * inside «the warden of this building» everywhere the contract says it
+     * about operative work. The administrator is outside it for the reason
+     * they are outside `DecideGuestRequests`: the dispute is about two people
+     * standing in one dormitory with one umbrella between them, and a person
+     * who holds the register of every dormitory is not the person who can see
+     * which of them is telling the truth.
+     *
+     * It is split from the capability above because the two lists of holders
+     * genuinely differ — the security officer takes an object in and settles
+     * nobody's dispute — which is the test `ViewRooms` and `ManageRooms` are
+     * split on.
+     */
+    case DecideLostFoundDisputes = 'lost_found.decide_disputes';
+
+    /**
      * Reading a guest's document number in full (NFR-06, §3.4.2).
      *
      * The column is stored encrypted and shown masked everywhere, so this is

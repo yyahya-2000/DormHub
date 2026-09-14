@@ -98,6 +98,34 @@ enum NotificationCategory: string
     case MandatoryAnnouncement = 'mandatory_announcement';
 
     /**
+     * FR-26. Something has happened to a claim on a find: one has arrived, one
+     * has been accepted with a handover point, one has been declined, one has
+     * been referred to the warden, or the warden has decided it.
+     *
+     * **One category for the whole exchange, and that is the decision here.**
+     * The obvious split — «a claim arrived» to the holder, «your claim was
+     * answered» to the claimant — would produce two switches held by the same
+     * people for the same conversation, and a resident who silenced one half
+     * would be left holding an object nobody would ever come for, or waiting
+     * at a handover point nobody named. The two messages are two ends of one
+     * exchange and they go on or off together.
+     *
+     * Optional, by the principle stated above: every one of these movements is
+     * on the person's own screen the moment they open the entry, and nothing
+     * in the rules of internal order obliges anybody to answer a claim at all
+     * — §2.5.4's module rests on the residents' willingness rather than on a
+     * duty. The message only saves them from looking.
+     *
+     * **This is the one category whose messages name another resident**, and
+     * the composition is narrow on purpose (§3.5.3): the claimant learns where
+     * to collect the object, and the holder learns that somebody has claimed
+     * it. No telephone number, no address of any kind and no e-mail travels in
+     * either direction — the exchange runs through the system, which is the
+     * whole reason the find card carries no contacts (FR-25).
+     */
+    case LostFoundClaim = 'lost_found_claim';
+
+    /**
      * Whether the category may not be switched off.
      *
      * @see self for the ground the line is drawn on.
@@ -107,7 +135,8 @@ enum NotificationCategory: string
         return match ($this) {
             self::AccountIssued, self::VisitOverdue, self::DocumentSignature,
             self::MandatoryAnnouncement => true,
-            self::RequestDecision, self::MaintenanceStatus, self::Announcement => false,
+            self::RequestDecision, self::MaintenanceStatus, self::Announcement,
+            self::LostFoundClaim => false,
         };
     }
 
@@ -131,6 +160,7 @@ enum NotificationCategory: string
             self::DocumentSignature => 'Document awaiting signature',
             self::Announcement => 'Announcements of the dormitory',
             self::MandatoryAnnouncement => 'Announcements requiring acknowledgement',
+            self::LostFoundClaim => 'Claims on a lost or found item',
         };
     }
 
@@ -147,6 +177,7 @@ enum NotificationCategory: string
             self::DocumentSignature => 'A document is waiting for your signature.',
             self::Announcement => 'The warden has published an announcement for your dormitory.',
             self::MandatoryAnnouncement => 'An announcement you are required to acknowledge, such as a change to the regime or a planned shutoff.',
+            self::LostFoundClaim => 'Somebody has claimed something you found, or a claim of yours has been answered.',
         };
     }
 
