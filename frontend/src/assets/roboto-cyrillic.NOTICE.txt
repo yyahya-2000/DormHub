@@ -1,0 +1,7 @@
+roboto-cyrillic.ttf is Roboto Regular, subset to the Latin and Cyrillic
+characters the account sheet prints. Roboto is (c) Google, licensed under the
+Apache License 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+
+The standard fonts of jsPDF are WinAnsi-encoded and have no Cyrillic glyphs, so
+a Russian name printed with them comes out as blanks. This file is embedded in
+the PDF instead.
