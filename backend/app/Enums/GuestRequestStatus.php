@@ -99,6 +99,32 @@ enum GuestRequestStatus: string implements TransitionableStatus
     }
 
     /**
+     * Whether a lookup at the post may say whom this request is about.
+     *
+     * **The code outlives the request and the card must not.** A resident who
+     * withdraws an approved request keeps the code on the row on purpose (see
+     * the migration): a guest who turns up anyway is met with «this visit was
+     * cancelled» rather than «no such code», which is the honest answer at the
+     * desk. But the entry being refused is not the whole of the protection —
+     * the card was still rendering the guest's name, the host's name and the
+     * host's room number to whoever held the withdrawn code. §2.7.1's
+     * minimisation and NFR-06 both say the same thing about that: the ground
+     * for showing a guest's data at the post is the visit that is about to be
+     * recorded, and where there is no such visit the ground is gone.
+     *
+     * `Completed` discloses, and is not an exception to the rule: the visit
+     * happened, the register holds it, and the officer looking it up is
+     * reading the journal of clause 2.1.2.
+     */
+    public function disclosesTheGuest(): bool
+    {
+        return match ($this) {
+            self::Rejected, self::Cancelled, self::Expired => false,
+            default => true,
+        };
+    }
+
+    /**
      * @return list<self>
      */
     public static function open(): array

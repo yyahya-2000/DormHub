@@ -50,7 +50,7 @@ final class CheckpointController extends Controller
             fn (GuestRequest $guestRequest): array => $checkpoint->cardFor($guestRequest)->toArray()
         );
 
-        return response()->json([
+        $body = [
             'data' => $cards->values()->all(),
             'meta' => [
                 'matches' => $cards->count(),
@@ -58,7 +58,18 @@ final class CheckpointController extends Controller
                 // this line say the same thing to two different readers.
                 'read_only' => true,
             ],
-        ], $this->statusFor($cards));
+        ];
+
+        if ($cards->isEmpty()) {
+            // The contract declares a message on this answer and the body
+            // carried none, so a terminal typed against it had an array of
+            // zero cards and a field that was never sent. The message is the
+            // sentence the officer reads off the screen; `data` and `meta`
+            // stay, so one shape is parsed whatever the status.
+            $body = ['message' => $this->nothingFound($request->code())] + $body;
+        }
+
+        return response()->json($body, $this->statusFor($cards));
     }
 
     /**
@@ -122,5 +133,19 @@ final class CheckpointController extends Controller
     private function statusFor(Collection $cards): int
     {
         return $cards->isEmpty() ? 404 : 200;
+    }
+
+    /**
+     * The two misses read differently at the desk and are told apart here.
+     *
+     * A code that matches nothing is a wrong code or a code from another
+     * dormitory; a surname that matches nothing means nobody of that name is
+     * expected today, which is not the same news and not the same next action.
+     */
+    private function nothingFound(?string $code): string
+    {
+        return $code !== null && $code !== ''
+            ? 'No visit in this dormitory answers to that code.'
+            : 'No guest of that name is expected in this dormitory today.';
     }
 }

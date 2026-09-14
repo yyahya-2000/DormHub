@@ -108,6 +108,21 @@ enum AuditAction: string
     case GuestRequestExpired = 'guest_request.expired';
     case GuestRequestDecisionRefused = 'guest_request.decision_refused';
 
+    /*
+     * FR-17, third criterion: «the applicant is notified of the decision» — and
+     * the case in which they are not.
+     *
+     * The notice of a decision is an optional category (§2.7.1), so a resident
+     * who has switched it off, or who has withdrawn the consent it rests on,
+     * receives nothing. That silence is correct and it was also invisible: the
+     * message was dropped inside `User::notify()` and the log recorded the
+     * decision as though it had been delivered. A criterion phrased «the
+     * applicant is notified» cannot be audited against a log that says nothing
+     * about the times it was not. The entry names the reason, so «why did I
+     * hear nothing» has an answer that does not require reading the code.
+     */
+    case GuestRequestDecisionNotDelivered = 'guest_request.decision_not_delivered';
+
     // FR-18. A lookup at the post reads a guest's name and document; art. 19
     // part 2 cl. 8 of Federal Law No. 152-FZ asks the operator to keep a
     // registration and accounting of the actions performed with personal data,

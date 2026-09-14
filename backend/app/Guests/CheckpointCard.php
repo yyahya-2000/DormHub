@@ -46,15 +46,35 @@ final readonly class CheckpointCard
     }
 
     /**
+     * Whether this card may name anybody.
+     *
+     * A withdrawn, refused or expired request still answers to its code —
+     * deliberately, so that a guest who turns up is told the visit was
+     * cancelled rather than that no such code exists — but there is no visit
+     * about to be recorded and therefore no ground for putting the guest's
+     * name, the host's name and the host's room on the screen (§2.7.1,
+     * NFR-06). The verdict and the status stay; the people do not.
+     */
+    public function disclosesTheGuest(): bool
+    {
+        return $this->request->status->disclosesTheGuest();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array
     {
+        if (! $this->disclosesTheGuest()) {
+            return $this->withheld();
+        }
+
         $window = $this->request->plannedWindow();
         $student = $this->request->student;
 
         return [
             'guest_request_id' => $this->request->getKey(),
+            'disclosed' => true,
             'access_code' => $this->request->access_code,
 
             // 1. The guest.
@@ -106,6 +126,44 @@ final readonly class CheckpointCard
                 'override_requires_reason' => $this->refusal?->overrideAvailable ?? false,
             ],
 
+            'checked_at' => $this->at->toIso8601String(),
+        ];
+    }
+
+    /**
+     * The same card with every person taken out of it.
+     *
+     * The shape is the shape of the card and not a shorter object, so that one
+     * screen draws both and the absence is a value the client reads rather
+     * than a field it has to discover is missing. What survives is what the
+     * officer needs in order to say something true to the person at the desk:
+     * this code belongs to a visit that is not going to happen, and here is
+     * why.
+     *
+     * @return array<string, mixed>
+     */
+    private function withheld(): array
+    {
+        return [
+            'guest_request_id' => $this->request->getKey(),
+            'disclosed' => false,
+            'access_code' => null,
+            'guest' => null,
+            'inviting_resident' => null,
+            'room' => null,
+            'due_at' => null,
+            'permitted_interval' => null,
+            'status' => $this->request->status->value,
+            'status_label' => $this->request->status->label(),
+            'visit' => null,
+            'consent_on_record' => false,
+            'admission' => [
+                'allowed' => false,
+                'reason_code' => $this->refusal?->reasonCode,
+                'reason' => $this->refusal?->getMessage(),
+                'override_available' => false,
+                'override_requires_reason' => false,
+            ],
             'checked_at' => $this->at->toIso8601String(),
         ];
     }
