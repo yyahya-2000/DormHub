@@ -9,6 +9,9 @@
 #   redis      queue, cache, sessions, rate-limit counters
 #   minio      S3-compatible object storage
 #
+# Beside them one container that is not a service: `minio-bootstrap` runs once
+# at start, creates the bucket the photographs go into and exits.
+#
 # The worker and the scheduler are separate containers here for the same reason
 # they are separate in the design: a scheduled sweep that only runs when someone
 # remembers to trigger it proves nothing.
@@ -167,6 +170,40 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # The bucket the application writes photographs into (FR-36, FR-24).
+  #
+  # A one-shot container rather than a line in the application's entrypoint,
+  # and the acceptance of 15.09.2026 is the reason there is anything here at
+  # all. MinIO starts with no buckets; nothing created `dormitory`; every
+  # upload was refused with `NoSuchBucket`, and — because the disk was
+  # configured not to throw — the refusal arrived as a `false` that the photo
+  # store dropped. `POST /maintenance-requests` answered 201 with
+  # `photo_count: 0`, which is the shape data loss takes when nobody checks a
+  # return value.
+  #
+  # `restart: "no"` because the job is done once and a container that keeps
+  # coming back would look like a service that keeps failing. `mc mb
+  # --ignore-existing` is idempotent, so a second `up` is a no-op rather than
+  # an error.
+  minio-bootstrap:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: dormitory-minio-bootstrap
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dormitory}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dormitory-secret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dormitory}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set dormitory http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "dormitory/$$MINIO_BUCKET"
+        echo "bucket $$MINIO_BUCKET is ready"
 
 volumes:
   postgres-data:
