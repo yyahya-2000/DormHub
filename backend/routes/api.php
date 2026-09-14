@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\BuildingController;
 use App\Http\Controllers\Api\V1\CheckpointController;
 use App\Http\Controllers\Api\V1\ConsentController;
 use App\Http\Controllers\Api\V1\GuestRequestController;
+use App\Http\Controllers\Api\V1\MaintenanceQueueController;
+use App\Http\Controllers\Api\V1\MaintenanceRequestController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationSettingController;
 use App\Http\Controllers\Api\V1\ResidencyController;
@@ -48,10 +50,15 @@ use Illuminate\Support\Facades\Route;
 | important announcement, is Could priority and outside the MVP — there is no
 | route for it and no column behind one.
 |
-| The remaining routes of §3.3.6 — lost-and-found and maintenance — belong to
-| later increments and are deliberately absent rather than stubbed: the OpenAPI
-| document beside this file is the input for client generation, and a generated
-| client should not carry methods that answer 404.
+| The seventh is the maintenance module of increment 3: the resident files a
+| defect (FR-36), the warden triages it (FR-37), the request moves along the
+| graph FR-38 fixes, the reporter confirms it or says it is not fixed (FR-39),
+| and the dormitory's queue is read and exported (FR-40).
+|
+| The remaining routes of §3.3.6 — lost-and-found — belong to a later increment
+| and are deliberately absent rather than stubbed: the OpenAPI document beside
+| this file is the input for client generation, and a generated client should
+| not carry methods that answer 404.
 |
 */
 
@@ -354,6 +361,82 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('checkpoint/check-out', [CheckpointController::class, 'checkOut'])
         ->name('checkpoint.check-out');
+
+    /*
+     |--------------------------------------------------------------------------
+     | The maintenance module (increment 3): FR-36 … FR-40
+     |--------------------------------------------------------------------------
+     |
+     | The scenario of §3.5.2 read as a list of routes, and three arrangements
+     | in them are decisions rather than defaults.
+     |
+     | **Every transition is a sub-resource of the request and not a PATCH of
+     | its status.** `POST …/accept`, `…/reject`, `…/completion` name the act.
+     | A client that could PUT a status could put any status, and the
+     | transition table of FR-38 would be enforcing what the client had already
+     | assumed. It is the same argument the guest module's `approve` and
+     | `reject` rest on.
+     |
+     | **The resident's list and the warden's queue are two routes**, which is
+     | where this module parts company with the guest one. There, one route
+     | serves both because the two lists are the same rows read with a
+     | different scope. Here they are not: the queue carries filters, an age,
+     | an overdue flag and an export, and none of that means anything on «my
+     | own three requests». `GET /maintenance-requests` therefore takes no
+     | parameter by which one resident could name another, and the queue is a
+     | sub-resource of the building, decided on the building object.
+     |
+     | **`confirmation` and `reopening` are the reporter's routes and carry a
+     | policy of their own.** §3.5.2: «the request is closed by the person who
+     | reported it, not by the person who fixed it». The warden's routes and
+     | the reporter's routes ask different authorisation questions, so they
+     | arrive through different form requests; a single class choosing between
+     | the two per route is the arrangement a later edit gets wrong silently.
+     */
+
+    /*
+     * FR-36. The caller's own requests, and the filing of a new one.
+     */
+    Route::get('maintenance-requests', [MaintenanceRequestController::class, 'index'])
+        ->name('maintenance-requests.index');
+
+    Route::post('maintenance-requests', [MaintenanceRequestController::class, 'store'])
+        ->name('maintenance-requests.store');
+
+    Route::get('maintenance-requests/{maintenanceRequest}', [MaintenanceRequestController::class, 'show'])
+        ->name('maintenance-requests.show');
+
+    /*
+     * FR-37, FR-38. The warden or the manager of this dormitory, and nobody
+     * else — not the duty officer, not the administrator (see `Permission`).
+     */
+    Route::post('maintenance-requests/{maintenanceRequest}/accept', [MaintenanceRequestController::class, 'accept'])
+        ->name('maintenance-requests.accept');
+
+    Route::post('maintenance-requests/{maintenanceRequest}/reject', [MaintenanceRequestController::class, 'reject'])
+        ->name('maintenance-requests.reject');
+
+    Route::post('maintenance-requests/{maintenanceRequest}/start', [MaintenanceRequestController::class, 'start'])
+        ->name('maintenance-requests.start');
+
+    Route::post('maintenance-requests/{maintenanceRequest}/completion', [MaintenanceRequestController::class, 'complete'])
+        ->name('maintenance-requests.complete');
+
+    /*
+     * FR-39. The reporter's own two answers, and the only two ways out of
+     * «completed» that a person can take.
+     */
+    Route::post('maintenance-requests/{maintenanceRequest}/confirmation', [MaintenanceRequestController::class, 'confirm'])
+        ->name('maintenance-requests.confirm');
+
+    Route::post('maintenance-requests/{maintenanceRequest}/reopening', [MaintenanceRequestController::class, 'reopen'])
+        ->name('maintenance-requests.reopen');
+
+    /*
+     * FR-40. The queue of one dormitory, filtered and exported.
+     */
+    Route::get('buildings/{building}/maintenance-queue', [MaintenanceQueueController::class, 'index'])
+        ->name('buildings.maintenance-queue');
 
     /*
      * FR-21. The register of one dormitory over an arbitrary period, and the
