@@ -108,6 +108,56 @@ final class GuestRequestApprovalTest extends TestCase
         );
     }
 
+    /**
+     * The queue names people rather than identifiers: who approved, who let
+     * the guest out, and which room the inviting resident holds.
+     */
+    public function test_the_queue_names_the_officer_who_decided_and_the_room_of_the_host(): void
+    {
+        $request = $this->pendingRequest();
+
+        Sanctum::actingAs($this->officer);
+
+        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")->assertOk();
+
+        $this->getJson('/api/v1/guest-requests?building_id='.$this->building->getKey())
+            ->assertOk()
+            ->assertJsonPath('data.0.decided_by', $this->officer->getKey())
+            ->assertJsonPath('data.0.decided_by_name', $this->officer->full_name)
+            ->assertJsonPath('data.0.inviting_resident.id', $this->resident->getKey())
+            ->assertJsonPath('data.0.inviting_resident.full_name', $this->resident->full_name)
+            ->assertJsonPath('data.0.inviting_resident.room', '305');
+    }
+
+    /**
+     * The page is the caller's, within a ceiling the caller cannot raise.
+     */
+    public function test_the_queue_is_paginated_and_the_page_size_is_capped(): void
+    {
+        foreach (range(1, 3) as $ignored) {
+            $this->pendingRequest();
+        }
+
+        Sanctum::actingAs($this->officer);
+
+        $url = '/api/v1/guest-requests?building_id='.$this->building->getKey();
+
+        $this->getJson($url.'&per_page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 2)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.total', 3);
+
+        $this->getJson($url.'&per_page=2&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.current_page', 2);
+
+        $this->getJson($url.'&per_page=5000')->assertStatus(422);
+    }
+
     public function test_no_access_code_exists_before_the_decision(): void
     {
         $this->assertNull($this->pendingRequest()->access_code);
@@ -284,85 +334,6 @@ final class GuestRequestApprovalTest extends TestCase
     }
 
     /**
-     * FR-23, second criterion: «a request with a foreign document cannot be
-     * approved with an interval extending beyond one day without a mark by the
-     * responsible officer».
-     *
-     * An interval that runs past midnight is only possible where the
-     * dormitory's own regime admits one, so the building is configured for it
-     * — which is NFR-09 again, and the reason this criterion is reachable at
-     * all rather than forbidden earlier by the window check of FR-16.
-     */
-    public function test_an_overnight_interval_on_a_foreign_document_needs_the_responsible_officers_mark(): void
-    {
-        $this->building->update([
-            'visiting_from' => '08:00:00',
-            'visiting_to' => '08:00:00',
-            'curfew_at' => '08:00:00',
-        ]);
-
-        $request = $this->pendingRequest([
-            'planned_from' => '20:00:00',
-            'planned_to' => '07:00:00',
-        ], foreign: true);
-
-        $this->assertTrue($request->spansMoreThanOneDay());
-
-        Sanctum::actingAs($this->officer);
-
-        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")
-            ->assertStatus(422)
-            ->assertJsonPath('required_field', 'responsible_officer_mark');
-
-        $this->assertSame(GuestRequestStatus::PendingReview, $request->fresh()->status);
-
-        $this->postJson("/api/v1/guest-requests/{$request->id}/approve", [
-            'responsible_officer_mark' => 'Migration officer S. Nechaeva informed, 14.09.2026.',
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', GuestRequestStatus::Approved->value)
-            ->assertJsonPath(
-                'data.responsible_officer_mark',
-                'Migration officer S. Nechaeva informed, 14.09.2026.',
-            );
-    }
-
-    /**
-     * The other half of §2.7.4, and the error it opens by warning against: a
-     * foreign document on a visit that ends the same evening creates no place
-     * of stay, so no mark is demanded.
-     */
-    public function test_a_foreign_document_inside_one_day_is_approved_without_a_mark(): void
-    {
-        $request = $this->pendingRequest([], foreign: true);
-
-        Sanctum::actingAs($this->officer);
-
-        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")->assertOk();
-    }
-
-    /**
-     * And the mirror: an overnight interval on an internal passport raises no
-     * migration question at all.
-     */
-    public function test_an_overnight_interval_on_a_russian_passport_needs_no_mark(): void
-    {
-        $this->building->update([
-            'visiting_to' => '08:00:00',
-            'curfew_at' => '08:00:00',
-        ]);
-
-        $request = $this->pendingRequest([
-            'planned_from' => '20:00:00',
-            'planned_to' => '07:00:00',
-        ]);
-
-        Sanctum::actingAs($this->officer);
-
-        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")->assertOk();
-    }
-
-    /**
      * FR-17, fourth criterion: «a request not processed by the start of the
      * visit is treated as rejected».
      */
@@ -516,20 +487,15 @@ final class GuestRequestApprovalTest extends TestCase
     /**
      * @param  array<string, mixed>  $overrides
      */
-    private function pendingRequest(array $overrides = [], bool $foreign = false): GuestRequest
+    private function pendingRequest(array $overrides = []): GuestRequest
     {
-        $factory = GuestRequest::factory()
+        return GuestRequest::factory()
             ->forBuilding($this->building)
-            ->from($this->resident);
-
-        if ($foreign) {
-            $factory = $factory->withForeignDocument();
-        }
-
-        return $factory->create($overrides + [
-            'visit_date' => '2026-09-14',
-            'planned_from' => '14:00:00',
-            'planned_to' => '18:00:00',
-        ]);
+            ->from($this->resident)
+            ->create($overrides + [
+                'visit_date' => '2026-09-14',
+                'planned_from' => '14:00:00',
+                'planned_to' => '18:00:00',
+            ]);
     }
 }

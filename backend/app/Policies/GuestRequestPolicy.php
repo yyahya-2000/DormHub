@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
-use App\Enums\Permission;
 use App\Models\Building;
 use App\Models\GuestRequest;
 use App\Models\User;
 
 /**
- * FR-16, FR-17 and FR-23 over one request.
+ * FR-16 and FR-17 over one request.
  *
  * Every method here reaches the building the request names and asks
  * `BuildingPolicy` about it, so the horizontal boundary of FR-07 is enforced
@@ -77,23 +76,6 @@ final class GuestRequestPolicy
     public function cancel(User $user, GuestRequest $request): bool
     {
         return $user->getKey() === $request->student_id;
-    }
-
-    /**
-     * NFR-06: unmasking the document number.
-     *
-     * Narrower than reading the request itself, and narrower than the post's
-     * own access. At the desk the document is in the officer's hand and the
-     * last four characters are what a comparison needs; asking the system for
-     * the number in full is a different act with a different purpose, and it
-     * leaves a row in the log.
-     */
-    public function viewDocumentNumber(User $user, GuestRequest $request): bool
-    {
-        $building = $this->buildingOf($request);
-
-        return $building !== null
-            && $user->hasPermissionInBuilding(Permission::ViewGuestDocument, $building);
     }
 
     private function buildingOf(GuestRequest $request): ?Building

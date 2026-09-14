@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Enums\ConsentDocument;
-use App\Enums\GuestDocumentType;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
 use App\Enums\RoleCode;
@@ -24,21 +23,17 @@ use Illuminate\Database\Seeder;
  * duty officer's queue, the security post and the visitor register have to be
  * able to draw.
  *
- * **Every guest here is invented (C-05).** The names are built from two fixed
- * lists by index, never sampled, so a second run produces the same people; the
- * document numbers come from a counter and belong to nobody. A seeder is
- * precisely the place where a real passport number would otherwise be pasted
- * in to see the mask work, and the mask works just as well on an invented one.
+ * **Every guest here is invented (C-05).** The names are taken from a fixed
+ * list by index, never sampled, so a second run produces the same people.
  *
  * **The states, and why each of them is here.** Pending review, because the
  * queue is empty without it and the queue is the officer's screen. Approved
  * with a code, because that is what the post is handed. In progress with an
  * open visit, so the «who is still inside» list is not empty. Overdue, because
- * FR-20's second criterion is the hardest thing to see by hand — waiting for a
- * curfew is not a demonstration. Completed, so the register export of FR-21
- * has rows with both times filled in. Rejected with a reason, because FR-17's
- * second criterion is about the reason and not about the refusal. And one
- * foreign document, for the warning of FR-23.
+ * FR-20's second criterion is the hardest thing to see by hand — waiting for
+ * the closing hour is not a demonstration. Completed, so the register of FR-21
+ * has rows with both times filled in. And rejected with a reason, because
+ * FR-17's second criterion is about the reason and not about the refusal.
  *
  * The seeder runs after the housing register and the staff accounts, because
  * every request names a resident who invites and a dormitory they live in. It
@@ -83,7 +78,6 @@ class GuestSeeder extends Seeder
         $this->inProgress($building, $residents[1 % count($residents)], $today, 3, $officer, $guard);
         $this->overdue($building, $residents[2 % count($residents)], $today, 4, $officer, $guard);
         $this->completed($building, $residents[2 % count($residents)], $today, 5, $officer, $guard);
-        $this->foreignGuest($building, $residents[3 % count($residents)], $today, 6);
     }
 
     private function pending(Building $building, User $student, CarbonImmutable $day, int $index): GuestRequest
@@ -93,7 +87,6 @@ class GuestSeeder extends Seeder
             'planned_from' => '15:00:00',
             'planned_to' => '20:00:00',
             'status' => GuestRequestStatus::PendingReview,
-            'purpose' => 'A study group before the examination',
         ]);
     }
 
@@ -107,7 +100,6 @@ class GuestSeeder extends Seeder
             'access_code' => app(AccessCodeGenerator::class)->generate(),
             'decided_by' => $this->staffOf($building, RoleCode::DutyOfficer)?->getKey(),
             'decided_at' => $day->subHours(3),
-            'purpose' => 'A visit from a relative',
         ]);
     }
 
@@ -230,26 +222,6 @@ class GuestSeeder extends Seeder
     }
 
     /**
-     * FR-23. A foreign passport inside clause 2.2's window, so the warning
-     * appears and the mark of the responsible officer is not yet demanded —
-     * which is the distinction §2.7.4 draws and the one a demonstration is
-     * most likely to blur.
-     */
-    private function foreignGuest(Building $building, User $student, CarbonImmutable $day, int $index): void
-    {
-        $this->make($building, $student, $index, [
-            'guest_doc_type' => GuestDocumentType::ForeignPassport,
-            'guest_doc_number' => sprintf('AB%07d', 4100000 + $index),
-            'is_foreign_document' => true,
-            'visit_date' => $day->addDays(2)->toDateString(),
-            'planned_from' => '10:00:00',
-            'planned_to' => '18:00:00',
-            'status' => GuestRequestStatus::PendingReview,
-            'purpose' => 'An exchange student from a partner university',
-        ]);
-    }
-
-    /**
      * @param  array<string, mixed>  $attributes
      */
     private function make(Building $building, User $student, int $index, array $attributes): GuestRequest
@@ -261,10 +233,6 @@ class GuestSeeder extends Seeder
             'student_id' => $student->getKey(),
             'building_id' => $building->getKey(),
             'guest_full_name' => self::GUEST_NAMES[$index % count(self::GUEST_NAMES)],
-            'guest_doc_type' => GuestDocumentType::InternalPassport,
-            'guest_doc_number' => sprintf('45%02d %06d', 10 + $index, 200000 + $index * 1117),
-            'is_foreign_document' => false,
-            'purpose' => 'A visit to a friend',
         ]);
     }
 

@@ -45,11 +45,6 @@ final class DecideGuestRequestRequest extends FormRequest
 
         return [
             'comment' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            // FR-23. Present only when the guest carries a foreign document
-            // and the interval runs past midnight; the service decides whether
-            // it was needed, because that decision reads the stored request
-            // and not the body.
-            'responsible_officer_mark' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 
@@ -68,12 +63,5 @@ final class DecideGuestRequestRequest extends FormRequest
         $comment = $this->validated('comment');
 
         return is_string($comment) && trim($comment) !== '' ? trim($comment) : null;
-    }
-
-    public function responsibleOfficerMark(): ?string
-    {
-        $mark = $this->validated('responsible_officer_mark');
-
-        return is_string($mark) && trim($mark) !== '' ? trim($mark) : null;
     }
 }

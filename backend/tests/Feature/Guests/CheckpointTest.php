@@ -202,28 +202,6 @@ final class CheckpointTest extends TestCase
     }
 
     /**
-     * NFR-06: the number comes back masked to its last four characters, and
-     * the search does not run on it.
-     */
-    public function test_the_document_number_on_the_card_is_masked(): void
-    {
-        $this->atTwentyPastTwo();
-
-        Sanctum::actingAs($this->guard);
-
-        $masked = (string) $this->postJson('/api/v1/checkpoint/verify', [
-            'building_id' => $this->building->getKey(),
-            'code' => $this->request->access_code,
-        ])->assertOk()->json('data.0.guest.document_number_masked');
-
-        $full = (string) $this->request->guest_doc_number;
-
-        $this->assertNotSame($full, $masked);
-        $this->assertStringEndsWith(substr($full, -4), $masked);
-        $this->assertStringStartsWith('•', $masked);
-    }
-
-    /**
      * §3.5.1: «verification is split in two deliberately: verify only reads
      * and renders the card, and check-in changes state». The split is what
      * lets the officer refuse entry without leaving a false record.
@@ -684,31 +662,6 @@ final class CheckpointTest extends TestCase
 
         $this->assertSame($this->guard->getKey(), $entry->user_id);
         $this->assertSame('access_code', $entry->payload['by']);
-    }
-
-    /**
-     * NFR-06 and §3.9.6: the number in full is a separate act with a narrower
-     * circle, and it is an event of the log in its own right.
-     */
-    public function test_the_document_number_in_full_needs_its_own_right_and_leaves_a_record(): void
-    {
-        Sanctum::actingAs($this->guard);
-
-        // The post holds the document in its hand; it does not unmask the
-        // number in the register.
-        $this->getJson("/api/v1/guest-requests/{$this->request->id}/document-number")
-            ->assertStatus(403);
-
-        Sanctum::actingAs($this->staff(RoleCode::Warden, $this->building, 'warden@example.test'));
-
-        $this->getJson("/api/v1/guest-requests/{$this->request->id}/document-number")
-            ->assertOk()
-            ->assertJsonPath('data.guest_doc_number', $this->request->guest_doc_number);
-
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => AuditAction::GuestDocumentNumberViewed->value,
-            'subject_id' => $this->request->getKey(),
-        ]);
     }
 
     private function atTwentyPastTwo(): void

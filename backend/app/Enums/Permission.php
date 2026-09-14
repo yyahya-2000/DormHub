@@ -193,15 +193,4 @@ enum Permission: string
      * split on.
      */
     case DecideLostFoundDisputes = 'lost_found.decide_disputes';
-
-    /**
-     * Reading a guest's document number in full (NFR-06, §3.4.2).
-     *
-     * The column is stored encrypted and shown masked everywhere, so this is
-     * not «may you see the register» but «may you unmask one number in it».
-     * The security post does not hold it: at the desk the document itself is
-     * in the officer's hand and the last four characters are what a comparison
-     * needs. Reading in full is an event of the audit log in its own right.
-     */
-    case ViewGuestDocument = 'guest_document.view';
 }

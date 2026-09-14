@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1;
 
-use App\Enums\GuestDocumentType;
 use App\Guests\TimeWindow;
 use App\Models\Building;
 use App\Models\GuestRequest;
@@ -16,7 +15,7 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * FR-16, `POST /api/v1/guest-requests`.
  *
- * **All three of FR-16's acceptance criteria are settled here**, before the
+ * **FR-16's acceptance criteria are settled here**, before the
  * service is reached, because every one of them is a property of the input and
  * 422 is the honest answer to input (§3.3.3). The service is left with what
  * only it can know — the state of the register, the quota, the decision.
@@ -28,10 +27,8 @@ use Illuminate\Foundation\Http\FormRequest;
  * rule here would have been shorter and would have made clause 2.2 of *this*
  * university's rules a property of the program.
  *
- * **The foreign flag is not accepted from the client** (FR-23). It is derived
- * from the document type in the service. A client able to set it would be able
- * to clear it, and the warning FR-23 attaches would then be attached at the
- * client's discretion.
+ * **The guest is a name and a time and nothing else.** No document, no purpose
+ * of the visit: the paper is compared with the person at the desk (§2.7.1).
  */
 final class StoreGuestRequestRequest extends FormRequest
 {
@@ -56,16 +53,9 @@ final class StoreGuestRequestRequest extends FormRequest
         return [
             'building_id' => ['required', 'integer', 'exists:buildings,id'],
             'guest_full_name' => ['required', 'string', 'min:2', 'max:255'],
-            'guest_doc_type' => ['required', 'string', 'in:'.implode(',', GuestDocumentType::values())],
-            // Kept short and shapeless on purpose: §2.7.1's minimisation means
-            // the type and the number and no scan of the page, and the formats
-            // of five kinds of document across as many countries are not
-            // something a dormitory's validator should claim to know.
-            'guest_doc_number' => ['required', 'string', 'min:4', 'max:64'],
             'visit_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'planned_from' => ['required', 'date_format:H:i'],
             'planned_to' => ['required', 'date_format:H:i'],
-            'purpose' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 
@@ -143,11 +133,6 @@ final class StoreGuestRequestRequest extends FormRequest
         return is_numeric($id) ? Building::query()->find((int) $id) : null;
     }
 
-    public function documentType(): GuestDocumentType
-    {
-        return GuestDocumentType::from((string) $this->validated('guest_doc_type'));
-    }
-
     public function visitDate(): CarbonInterface
     {
         return CarbonImmutable::parse((string) $this->input('visit_date'))->startOfDay();
@@ -158,11 +143,6 @@ final class StoreGuestRequestRequest extends FormRequest
         return trim((string) $this->validated('guest_full_name'));
     }
 
-    public function documentNumber(): string
-    {
-        return trim((string) $this->validated('guest_doc_number'));
-    }
-
     public function plannedFrom(): string
     {
         return (string) $this->validated('planned_from').':00';
@@ -171,12 +151,5 @@ final class StoreGuestRequestRequest extends FormRequest
     public function plannedTo(): string
     {
         return (string) $this->validated('planned_to').':00';
-    }
-
-    public function purpose(): ?string
-    {
-        $purpose = $this->validated('purpose');
-
-        return is_string($purpose) && trim($purpose) !== '' ? trim($purpose) : null;
     }
 }

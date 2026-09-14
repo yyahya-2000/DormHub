@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature\Guests;
 
 use App\Enums\AuditAction;
-use App\Enums\GuestDocumentType;
 use App\Enums\GuestRequestStatus;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
@@ -20,8 +19,7 @@ use Tests\Support\BuildsAGuestScenario;
 use Tests\TestCase;
 
 /**
- * FR-16, «Guest request submission», one test per acceptance criterion, and
- * FR-23's first criterion, which is decided at the same moment.
+ * FR-16, «Guest request submission», one test per acceptance criterion.
  *
  * The clock is pinned throughout. Every rule under test is a comparison
  * between a stated interval and the present moment, and a suite that ran at
@@ -58,40 +56,31 @@ final class GuestRequestSubmissionTest extends TestCase
     }
 
     /**
-     * Third criterion: «the submission carries guest name, document type and
-     * number, visit date, time interval and purpose».
+     * Third criterion: «the submission carries the guest's name, the visit
+     * date and the time interval». The document and the purpose of the visit
+     * were dropped with the MVP: the paper stays in the officer's hand.
      */
-    public function test_the_submission_carries_the_guest_the_document_the_date_the_interval_and_the_purpose(): void
+    public function test_the_submission_carries_the_guest_the_date_and_the_interval(): void
     {
         Sanctum::actingAs($this->resident);
 
         $response = $this->postJson('/api/v1/guest-requests', $this->payload())
             ->assertStatus(201)
             ->assertJsonPath('data.guest_full_name', 'Ostap Verigin')
-            ->assertJsonPath('data.guest_doc_type', GuestDocumentType::InternalPassport->value)
             ->assertJsonPath('data.visit_date', '2026-09-14')
             ->assertJsonPath('data.planned_from', '14:00')
             ->assertJsonPath('data.planned_to', '18:00')
-            ->assertJsonPath('data.purpose', 'A study group')
             ->assertJsonPath('data.status', GuestRequestStatus::PendingReview->value);
 
         $stored = GuestRequest::query()->findOrFail($response->json('data.id'));
 
-        $this->assertSame('4509 123456', $stored->guest_doc_number);
         $this->assertSame($this->resident->getKey(), $stored->student_id);
 
-        // NFR-06: the number is stored encrypted and shown masked, and there
-        // is no path by which the response could carry it in the clear.
-        // The mask keeps the length and the last four characters and hides
-        // everything else, the separating space included — a mask that let the
-        // shape of the number through would leak which document it is.
-        $this->assertSame('•••••••3456', $response->json('data.guest_doc_number_masked'));
-        $this->assertArrayNotHasKey('guest_doc_number', $response->json('data'));
+        $body = $response->json('data');
 
-        $this->assertNotSame(
-            '4509 123456',
-            AuditLog::query()->where('action', AuditAction::GuestRequestSubmitted->value)->sole()->payload['guest_doc_type'] ?? null,
-        );
+        foreach (['guest_doc_type', 'guest_doc_number', 'guest_doc_number_masked', 'purpose'] as $gone) {
+            $this->assertArrayNotHasKey($gone, $body);
+        }
     }
 
     /**
@@ -245,60 +234,6 @@ final class GuestRequestSubmissionTest extends TestCase
         $this->postJson('/api/v1/guest-requests', $this->payload())->assertStatus(403);
     }
 
-    /**
-     * FR-23, first criterion: «selecting document type "foreign passport"
-     * flags the request and attaches the warning about the procedure in force
-     * at the university».
-     */
-    public function test_a_foreign_passport_flags_the_request_and_attaches_the_warning(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $response = $this->postJson('/api/v1/guest-requests', $this->payload([
-            'guest_doc_type' => GuestDocumentType::ForeignPassport->value,
-            'guest_doc_number' => 'AB1234567',
-        ]))
-            ->assertStatus(201)
-            ->assertJsonPath('data.is_foreign_document', true);
-
-        $warning = (string) $response->json('data.foreign_guest_warning');
-
-        $this->assertStringContainsString('109-FZ', $warning);
-        $this->assertStringContainsString(
-            'The system does not submit that notification',
-            $warning,
-            'FR-W2 keeps the migration notification outside the perimeter, and the warning has to say so.',
-        );
-    }
-
-    public function test_an_internal_passport_carries_no_foreign_flag_and_no_warning(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $this->postJson('/api/v1/guest-requests', $this->payload())
-            ->assertStatus(201)
-            ->assertJsonPath('data.is_foreign_document', false)
-            ->assertJsonPath('data.foreign_guest_warning', null);
-    }
-
-    /**
-     * The flag is derived from the document type and never accepted from the
-     * client — otherwise the warning of FR-23 would be attached at the
-     * client's discretion.
-     */
-    public function test_the_foreign_flag_cannot_be_set_or_cleared_from_the_request_body(): void
-    {
-        Sanctum::actingAs($this->resident);
-
-        $response = $this->postJson('/api/v1/guest-requests', $this->payload([
-            'guest_doc_type' => GuestDocumentType::ForeignPassport->value,
-            'guest_doc_number' => 'AB1234567',
-            'is_foreign_document' => false,
-        ]))->assertStatus(201);
-
-        $this->assertTrue(GuestRequest::query()->findOrFail($response->json('data.id'))->is_foreign_document);
-    }
-
     public function test_a_request_needs_a_session(): void
     {
         $this->postJson('/api/v1/guest-requests', $this->payload())->assertStatus(401);
@@ -328,12 +263,9 @@ final class GuestRequestSubmissionTest extends TestCase
         return $overrides + [
             'building_id' => $this->building->getKey(),
             'guest_full_name' => 'Ostap Verigin',
-            'guest_doc_type' => GuestDocumentType::InternalPassport->value,
-            'guest_doc_number' => '4509 123456',
             'visit_date' => '2026-09-14',
             'planned_from' => '14:00',
             'planned_to' => '18:00',
-            'purpose' => 'A study group',
         ];
     }
 }

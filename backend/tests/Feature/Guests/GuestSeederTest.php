@@ -46,12 +46,8 @@ final class GuestSeederTest extends TestCase
             );
         }
 
-        // FR-23: one guest on a foreign document, so the warning is on a
-        // screen somebody can look at.
-        $this->assertTrue(GuestRequest::query()->where('is_foreign_document', true)->exists());
-
         // FR-18, FR-19: an open visit for the «who is still inside» list, a
-        // closed one for the register export, and an overdue one for FR-20.
+        // closed one for the register, and an overdue one for FR-20.
         $this->assertTrue(GuestVisit::query()->where('status', GuestVisitStatus::InBuilding->value)->exists());
         $this->assertTrue(GuestVisit::query()->where('status', GuestVisitStatus::Closed->value)->exists());
         $this->assertTrue(GuestVisit::query()->whereNotNull('overdue_notified_at')->exists());

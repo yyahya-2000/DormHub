@@ -52,8 +52,8 @@ final readonly class CheckpointCard
      * deliberately, so that a guest who turns up is told the visit was
      * cancelled rather than that no such code exists — but there is no visit
      * about to be recorded and therefore no ground for putting the guest's
-     * name, the host's name and the host's room on the screen (§2.7.1,
-     * NFR-06). The verdict and the status stay; the people do not.
+     * name, the host's name and the host's room on the screen (§2.7.1).
+     * The verdict and the status stay; the people do not.
      */
     public function disclosesTheGuest(): bool
     {
@@ -77,15 +77,10 @@ final readonly class CheckpointCard
             'disclosed' => true,
             'access_code' => $this->request->access_code,
 
-            // 1. The guest.
+            // 1. The guest. A name: the document itself is in the officer's
+            // hand and the register keeps no copy of it.
             'guest' => [
                 'full_name' => $this->request->guest_full_name,
-                'document_type' => $this->request->guest_doc_type?->value,
-                'document_type_label' => $this->request->guest_doc_type?->label(),
-                // NFR-06. What a comparison against the document in the
-                // officer's hand needs, and not a character more.
-                'document_number_masked' => $this->request->maskedDocumentNumber(),
-                'is_foreign_document' => (bool) $this->request->is_foreign_document,
             ],
 
             // 2. The inviting resident.

@@ -62,13 +62,8 @@ final readonly class CheckpointService
     /**
      * FR-18: find the guest by code or by surname, inside one dormitory.
      *
-     * **Not by document number, and not as an oversight.** The column is
-     * stored encrypted (§3.4.2, NFR-06) and an encrypted column cannot be
-     * indexed, so a search over it would be a full scan and a decryption per
-     * row. FR-18 asks for code, QR and surname; the QR carries the code, so
-     * two searches cover all three. §2.7.1's minimisation is the other half of
-     * the argument: a post that can look a person up by passport number is a
-     * different instrument from one that cannot.
+     * FR-18 asks for code, QR and surname; the QR carries the code, so two
+     * searches cover all three.
      *
      * @return Collection<int, GuestRequest>
      */
@@ -94,7 +89,7 @@ final readonly class CheckpointService
              * somebody standing in front of it, not through the archive: a
              * common surname over a whole year would put a list on the screen
              * that nobody can compare a document against, and the archive is
-             * what the register export of FR-21 is for.
+             * what the register of FR-21 is for.
              */
             $query
                 ->where('guest_full_name', 'ilike', '%'.trim((string) $surname).'%')

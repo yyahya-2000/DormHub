@@ -102,7 +102,7 @@ final class CheckpointController extends Controller
             ipAddress: $request->ip(),
         );
 
-        return GuestVisitResource::make($visit)
+        return GuestVisitResource::make($visit->load('checkedInBy'))
             ->response()
             ->setStatusCode(201);
     }
@@ -116,7 +116,7 @@ final class CheckpointController extends Controller
             officer: $request->user(),
             visit: $request->visit(),
             ipAddress: $request->ip(),
-        ));
+        )->load(['checkedInBy', 'checkedOutBy']));
     }
 
     /**
