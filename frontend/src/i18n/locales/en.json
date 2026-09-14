@@ -14,7 +14,8 @@
       "guestQueue": "Requests",
       "guests": "Guests",
       "announcements": "Announcements",
-      "maintenance": "Repairs"
+      "maintenance": "Repairs",
+      "lostFound": "Lost and found"
     }
   },
   "common": {
@@ -126,7 +127,18 @@
     "assigned_to": "Responsible",
     "comment": "Comment",
     "min_age_days": "Age, days",
-    "overdue": "Late only"
+    "overdue": "Late only",
+    "message": "What marks it",
+    "handover_point": "Handover point",
+    "note": "Note",
+    "place": "Where",
+    "happened_on": "Day it happened",
+    "declared_on": "Declared to the police",
+    "custody": "Who is holding it",
+    "kind": "What this entry is",
+    "photo": "Photograph",
+    "upheld": "Decision",
+    "search": "Search"
   },
   "login": {
     "title": "Sign in",
@@ -529,7 +541,18 @@
     "maintenanceNumber": "Request no. {{number}}",
     "documentAwaiting": "A document is waiting for your signature: {{title}}",
     "documentDue": "Due {{date}}",
-    "documentRevision": "Revision {{revision}}"
+    "documentRevision": "Revision {{revision}}",
+    "lostFoundClaim": "Somebody says «{{title}}» is theirs",
+    "lostFoundReferred": "A disputed claim on «{{title}}» has been referred to you",
+    "lostFoundClaimed": "Somebody has claimed an entry of yours",
+    "lostFoundMarks": "The marks given: {{marks}}",
+    "lostFoundUnnamed": "an entry the message did not name",
+    "lostFoundAccepted": "The person holding «{{title}}» says it is yours",
+    "lostFoundUpheld": "The warden upheld your claim on «{{title}}»",
+    "lostFoundDeclined": "Your claim on «{{title}}» was declined",
+    "lostFoundNotUpheld": "The warden did not uphold your claim on «{{title}}»",
+    "lostFoundDecided": "Your claim on «{{title}}» has been answered",
+    "lostFoundHandover": "Collect it here: {{place}}"
   },
   "notificationCategory": {
     "account_issued": {
@@ -563,6 +586,10 @@
       "label": "Announcements requiring acknowledgement",
       "description": "Notices you are asked to confirm you have read.",
       "ground": "The ground is clause 4.2.7 of the rules of internal order: a resident is obliged to acquaint themselves with the instructions of the administration. The acknowledgement is the record that you were told, so the message cannot be switched off."
+    },
+    "lost_found_claim": {
+      "label": "Claims in the lost and found",
+      "description": "Somebody claims something you published, or your own claim has been answered."
     }
   },
   "notificationSettings": {
@@ -1182,5 +1209,162 @@
     "listCount_other": "{{count, number}} requests",
     "empty": "Nothing matches.",
     "rowTitle": "No. {{number}} · {{place}}"
+  },
+  "lostFoundKind": {
+    "found": "Found",
+    "lost": "Lost"
+  },
+  "lostFoundStatus": {
+    "published": "In the list",
+    "claimed": "Claimed",
+    "resolved": "Returned"
+  },
+  "lostFoundCustody": {
+    "finder": "With the person who found it",
+    "administration": "Deposited with the administration"
+  },
+  "lostFoundClaimStatus": {
+    "new": "Awaiting an answer",
+    "accepted": "Accepted",
+    "declined": "Declined",
+    "referred": "Referred to the warden"
+  },
+  "lostFound": {
+    "heading": "Lost and found",
+    "lead": "Things found and things lost in your dormitory. Anyone living here may publish an entry; nothing waits for a member of staff to approve it.",
+    "privacyNote": "No entry names the person who published it, and none carries a telephone number or an address. If something here is yours, say what marks it — the person holding it reads your claim and answers it in the system.",
+    "publishLink": "Publish an entry",
+    "backToFeed": "Back to the list",
+    "openEntry": "Open the entry",
+    "noBuilding": "An entry belongs to a dormitory, and this account is attached to none. A resident publishes where they live; a member of staff, where their appointment names.",
+    "filters": {
+      "heading": "Narrow the list",
+      "status": "State",
+      "statusNote": "Entries that have gone back to their owners leave the list altogether and are not among these.",
+      "kind": "Found or lost",
+      "kindNote": "A claim can be made on a find. A notice of a loss is read, not claimed — its author is holding nothing.",
+      "kindAll": "Both",
+      "search": "Object or place",
+      "searchNote": "Matches part of the line naming the object, or part of the place it turned up.",
+      "apply": "Search",
+      "clear": "Clear the search"
+    },
+    "caption": {
+      "published": "In the list",
+      "claimed": "Claimed, awaiting an answer"
+    },
+    "total_one": "{{count, number}} entry",
+    "total_other": "{{count, number}} entries",
+    "empty": {
+      "published": "Nothing is in the list at the moment.",
+      "claimed": "Nothing is waiting for an answer.",
+      "search": "Nothing matches «{{search}}»."
+    },
+    "page": "Page {{current}} of {{total}}",
+    "previous": "Back",
+    "next": "Forward",
+    "photograph": {
+      "attached": "A photograph is attached",
+      "none": "None",
+      "storedNote": "The file is in the object store. This iteration has no route that turns a stored path into a link, so the card says the photograph is there rather than drawing a broken image."
+    },
+    "fields": {
+      "place": "Where",
+      "happenedOn": {
+        "found": "Day it was found",
+        "lost": "Day it was lost"
+      },
+      "placeLabel": {
+        "found": "Where it turned up",
+        "lost": "Where it was last seen"
+      },
+      "building": "Dormitory",
+      "kind": "What this entry is",
+      "kindNoteFound": "You picked something up and are holding it. Residents will claim it, and you decide which claim is right.",
+      "kindNoteLost": "You lost something. The entry is read by the dormitory; nobody can claim a loss, because you are holding nothing.",
+      "custody": "Who is holding it",
+      "custodyNoteFinder": "The object stays with you. You publish it, you answer the claims, and you hand it over yourself.",
+      "custodyNoteAdministration": "The object was handed in and the administration is holding it. Claims on the entry are then answered by the staff of the dormitory rather than by one person.",
+      "custodyCardFinder": "The ordinary way: the object is with the person who found it, and the claims are theirs to answer.",
+      "custodyCardAdministration": "The object was handed in for safekeeping. Civil Code art. 227 cl. 1 para. 2: a thing found on premises and handed to the person representing their owner.",
+      "title": "What it is",
+      "titleNote": "One short line — «a black umbrella with a wooden handle». The details go below.",
+      "placeNote": "In words, not by room number: the register knows rooms and nothing about the landing between the third and fourth floors.",
+      "happenedOnNote": "Not the day of this entry. A drawer cleared in December may well hold something picked up in September, and nothing refuses that; a day still ahead is refused.",
+      "declaredOn": "Declared to the police",
+      "declaredOnNote": "The day the find was declared to the police or to a local self-government body (Civil Code art. 227 cl. 2). Leave it empty while nothing has been declared.",
+      "declaredOnCardNote": "The six-month period of Civil Code art. 228 cl. 1 runs from this day and not from the entry. This iteration states the date and counts nothing.",
+      "description": "Details",
+      "descriptionNote": "Optional, and worth holding something back: what you do not publish here is what tells a real owner from a hopeful one.",
+      "photo": "Photograph",
+      "photoNote": "Optional, and at most one. JPEG, PNG or WebP.",
+      "claims": "Claims",
+      "claimsNote": "How many have been made. What any of them says is read by the person answering them and by nobody else.",
+      "resolvedAt": "Returned",
+      "resolvedNote": "The object changed hands and the entry left the list."
+    },
+    "publishHeading": "Publish an entry",
+    "publishLead": "A find or a loss. The entry is in the list the moment it is saved — nobody approves it first.",
+    "formHeading": "The entry",
+    "publish": "Publish",
+    "publishedTitle": "Published",
+    "publishedBody": "«{{title}}» is in the list of your dormitory. Claims arrive as messages in your personal account.",
+    "cardHeading": "The entry",
+    "cardLead": "Entry № {{number}}",
+    "lossNote": "This is a notice of a loss. There is nothing to claim: its author is holding nothing, and the person who finds the object publishes an entry of their own.",
+    "claimHeading": "Say it is yours",
+    "claimLead": "Describe what marks the object. That description is the only thing the person holding it has to judge by, so «it is mine» will not do.",
+    "claimSubmit": "Send the claim",
+    "claimFiledTitle": "The claim has been sent",
+    "claimFiledBody": "The person holding the object has been told, along with the marks you gave. Your name went with them; your telephone number and your address did not.",
+    "claimFiledWhere": "The answer arrives in your personal account and by mail. If it is a refusal you disagree with, the message carries the offer to put it to the warden.",
+    "resolveHeading": "The object went back",
+    "resolveLead": "Press this once the object has actually changed hands. The entry then leaves the list with the time on it.",
+    "resolveBlocked": "The entry closes on a claim you accepted, or on one the warden upheld. Until then there is nobody it went to.",
+    "resolveTo": "Accepted: {{name}}. Handover point: {{place}}.",
+    "resolve": "Mark it returned",
+    "noAcceptedTitle": "Nobody has been accepted yet",
+    "noAcceptedBody": "An entry closes as returned on a claim somebody accepted. None on this entry is accepted, so there is nobody the object went to.",
+    "noAcceptedOutstanding_one": "{{count, number}} claim is still waiting for an answer.",
+    "noAcceptedOutstanding_other": "{{count, number}} claims are still waiting for an answer.",
+    "claims": {
+      "heading": "Claims on this entry",
+      "none": "Nobody has claimed it.",
+      "unnamed": "a claimant the answer did not name",
+      "count_one": "{{count, number}} claim",
+      "count_other": "{{count, number}} claims",
+      "filed": "Sent",
+      "referredAt": "Referred",
+      "decidedAt": "Answered",
+      "decidedBy": "by {{name}}",
+      "note": "Note",
+      "handover": "Handover point",
+      "handoverNote": "Where the owner collects it — a place you chose, not an address of yours. It is the one piece of location this module publishes.",
+      "marks": "What marks it",
+      "marksNote": "At least ten characters. Say what is on it, in it or wrong with it — something the person holding it can check.",
+      "accept": "It is theirs",
+      "decline": "It is not theirs",
+      "declineLead": "A reason is not required. The claimant is told either way, and is offered the chance to put the refusal to the warden.",
+      "declineConfirm": "Decline the claim",
+      "reason": "Reason",
+      "reasonNote": "Optional. A sentence saying which of the marks did not match saves the warden a question later.",
+      "judgeLead": "The claimant did not accept the refusal. Read the marks and the refusal above, and say which of the two is right.",
+      "verdict": "Decision",
+      "verdictUpheld": "Uphold the claim",
+      "verdictRefused": "Leave the refusal standing",
+      "verdictUpheldNote": "The claim becomes accepted. The entry stays open until the object changes hands, and the person holding it says when it does.",
+      "verdictRefusedNote": "The refusal stands and the entry returns to the list.",
+      "judgeHandoverNote": "Where the owner collects it. Required, because upholding a claim is telling the claimant where to go.",
+      "judgeNoteNote": "Required either way. A decision taken over the head of the person entitled to make it is one nobody can answer if nobody explained it.",
+      "decide": "Record the decision"
+    },
+    "referral": {
+      "offer": "If you disagree, the warden of the dormitory can decide it.",
+      "action": "Put it to the warden",
+      "note": "Anything to add",
+      "noteNote": "Optional. The warden reads the claim and the refusal in full, so this is a courtesy rather than a second statement of the case.",
+      "send": "Refer the claim",
+      "done": "The claim is with the warden. The decision arrives here."
+    }
   }
 }
