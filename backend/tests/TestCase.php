@@ -26,6 +26,15 @@ abstract class TestCase extends BaseTestCase
             'queue.default' => 'sync',
             'mail.default' => 'array',
             'filesystems.default' => 'local',
+            /*
+             * FR-36's photographs. The disk is named in `config/dormitory.php`
+             * and the deployment points it at the S3-compatible store, so
+             * pinning `filesystems.default` alone is not enough: a submission
+             * test would have written its invented photographs into the real
+             * MinIO bucket, and `Storage::fake('local')` would have asserted
+             * against an empty disk while the files piled up elsewhere.
+             */
+            'dormitory.maintenance.photo_disk' => 'local',
         ]);
 
         $this->app->forgetInstance('cache');
