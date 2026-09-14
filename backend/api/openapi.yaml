@@ -14,9 +14,7 @@ info:
     (rooms and places), FR-03 (moving in), FR-05 (moving out) and FR-06 (the
     resident card). The third follows revision 2 of the role model: FR-41 (staff
     appointment inside a building) and FR-42 (issuing a resident account). The
-    fourth is the personal account: FR-34 (notifications and the switches that
-    decide which of them arrive) and FR-35 (consent to the processing of
-    personal data).
+    fourth is the personal account: FR-34 (notifications).
 
     The fifth is the guest module of increment 1, which is what the work is
     built around: FR-16 (the request), FR-17 (the duty officer's decision),
@@ -88,21 +86,6 @@ info:
     residents holding one place over overlapping periods is refused by a partial
     unique index in the database, and the refusal carries the conflicting record.
 
-    Consent to the processing of personal data has routes of its own, and that
-    is the requirement rather than an arrangement. Art. 9 part 1 of Federal Law
-    No. 152-FZ has consent «executed separately from other documents», so no
-    other request in this document carries a field that records one: not the
-    sign-in, not the first password, not the account form. `POST /consents`
-    names exactly one document and one text revision, and it is the only way a
-    consent record comes into being.
-
-    A guest's consent is taken at the security post and not at submission. The
-    request is filed by the resident while the personal data belong to the
-    guest, so `POST /checkpoint/guest-consent` is a route of its own and
-    `POST /checkpoint/check-in` answers 409 until it has been called. The record
-    names the guest request as its subject and carries no account, because a
-    guest has none.
-
     The visiting regime is a property of each dormitory and never a constant.
     `visiting_from`, `visiting_to` and `guest_lead_time_hours` sit
     on the BUILDING row, and they are what the submission validator, the card at
@@ -154,12 +137,7 @@ tags:
       route: the manager appoints nobody.
   - name: Notifications
     description: >-
-      FR-34. A person's own messages, and the switches that decide which
-      categories reach them at all.
-  - name: Consent
-    description: >-
-      FR-35. Consent to the processing of personal data, on routes of its own,
-      as art. 9 part 1 of Federal Law No. 152-FZ requires.
+      FR-34. A person's own messages.
   - name: Announcements
     description: >-
       FR-09 and FR-11. The warden or the manager of a dormitory publishes; the
@@ -173,9 +151,9 @@ tags:
       not the administrator.
   - name: Checkpoint
     description: >-
-      FR-18 and FR-19. The security post: find the guest, take their consent,
-      record the entry, record the exit. Verification and entry are two
-      operations on purpose (§3.5.1).
+      FR-18 and FR-19. The security post: find the guest, record the entry,
+      record the exit. Verification and entry are two operations on purpose
+      (§3.5.1).
   - name: Visitor register
     description: >-
       FR-21. The journal clause 2.1.2 of the HSE rules of internal order makes
@@ -423,9 +401,12 @@ paths:
 
         The administrator, and the warden, manager or duty officer **of this
         building**. A resident does not read the occupancy of the whole dormitory.
-        The list is paged, and both filters are applied by the database rather
-        than by the client: `free=1` narrows it to the rooms holding a place
-        somebody could move into today, and `q` matches part of a room number.
+        The list is paged, and all three filters are applied by the database
+        rather than by the client: `free=1` narrows it to the rooms holding a
+        place somebody could move into today, `q` matches part of a room
+        number, and `floor` keeps one storey. `floor` is what the floor card of
+        FR-02 reads a storey with — without it the card had to page through the
+        whole register and discard everything on the other floors.
       operationId: listBuildingRooms
       parameters:
         - $ref: '#/components/parameters/BuildingId'
@@ -439,6 +420,15 @@ paths:
           required: false
           description: Keep only the rooms with at least one free place.
           schema: { type: boolean }
+        - name: floor
+          in: query
+          required: false
+          description: >-
+            Keep only the rooms on this storey. An empty value is the same as
+            omitting it. A storey the dormitory has no rooms on is an empty
+            page and not an error; a value outside the bounds a room may be
+            created with is 422.
+          schema: { type: integer, minimum: 0, maximum: 100 }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -1278,167 +1268,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /consents/pending:
-    get:
-      tags: [Consent]
-      summary: The consent texts this person has not yet decided on
-      description: |
-        FR-35, first criterion, the «displayed» half. The wording comes with it:
-        art. 9 part 1 of Federal Law No. 152-FZ requires consent to be informed,
-        and a title with a checkbox beside it is not that.
-
-        A consent given against a text that has since been superseded counts as
-        pending — the person agreed to a wording, and the wording has changed.
-        Nothing in the code says so; it falls out of comparing the revision on
-        the record with the revision in force.
-
-        The list is empty when nothing is outstanding. Nothing blocks the
-        session while it is not: consent has to be free (art. 9 part 1), and a
-        system that locked the account until it was given would be extracting
-        consent rather than receiving it.
-      operationId: listPendingConsents
-      responses:
-        '200':
-          description: The texts awaiting a decision, in full.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/ConsentText'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-
-  /consents:
-    get:
-      tags: [Consent]
-      summary: This person's history of consent
-      description: |
-        Given, withdrawn, given again — newest first, withdrawn rows included.
-        They are the history of a legal act and are never pruned: art. 9 part 3
-        of Federal Law No. 152-FZ puts on the operator the burden of proving
-        that consent was given, and the proof has to survive the withdrawal.
-      operationId: listConsents
-      responses:
-        '200':
-          description: Every act of consent this person has performed.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/ConsentRecord'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-    post:
-      tags: [Consent]
-      summary: Give consent to one document
-      description: |
-        FR-35, first criterion, the «recorded» half, and the second criterion in
-        its entirety.
-
-        One document per request, named explicitly. There is no «accept all»,
-        no array, and no other route in this document that records a consent as
-        a by-product — art. 9 part 1 has consent «executed separately from other
-        documents», which is a rule about the act and not about the layout of a
-        page.
-
-        `revision` is the text the person actually read, and it is checked
-        against the revision in force. A client that held the screen open while
-        the operator published a new text is sent back for the current one: a
-        record naming a wording this person never saw would prove nothing.
-
-        Consenting again to the revision already in force answers with the
-        standing record rather than writing a second one. Consenting to a new
-        revision supersedes the old, which is marked withdrawn on the same day.
-
-        `guest_personal_data` is refused here: the guest's consent is taken at
-        the security post, in person, before the entry is recorded.
-      operationId: giveConsent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConsentInput'
-      responses:
-        '201':
-          description: >-
-            The consent is recorded with the fact, the date, the text revision
-            and the address it was given from. The act is in the audit log as
-            `consent.granted`.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ConsentRecord'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-
-  /consents/{document}/withdrawal:
-    post:
-      tags: [Consent]
-      summary: Withdraw consent to one document
-      description: |
-        FR-35, fourth criterion: withdrawal, from the personal account.
-
-        **What the withdrawal does.** It writes `revoked_at` and stops the
-        processing that rested on consent. It does not delete the record — art.
-        9 part 3 puts on the operator the burden of proving consent, and the
-        proof is needed for the period before the withdrawal as much as after.
-
-        **What it does not do.** For a resident it closes nothing: the housing
-        register, the resident card and the notifications the dormitory is
-        obliged to send all rest on the accommodation contract (art. 6 part 1
-        cl. 5) and continue. What stops are the categories of FR-34 that have
-        no other ground than the consent. The person becomes pending
-        again and is offered the text at the next sign-in; they are not locked
-        out, because consent that could only be withheld at the price of the
-        service would not be free.
-
-        For a **guest** the same withdrawal is absolute, and that asymmetry is
-        the point of §2.7.1: a guest is not a party to the accommodation
-        contract, so consent is the sole ground there is and without it no entry
-        can be recorded at the post.
-
-        A withdrawal when nothing stands is 204 rather than 404: the caller
-        asked for a state, and the state is what they get.
-      operationId: withdrawConsent
-      parameters:
-        - $ref: '#/components/parameters/ConsentDocumentCode'
-      responses:
-        '200':
-          description: >-
-            The consent that stood, now carrying `revoked_at`. The act is in the
-            audit log as `consent.withdrawn`.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ConsentRecord'
-        '204':
-          description: There was no consent of this document in force.
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   /audit-logs:
     get:
       tags: [Audit]
@@ -1572,9 +1401,9 @@ paths:
         which case the announcement does not expire. An expiry already past is
         422: it would produce a notice in no feed and in no archive.
 
-        The fan-out to the audience is queued and passes through the
-        notification gate, so a resident who has withdrawn the consent the
-        `announcement` category rests on receives nothing (FR-34, FR-35).
+        The fan-out to the audience is queued: the warden's request returns
+        once the announcement is written, and the messages of FR-34 are put on
+        the queue by a job behind it.
       operationId: publishAnnouncement
       requestBody:
         required: true
@@ -2012,51 +1841,6 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
-  /checkpoint/guest-consent:
-    post:
-      tags: [Checkpoint]
-      summary: Record the guest's consent, at the desk
-      description: |
-        FR-35, first criterion, guest half, and §2.7.1's whole argument.
-
-        The request was filed by the resident while the personal data belong to
-        the guest, so consent under art. 9 part 1 of Federal Law No. 152-FZ
-        cannot be given «on the guest's behalf» at submission. It is taken from
-        the guest, in person, at the post, **before** the entry is recorded —
-        and `POST /checkpoint/check-in` answers 409 until it is.
-
-        A route of its own, because art. 9 part 1 has consent «executed
-        separately from other documents»: there is no consent field on the
-        check-in body, exactly as there is none on the sign-in form.
-
-        The record names the guest request as its subject and carries no
-        account — a guest has none. `revision` is the text the guest was shown
-        and is checked against the repository.
-      operationId: recordGuestConsent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GuestConsentInput'
-      responses:
-        '201':
-          description: The consent is recorded, and the entry may now be written.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ConsentRecord'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-
   /checkpoint/check-in:
     post:
       tags: [Checkpoint]
@@ -2106,15 +1890,6 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '409':
-          description: >-
-            No consent from the guest is on record. Take it at
-            `POST /checkpoint/guest-consent` and call again; the body names the
-            document and the revision to put on the screen.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentRequiredError'
         '422':
           description: >-
             The rules admit no entry as things stand. `reason_code` says which
@@ -3512,13 +3287,6 @@ components:
         identifier travels to the client, and a guessable one would let a
         stranger probe for the existence of other people's messages.
       schema: { type: string, format: uuid }
-    ConsentDocumentCode:
-      name: document
-      in: path
-      required: true
-      description: The document whose consent is being withdrawn.
-      schema:
-        $ref: '#/components/schemas/ConsentDocument'
     GuestRequestId:
       name: guestRequest
       in: path
@@ -3645,15 +3413,12 @@ components:
         - staff.revoked
         - resident.account_issued
         - auth.password_set
-        - consent.granted
-        - consent.withdrawn
         - guest_request.submitted
         - guest_request.approved
         - guest_request.rejected
         - guest_request.cancelled
         - guest_request.expired
         - guest_request.decision_refused
-        - guest_request.decision_not_delivered
         - checkpoint.guest_verified
         - checkpoint.entry_recorded
         - checkpoint.entry_refused
@@ -3755,18 +3520,6 @@ components:
             FR-42 whose resident is still signing in with the password the
             office printed for them. It says that much and carries no secret;
             replacing the password at `POST /auth/password` clears it.
-        consent_required:
-          type: array
-          description: >-
-            FR-35. The documents this person has not yet consented to, or has
-            consented to under a wording that has since been superseded. Present
-            on the sign-in answer and on `GET /auth/me`, and absent everywhere
-            else this schema is used — the listings of people would otherwise
-            pay a query per person for a field nobody reads there. An empty
-            array means nothing is outstanding; the texts themselves are at
-            `GET /consents/pending`.
-          items:
-            $ref: '#/components/schemas/ConsentDocument'
         roles:
           type: array
           description: Present when the grants were loaded for this response.
@@ -4298,8 +4051,8 @@ components:
 
         `request_decision` is a decision on a guest request, `visit_overdue` a
         guest still recorded inside after the hour clause 2.2 of the rules of
-        internal order sets, `maintenance_status` a movement of a maintenance
-        request, and `document_signature` a document waiting to be signed.
+        internal order sets, and `maintenance_status` a movement of a
+        maintenance request.
 
         `announcement` is FR-09 reaching the resident: the feed is on screen
         either way and the message only saves the person from opening it.
@@ -4312,16 +4065,13 @@ components:
         another resident: no telephone number, no address and no e-mail travels
         in either direction.
 
-        There is no per-category switch. Four of these rest on the resident's
-        consent (§2.7.1) and stop when the consent of FR-35 is withdrawn;
-        `visit_overdue` and `document_signature` are owed under the
-        accommodation contract and the rules of internal order and are sent
-        whatever anybody has agreed to.
+        There is no per-category switch and nothing else stands between a
+        message and the person it names: a category is the label the personal
+        account draws it under and not a condition on its delivery.
       enum:
         - request_decision
         - visit_overdue
         - maintenance_status
-        - document_signature
         - announcement
         - lost_found_claim
 
@@ -4368,108 +4118,6 @@ components:
           type: [string, 'null']
           format: date-time
         created_at: { type: string, format: date-time }
-
-    ConsentDocument:
-      type: string
-      description: |
-        The documents a person is asked to consent to, and they are two rather
-        than one because the ground behind them differs (§2.7.1).
-
-        `resident_personal_data` covers the processing that goes beyond the
-        accommodation contract — the optional notifications, the guest-visiting
-        service — and is asked for at first sign-in.
-
-        `guest_personal_data` is the guest's own, taken at the security post
-        before the entry is recorded. A guest is not a party to the
-        accommodation contract, so consent is the **only** ground there is: with
-        none on record the entry cannot be written at all.
-      enum: [resident_personal_data, guest_personal_data]
-
-    ConsentText:
-      type: object
-      required: [document, revision, title, body]
-      properties:
-        document:
-          $ref: '#/components/schemas/ConsentDocument'
-        revision:
-          type: string
-          maxLength: 32
-          description: >-
-            The identifier of the wording. It names a file under version
-            control, which is what makes a record demonstrable afterwards: art.
-            9 part 3 of Federal Law No. 152-FZ puts the burden of proving
-            consent on the operator, and a revision whose text could not be
-            produced would prove nothing.
-        title: { type: string }
-        body:
-          type: string
-          description: The wording itself, in Markdown. Shown to the person before they decide.
-
-    ConsentRecord:
-      type: object
-      required: [id, document, title, revision, accepted_at, revoked_at, in_force]
-      properties:
-        id: { type: integer, format: int64 }
-        user_id:
-          type: [integer, 'null']
-          format: int64
-          description: >-
-            The account whose consent this is. Null for a guest's, which names
-            the request instead: exactly one of the two is ever set, and the
-            database refuses any other shape.
-        guest_request_id:
-          type: [integer, 'null']
-          format: int64
-          description: The guest request this consent was taken against, at the post.
-        document:
-          $ref: '#/components/schemas/ConsentDocument'
-        title: { type: string }
-        revision: { type: string, maxLength: 32 }
-        accepted_at: { type: string, format: date-time }
-        revoked_at:
-          type: [string, 'null']
-          format: date-time
-          description: >-
-            When the consent was withdrawn, or superseded by a consent to a
-            newer wording. The row is never deleted and never rewritten: the
-            history is the evidence.
-        in_force:
-          type: boolean
-          description: Whether this consent stands today.
-        ip_address:
-          type: [string, 'null']
-          maxLength: 45
-
-    ConsentInput:
-      type: object
-      required: [document, revision]
-      properties:
-        document:
-          $ref: '#/components/schemas/ConsentDocument'
-        revision:
-          type: string
-          maxLength: 32
-          description: >-
-            The revision the person was shown, as it came from
-            `GET /consents/pending`. Sending it back is what makes the record
-            name the text they actually read; a revision that is not the one in
-            force is refused with 422.
-
-    ConsentRequired:
-      type: object
-      required: [message, document, revision]
-      description: >-
-        The refusal of an operation that would process personal data with no
-        consent on record. 409 rather than 403: the caller's role covers the
-        object, and what stands in the way is a missing document. The first
-        route to answer with it is the security post's `check-in`, in increment 1.
-      properties:
-        message: { type: string }
-        document:
-          $ref: '#/components/schemas/ConsentDocument'
-        revision:
-          type: string
-          description: The revision in force, so the client knows which text to put on the screen.
 
     AnnouncementCategory:
       type: string
@@ -4797,11 +4445,6 @@ components:
             checked_out_at: { type: string, format: date-time, nullable: true }
             status:
               $ref: '#/components/schemas/GuestVisitStatus'
-        consent_on_record:
-          type: boolean
-          description: >-
-            Whether the guest has consented at this post. False means the entry
-            cannot yet be written (§2.7.1).
         admission:
           type: object
           properties:
@@ -4819,16 +4462,6 @@ components:
                 request that was never approved.
             override_requires_reason: { type: boolean }
         checked_at: { type: string, format: date-time }
-
-    GuestConsentInput:
-      type: object
-      required: [guest_request_id, revision]
-      properties:
-        guest_request_id: { type: integer, format: int64, minimum: 1 }
-        revision:
-          type: string
-          maxLength: 32
-          description: The revision of the text the guest was actually shown.
 
     CheckInInput:
       type: object
@@ -4926,19 +4559,6 @@ components:
           enum: [outside_permitted_interval, request_not_approved, guest_already_inside, wrong_visit_date]
         override_available: { type: boolean }
         override_requires_reason: { type: boolean }
-
-    ConsentRequiredError:
-      type: object
-      description: >-
-        FR-35 at the point it bites. 409 and not 403: the caller's role covers
-        the object perfectly well, and what stands in the way is the state of
-        the world.
-      required: [message]
-      properties:
-        message: { type: string }
-        document:
-          $ref: '#/components/schemas/ConsentDocument'
-        revision: { type: string }
 
     VisitAlreadyClosedError:
       type: object
