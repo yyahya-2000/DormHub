@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1;
 
-use App\Enums\RoomStatus;
 use App\Enums\RoomType;
 use App\Models\Building;
 use Illuminate\Foundation\Http\FormRequest;
@@ -45,7 +44,6 @@ final class StoreRoomRequest extends FormRequest
             'floor' => ['required', 'integer', 'min:0', 'max:100'],
             'capacity' => ['required', 'integer', 'min:1', 'max:32'],
             'type' => ['sometimes', Rule::enum(RoomType::class)],
-            'status' => ['sometimes', Rule::enum(RoomStatus::class)],
         ];
     }
 
@@ -54,6 +52,6 @@ final class StoreRoomRequest extends FormRequest
      */
     public function payload(): array
     {
-        return $this->safe()->only(['number', 'floor', 'capacity', 'type', 'status']);
+        return $this->safe()->only(['number', 'floor', 'capacity', 'type']);
     }
 }

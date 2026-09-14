@@ -30,7 +30,6 @@ final class ResidencyController extends Controller
             bed: $bed,
             contractNumber: $request->contractNumber(),
             movedInAt: $request->movedInAt(),
-            ground: $request->ground(),
             ipAddress: $request->ip(),
         );
 

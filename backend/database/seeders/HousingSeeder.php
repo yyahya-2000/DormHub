@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Enums\BedStatus;
+use App\Enums\Citizenship;
 use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
-use App\Enums\RoomStatus;
 use App\Enums\RoomType;
-use App\Enums\StudyStatus;
 use App\Enums\UserStatus;
 use App\Models\Bed;
 use App\Models\Building;
@@ -53,7 +52,14 @@ class HousingSeeder extends Seeder
         'Tregubov', 'Tregubova', 'Yakimov', 'Yakimova', 'Panfilov', 'Panfilova',
     ];
 
-    private const CITIZENSHIPS = ['RU', 'RU', 'RU', 'BY', 'KZ', 'AM'];
+    private const CITIZENSHIPS = [
+        Citizenship::Russia,
+        Citizenship::Russia,
+        Citizenship::Russia,
+        Citizenship::Belarus,
+        Citizenship::Kazakhstan,
+        Citizenship::Armenia,
+    ];
 
     public function run(): void
     {
@@ -94,8 +100,6 @@ class HousingSeeder extends Seeder
             $attributes + [
                 'visiting_from' => '08:00:00',
                 'visiting_to' => '23:00:00',
-                'curfew_at' => '23:00:00',
-                'is_active' => true,
             ],
         ));
     }
@@ -106,10 +110,10 @@ class HousingSeeder extends Seeder
     private function roomsOf(Building $building): Collection
     {
         $plan = [
-            ['floor' => 3, 'index' => 5, 'capacity' => 3, 'type' => RoomType::Corridor, 'status' => RoomStatus::InService],
-            ['floor' => 3, 'index' => 6, 'capacity' => 2, 'type' => RoomType::Corridor, 'status' => RoomStatus::InService],
-            ['floor' => 4, 'index' => 1, 'capacity' => 4, 'type' => RoomType::Block, 'status' => RoomStatus::InService],
-            ['floor' => 5, 'index' => 2, 'capacity' => 2, 'type' => RoomType::Apartment, 'status' => RoomStatus::UnderRepair],
+            ['floor' => 3, 'index' => 5, 'capacity' => 3, 'type' => RoomType::Corridor],
+            ['floor' => 3, 'index' => 6, 'capacity' => 2, 'type' => RoomType::Corridor],
+            ['floor' => 4, 'index' => 1, 'capacity' => 4, 'type' => RoomType::Block],
+            ['floor' => 5, 'index' => 2, 'capacity' => 2, 'type' => RoomType::Apartment],
         ];
 
         return collect($plan)->map(fn (array $entry): Room => Room::query()->firstOrCreate(
@@ -121,15 +125,14 @@ class HousingSeeder extends Seeder
                 'floor' => $entry['floor'],
                 'capacity' => $entry['capacity'],
                 'type' => $entry['type'],
-                'status' => $entry['status'],
             ],
         ));
     }
 
     /**
-     * Places, exactly as many as the capacity allows. One place of the room
-     * under repair is left blocked, so the state that no index can express
-     * exists in the demonstration data too.
+     * Places, exactly as many as the capacity allows. The first place of the
+     * last room of the plan is left blocked, so the state that no index can
+     * express exists in the demonstration data too.
      */
     private function placesOf(Room $room): void
     {
@@ -137,7 +140,7 @@ class HousingSeeder extends Seeder
             Bed::query()->firstOrCreate(
                 ['room_id' => $room->getKey(), 'label' => (string) $index],
                 [
-                    'status' => $room->status === RoomStatus::UnderRepair && $index === 1
+                    'status' => $room->number === '502' && $index === 1
                         ? BedStatus::Blocked
                         : BedStatus::Free,
                 ],
@@ -164,7 +167,6 @@ class HousingSeeder extends Seeder
             'bed_id' => $bed->getKey(),
             'contract_number' => sprintf('DOG-%d-%04d', CarbonImmutable::now()->year, 1000 + $index),
             'moved_in_at' => CarbonImmutable::now()->subMonths(6)->toDateString(),
-            'moved_in_ground' => 'Accommodation order of the admissions committee',
             'status' => ResidencyStatus::Active,
         ]);
 
@@ -196,7 +198,6 @@ class HousingSeeder extends Seeder
             [
                 'contract_number' => sprintf('DOG-%d-%04d', CarbonImmutable::now()->year - 1, 900 + $index),
                 'moved_in_at' => CarbonImmutable::now()->subMonths(20)->toDateString(),
-                'moved_in_ground' => 'Accommodation order of the admissions committee',
                 'moved_out_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
                 'moved_out_ground' => 'Graduation, art. 105 cl. 2 of the Housing Code',
                 'status' => ResidencyStatus::Ended,
@@ -214,7 +215,6 @@ class HousingSeeder extends Seeder
             [
                 'full_name' => $given.' '.$family,
                 'phone' => sprintf('+7900%07d', 1000000 + $index),
-                'study_status' => StudyStatus::Enrolled,
                 'citizenship' => self::CITIZENSHIPS[$index % count(self::CITIZENSHIPS)],
                 'password_hash' => Hash::make(self::DEMO_PASSWORD),
                 'status' => UserStatus::Active,

@@ -46,7 +46,6 @@ final class ResidencyResource extends JsonResource
             'building_name' => $building?->name,
             'contract_number' => $this->contract_number,
             'moved_in_at' => $this->moved_in_at?->toDateString(),
-            'moved_in_ground' => $this->moved_in_ground,
             'moved_out_at' => $this->moved_out_at?->toDateString(),
             'moved_out_ground' => $this->moved_out_ground,
             'status' => $this->status->value,

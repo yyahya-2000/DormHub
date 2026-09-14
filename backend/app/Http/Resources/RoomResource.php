@@ -37,8 +37,6 @@ final class RoomResource extends JsonResource
             'capacity' => $this->capacity,
             'type' => $this->type->value,
             'type_label' => $this->type->label(),
-            'status' => $this->status->value,
-            'status_label' => $this->status->label(),
             'beds_count' => $this->bedsCount(),
             'occupied_beds_count' => $this->occupiedBedsCount(),
             'free_places' => $this->freePlaces(),

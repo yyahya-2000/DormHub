@@ -369,7 +369,7 @@ final class ResidencyAssignmentTest extends TestCase
             ->assertJsonPath('conflict.bed_id', $beds[0]->id);
     }
 
-    public function test_a_blocked_bed_and_a_room_under_repair_accept_no_residency(): void
+    public function test_a_blocked_bed_accepts_no_residency(): void
     {
         $resident = $this->resident('blocked@example.test');
 
@@ -379,14 +379,6 @@ final class ResidencyAssignmentTest extends TestCase
         Sanctum::actingAs($this->warden);
 
         $this->postJson('/api/v1/residencies', $this->payload($resident, $blockedBed, 'DOG-1'))
-            ->assertStatus(422);
-
-        $repaired = Room::factory()->for($this->first)->underRepair()->withBeds(1)->create([
-            'number' => '502',
-            'capacity' => 1,
-        ]);
-
-        $this->postJson('/api/v1/residencies', $this->payload($resident, $repaired->beds()->sole(), 'DOG-2'))
             ->assertStatus(422);
 
         $this->assertSame(0, Residency::query()->count());
@@ -424,6 +416,54 @@ final class ResidencyAssignmentTest extends TestCase
     /**
      * @return array<string, mixed>
      */
+    public function test_the_accommodation_form_finds_a_candidate_by_part_of_the_name(): void
+    {
+        // FR-03 at the form: the warden types a few letters instead of being
+        // handed the whole roll to filter in the browser.
+        $this->userWith(RoleCode::Resident, $this->first, 'petrova@example.test')
+            ->update(['full_name' => 'Petrova Anna Sergeevna']);
+        $this->userWith(RoleCode::Resident, $this->first, 'petrov@example.test')
+            ->update(['full_name' => 'Petrov Ivan Ivanovich']);
+        $this->userWith(RoleCode::Resident, $this->first, 'orlova@example.test')
+            ->update(['full_name' => 'Orlova Maria Pavlovna']);
+
+        Sanctum::actingAs($this->warden);
+
+        $found = $this->getJson("/api/v1/buildings/{$this->first->id}/users?role=student&q=petrov")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2)
+            ->json('data.*.full_name');
+
+        $this->assertSame(['Petrov Ivan Ivanovich', 'Petrova Anna Sergeevna'], $found);
+
+        // The role narrows it the other way: the warden of this building holds
+        // a grant here too and is not a candidate for a bed.
+        $this->assertNotContains(
+            $this->warden->full_name,
+            $this->getJson("/api/v1/buildings/{$this->first->id}/users?role=student")
+                ->assertOk()
+                ->json('data.*.full_name'),
+        );
+    }
+
+    public function test_the_roll_of_a_building_never_answers_with_a_resident_of_another_one(): void
+    {
+        // The search narrows the roll and cannot widen it. A resident of block
+        // 2 whose name matches perfectly is invisible to the warden of block 1,
+        // because the query starts from the grants naming block 1.
+        $this->userWith(RoleCode::Resident, $this->second, 'elsewhere@example.test')
+            ->update(['full_name' => 'Petrov Semyon Petrovich']);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/users?q=Petrov")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 0);
+
+        $this->getJson("/api/v1/buildings/{$this->second->id}/users?q=Petrov")
+            ->assertStatus(403);
+    }
+
     private function payload(User $resident, Bed $bed, string $contract): array
     {
         return [

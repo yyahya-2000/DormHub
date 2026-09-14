@@ -48,7 +48,6 @@ final class StoreResidencyRequest extends FormRequest
             'bed_id' => ['required', 'integer', 'exists:beds,id'],
             'contract_number' => ['required', 'string', 'max:64'],
             'moved_in_at' => ['required', 'date_format:Y-m-d'],
-            'ground' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 
@@ -72,12 +71,5 @@ final class StoreResidencyRequest extends FormRequest
     public function contractNumber(): string
     {
         return (string) $this->validated('contract_number');
-    }
-
-    public function ground(): ?string
-    {
-        $ground = $this->validated('ground');
-
-        return is_string($ground) && $ground !== '' ? $ground : null;
     }
 }

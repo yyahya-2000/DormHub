@@ -52,7 +52,7 @@ final readonly class ResidencyService
     /**
      * FR-03: place a resident in a bed.
      *
-     * @throws BedNotAssignableException the bed or its room is out of use
+     * @throws BedNotAssignableException the bed is out of use
      * @throws BedAlreadyOccupiedException the bed is held (FR-03, criterion 1)
      * @throws ResidentAlreadyAccommodatedException the person holds another bed (§3.4.4)
      */
@@ -62,32 +62,26 @@ final readonly class ResidencyService
         Bed $bed,
         string $contractNumber,
         CarbonInterface $movedInAt,
-        ?string $ground = null,
         ?string $ipAddress = null,
     ): Residency {
         $bed->loadMissing('room');
 
-        // The two states no index can express: a bed withdrawn from use, and
-        // a room under repair. Both are refused before the insert, because
-        // there is no constraint waiting to refuse them afterwards.
+        // The one state no index can express: a place withdrawn from use. It is
+        // refused before the insert, because there is no constraint waiting to
+        // refuse it afterwards.
         if ($bed->status === BedStatus::Blocked) {
             throw BedNotAssignableException::bedBlocked($bed);
         }
 
-        if ($bed->room !== null && ! $bed->room->acceptsResidents()) {
-            throw BedNotAssignableException::roomOutOfService($bed);
-        }
-
         try {
             return DB::transaction(function () use (
-                $actor, $resident, $bed, $contractNumber, $movedInAt, $ground, $ipAddress
+                $actor, $resident, $bed, $contractNumber, $movedInAt, $ipAddress
             ): Residency {
                 $residency = Residency::query()->create([
                     'user_id' => $resident->getKey(),
                     'bed_id' => $bed->getKey(),
                     'contract_number' => $contractNumber,
                     'moved_in_at' => $movedInAt->toDateString(),
-                    'moved_in_ground' => $ground,
                     'moved_out_at' => null,
                     'moved_out_ground' => null,
                     'status' => ResidencyStatus::Active,

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\BedStatus;
-use App\Enums\RoomStatus;
 use App\Enums\RoomType;
 use Database\Factories\RoomFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * rather than issuing a query of their own, so a list of forty rooms costs
  * two queries and not eighty.
  */
-#[Fillable(['building_id', 'number', 'floor', 'capacity', 'type', 'status'])]
+#[Fillable(['building_id', 'number', 'floor', 'capacity', 'type'])]
 class Room extends Model
 {
     /** @use HasFactory<RoomFactory> */
@@ -39,7 +38,6 @@ class Room extends Model
      */
     protected $attributes = [
         'type' => 'corridor',
-        'status' => 'in_service',
     ];
 
     /**
@@ -52,7 +50,6 @@ class Room extends Model
             'floor' => 'integer',
             'capacity' => 'integer',
             'type' => RoomType::class,
-            'status' => RoomStatus::class,
         ];
     }
 
@@ -121,10 +118,5 @@ class Room extends Model
         return $this->relationLoaded('beds')
             ? $this->beds->filter(fn (Bed $bed): bool => $bed->isOccupied())->count()
             : $this->beds()->where('status', BedStatus::Occupied->value)->count();
-    }
-
-    public function acceptsResidents(): bool
-    {
-        return $this->status->acceptsResidents();
     }
 }

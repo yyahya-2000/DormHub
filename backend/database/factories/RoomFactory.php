@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Enums\BedStatus;
-use App\Enums\RoomStatus;
 use App\Enums\RoomType;
 use App\Models\Building;
 use App\Models\Room;
@@ -29,7 +28,6 @@ class RoomFactory extends Factory
             'floor' => $floor,
             'capacity' => fake()->numberBetween(2, 4),
             'type' => RoomType::Corridor,
-            'status' => RoomStatus::InService,
         ];
     }
 
@@ -51,10 +49,5 @@ class RoomFactory extends Factory
 
             $room->unsetRelation('beds');
         });
-    }
-
-    public function underRepair(): static
-    {
-        return $this->state(fn (): array => ['status' => RoomStatus::UnderRepair]);
     }
 }

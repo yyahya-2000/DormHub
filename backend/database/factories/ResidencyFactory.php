@@ -30,7 +30,6 @@ class ResidencyFactory extends Factory
             'bed_id' => Bed::factory(),
             'contract_number' => sprintf('DOG-%d-%04d', CarbonImmutable::now()->year, fake()->unique()->numberBetween(1, 9999)),
             'moved_in_at' => CarbonImmutable::now()->subMonths(fake()->numberBetween(1, 10))->toDateString(),
-            'moved_in_ground' => 'Accommodation order',
             'moved_out_at' => null,
             'moved_out_ground' => null,
             'status' => ResidencyStatus::Active,

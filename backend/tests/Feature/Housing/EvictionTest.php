@@ -259,7 +259,6 @@ final class EvictionTest extends TestCase
             'bed_id' => $bed->getKey(),
             'contract_number' => 'DOG-BOOKED',
             'moved_in_at' => $departure->toDateString(),
-            'moved_in_ground' => 'Accommodation order',
         ]);
 
         $this->postJson("/api/v1/residencies/{$residency->id}/termination", [
@@ -341,7 +340,6 @@ final class EvictionTest extends TestCase
             'bed_id' => $bed->getKey(),
             'contract_number' => 'DOG-'.$resident->getKey(),
             'moved_in_at' => CarbonImmutable::now()->subMonths(3)->toDateString(),
-            'moved_in_ground' => 'Accommodation order',
             'status' => ResidencyStatus::Active,
         ]);
 

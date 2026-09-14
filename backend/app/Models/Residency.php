@@ -47,7 +47,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'bed_id',
     'contract_number',
     'moved_in_at',
-    'moved_in_ground',
     'moved_out_at',
     'moved_out_ground',
     'status',

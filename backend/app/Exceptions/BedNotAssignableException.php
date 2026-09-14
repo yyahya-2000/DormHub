@@ -8,9 +8,8 @@ use App\Models\Bed;
 use RuntimeException;
 
 /**
- * A bed that no residency holds and that still cannot receive one: a bed
- * withdrawn by the warden, or a bed in a room under repair or out of the
- * housing stock.
+ * A bed that no residency holds and that still cannot receive one: a place the
+ * warden has withdrawn from use.
  *
  * This is the case the partial unique index cannot cover, and the reason
  * `BED.status` is stored rather than derived (see `App\Enums\BedStatus`). The
@@ -31,18 +30,6 @@ final class BedNotAssignableException extends RuntimeException
         return new self(
             bedId: (int) $bed->getKey(),
             reason: sprintf('Bed %s is blocked and accepts no residency.', $bed->label),
-        );
-    }
-
-    public static function roomOutOfService(Bed $bed): self
-    {
-        return new self(
-            bedId: (int) $bed->getKey(),
-            reason: sprintf(
-                'Room %s is %s and accepts no residency.',
-                $bed->room?->number ?? '?',
-                $bed->room?->status->label() ?? 'out of service',
-            ),
         );
     }
 }
