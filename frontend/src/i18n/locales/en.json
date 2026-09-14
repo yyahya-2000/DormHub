@@ -33,7 +33,14 @@
     "languageRu": "Rus",
     "languageEn": "Eng",
     "menu": "Sections",
-    "backToBuilding": "Back to the building card"
+    "backToBuilding": "Back to the building card",
+    "requiredField": "Required field",
+    "pagination": {
+      "label": "Pages",
+      "previous": "Previous page",
+      "next": "Next page",
+      "position": "{{page}} of {{total}}"
+    }
   },
   "errors": {
     "network": "The server is not answering. Check the connection and try again.",

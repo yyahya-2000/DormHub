@@ -33,7 +33,14 @@
     "languageRu": "Рус",
     "languageEn": "Eng",
     "menu": "Разделы",
-    "backToBuilding": "К карточке корпуса"
+    "backToBuilding": "К карточке корпуса",
+    "requiredField": "Обязательное поле",
+    "pagination": {
+      "label": "Страницы",
+      "previous": "Предыдущая страница",
+      "next": "Следующая страница",
+      "position": "{{page}} из {{total}}"
+    }
   },
   "errors": {
     "network": "Сервер не отвечает. Проверьте соединение и повторите попытку.",
