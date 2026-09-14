@@ -4,7 +4,6 @@ use App\Exceptions\BedAlreadyOccupiedException;
 use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
 use App\Exceptions\ConfirmationWindowClosedException;
-use App\Exceptions\ConsentRequiredException;
 use App\Exceptions\EntryNotPermittedException;
 use App\Exceptions\GuestQuotaExceededException;
 use App\Exceptions\IllegalTransitionException;
@@ -132,20 +131,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'message' => $exception->getMessage(),
             'bed_id' => $exception->bedId,
         ], 422));
-
-        /*
-         * FR-35, first criterion, at the point it bites: the operation
-         * processes personal data and there is no consent on record for it.
-         *
-         * 409 and not 403 — the caller's role covers the object perfectly
-         * well, and what stands in the way is the state of the world. 403 in
-         * this application means something else and is written to the audit
-         * log as `access.denied`, which this is not. The body names the
-         * document and the revision so the client knows which text to show.
-         */
-        $exceptions->render(fn (ConsentRequiredException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ] + $exception->context(), 409));
 
         /*
          * §3.5.4: an illegal transition is HTTP 409. The caller had the right

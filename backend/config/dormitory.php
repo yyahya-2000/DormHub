@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\ConsentDocument;
 use App\Identity\DatabaseIdentityProvider;
 
 return [
@@ -290,33 +289,6 @@ return [
         | up behind it.
         */
         'feed_page_size' => (int) env('LOST_FOUND_FEED_PAGE_SIZE', 20),
-
-    ],
-
-    /*
-    |---------------------------------------------------------------------------
-    | Consent to the processing of personal data (FR-35)
-    |---------------------------------------------------------------------------
-    |
-    | Publishing a new consent text is two steps and no code: add the file
-    | under the path below, then name it here. Everyone whose last consent
-    | carries the old revision becomes pending again the moment the value
-    | changes, which is what a changed text has to mean — a person agreed to
-    | wording, not to a document code.
-    |
-    */
-
-    'consent' => [
-
-        'revisions' => [
-            ConsentDocument::ResidentPersonalData->value => env('CONSENT_REVISION_RESIDENT', '2026-09-01'),
-            ConsentDocument::GuestPersonalData->value => env('CONSENT_REVISION_GUEST', '2026-09-01'),
-        ],
-
-        // Where the revisions themselves live. Under version control, because
-        // art. 9 part 3 of Federal Law No. 152-FZ puts on the operator the
-        // burden of proving what was agreed to.
-        'path' => resource_path('consent'),
 
     ],
 
