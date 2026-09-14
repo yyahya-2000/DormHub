@@ -101,7 +101,7 @@ final class ResidentCardTest extends TestCase
             ->assertJsonPath('data.id', $this->residentOfFirst->id);
     }
 
-    public function test_the_own_card_returns_name_citizenship_contact_current_bed_history_and_open_obligations(): void
+    public function test_the_own_card_returns_name_citizenship_contact_current_bed_and_history(): void
     {
         Sanctum::actingAs($this->residentOfFirst);
 
@@ -115,7 +115,7 @@ final class ResidentCardTest extends TestCase
                     'contact' => ['email', 'phone'],
                     'current_bed' => ['building_name', 'room_number', 'bed_label', 'moved_in_at'],
                     'residency_history',
-                    'open_obligations',
+                    'overdue_guest_visits',
                 ],
             ])
             ->json('data');
@@ -126,12 +126,11 @@ final class ResidentCardTest extends TestCase
         $this->assertSame('Block 1', $card['current_bed']['building_name']);
         $this->assertSame('305', $card['current_bed']['room_number']);
         $this->assertCount(1, $card['residency_history']);
+        $this->assertSame('DOG-305-1', $card['residency_history'][0]['contract_number']);
 
-        // The one obligation the MVP register knows: an accommodation contract
-        // that has not been terminated.
-        $this->assertCount(1, $card['open_obligations']);
-        $this->assertSame('accommodation_contract', $card['open_obligations'][0]['kind']);
-        $this->assertSame('DOG-305-1', $card['open_obligations'][0]['contract_number']);
+        // Nothing has run past its deadline, and the field says so with an
+        // empty list rather than by being absent (FR-20, third criterion).
+        $this->assertSame([], $card['overdue_guest_visits']);
     }
 
     public function test_the_card_shows_the_whole_residency_history_and_no_current_bed_after_a_move_out(): void
@@ -152,16 +151,14 @@ final class ResidentCardTest extends TestCase
 
         $this->assertNull($card['current_bed']);
         $this->assertCount(1, $card['residency_history']);
-        $this->assertSame([], $card['open_obligations']);
     }
 
     public function test_a_resident_evicted_for_a_future_date_still_has_a_current_bed_on_the_card(): void
     {
         // The card used to read «record open» where FR-05 says «resident
-        // today». A person leaving on the 31st of December lost their bed and
-        // their obligations from the moment the notice was written, while the
-        // same response marked the same residency `is_current: true` three
-        // fields further down.
+        // today». A person leaving on the 31st of December lost their bed from
+        // the moment the notice was written, while the same response marked
+        // the same residency `is_current: true` two fields further down.
         $leaving = $this->resident($this->first, 'leaving@example.test');
         $residency = $this->accommodate($leaving, $this->first, '402', '1');
 
@@ -178,17 +175,15 @@ final class ResidentCardTest extends TestCase
         $card = $this->getJson("/api/v1/residents/{$leaving->id}")->assertOk()->json('data');
 
         $this->assertSame('402', $card['current_bed']['room_number']);
-        $this->assertCount(1, $card['open_obligations']);
         $this->assertTrue($card['residency_history'][0]['is_current']);
 
-        // On the stated date the card agrees with the register: no bed, no
-        // obligation, and the history still there.
+        // On the stated date the card agrees with the register: no bed, and
+        // the history still there.
         $this->travelTo($departure);
         $card = $this->getJson("/api/v1/residents/{$leaving->id}")->assertOk()->json('data');
         $this->travelBack();
 
         $this->assertNull($card['current_bed']);
-        $this->assertSame([], $card['open_obligations']);
         $this->assertCount(1, $card['residency_history']);
     }
 

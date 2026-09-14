@@ -46,10 +46,10 @@ use Illuminate\Database\Eloquent\Builder;
  * deliberately independent: either one of them alone stops the escalation.
  *
  * The history is loaded down to the building in one pass, because the card
- * shows the current bed, the whole history and the open obligations, and all
- * three are views of the same rows. `ResidentCardResource` reads them off the
- * loaded relation rather than querying again, which is also why a second query
- * cannot show a third state.
+ * shows the current bed and the whole history, and the two are views of the
+ * same rows. `ResidentCardResource` reads them off the loaded relation rather
+ * than querying again, which is also why a second query cannot show a third
+ * state.
  */
 final readonly class ResidentDirectory
 {
@@ -99,11 +99,10 @@ final readonly class ResidentDirectory
             'residencies.bed.room.building',
             /*
              * FR-20, third criterion: «the fact is visible on the inviting
-             * resident's card». The overdue visits of this person's guests
-             * belong to the card for the same reason the open obligations do —
-             * clause 3.4 of the Model Rules makes the inviting resident
-             * answerable for the guest's timely departure, so an overdue visit
-             * is an unsettled matter of theirs and not only of the post's.
+             * resident's card». Clause 3.4 of the Model Rules makes the
+             * inviting resident answerable for the guest's timely departure,
+             * so an overdue visit is an unsettled matter of theirs and not
+             * only of the post's.
              */
             'overdueGuestVisits.request',
         ]);
