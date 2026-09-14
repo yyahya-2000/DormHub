@@ -261,6 +261,40 @@ final class BuildingPolicy
     }
 
     /**
+     * FR-24, FR-26: taking a found object into the administration's
+     * safekeeping in this dormitory, and answering the claims made against an
+     * entry it holds.
+     *
+     * The security officer, the warden and the manager. It is the narrower of
+     * the module's two staff capabilities and the only one the post holds: an
+     * object picked up in a corridor is handed in at the desk, and handing it
+     * back is the same job.
+     *
+     * Nothing here touches the ordinary path of the module. A find that stays
+     * with the resident who found it is published, claimed and settled without
+     * this method being reached at all (§2.5.4).
+     */
+    public function holdLostFoundItems(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::HoldLostFoundItems, $building);
+    }
+
+    /**
+     * FR-26: deciding a claim the finder and the claimant could not settle, in
+     * this dormitory.
+     *
+     * The warden and the manager beneath him. Not the security officer, who
+     * keeps objects and settles nothing, and not the administrator, for the
+     * reason they are outside `decideGuestRequests()`: a disagreement between
+     * two residents about one umbrella is settled by somebody who can see both
+     * of them.
+     */
+    public function decideLostFoundDisputes(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::DecideLostFoundDisputes, $building);
+    }
+
+    /**
      * FR-16: submitting a guest request for this dormitory.
      *
      * Decided against the residency register and not against a capability, for
