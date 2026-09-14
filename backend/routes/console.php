@@ -20,27 +20,11 @@ Schedule::command('housing:settle-residencies')
     ->withoutOverlapping();
 
 /*
- * FR-42. A one-time code lives an hour and leaves a hashed row behind it in
- * `password_reset_tokens` — spent or not. Nothing was sweeping that table: the
- * framework ships the command and the schedule simply never named it, so every
- * account ever issued kept a row for the life of the deployment. A hash of an
- * expired secret is not a secret, but it is a list of addresses that hold an
- * account, which is the same thing the sign-in route is careful never to
- * answer.
- *
- * Ten past midnight, behind the residency pass, so that the two nightly jobs do
- * not contend for the same connection.
- */
-Schedule::command('auth:clear-resets')
-    ->dailyAt('00:10')
-    ->withoutOverlapping();
-
-/*
- * FR-20. The control time is `BUILDING.curfew_at` and not a constant, so this
- * cannot be a cron entry at 23:00: a single nightly run would bake this
- * university's hour into the deployment and leave the column editable but
+ * FR-20. The departure deadline is `BUILDING.visiting_to` and not a constant,
+ * so this cannot be a cron entry at 23:00: a single nightly run would bake
+ * this university's hour into the deployment and leave the column editable but
  * inert, breaking NFR-09 for a dormitory that closes at 22:00. The sweep runs
- * quarter-hourly instead and asks each building whether its own hour has come.
+ * quarter-hourly instead and takes every visit whose own deadline has passed.
  *
  * Overlapping is refused for the usual reason and one more: two passes over
  * the same visit would race on `overdue_notified_at`. They would not both send
@@ -70,8 +54,8 @@ Schedule::command('guests:expire-stale-requests')
  * quarter-hourly pass — the shape the guest module's two sweeps take — would
  * buy nothing and cost a full scan of the completed requests of every
  * dormitory ninety-six times a day. The guest sweeps run that often because
- * `BUILDING.curfew_at` is an hour of the day and the schedule must know none;
- * nothing here is measured against an hour.
+ * `BUILDING.visiting_to` is an hour of the day and the schedule must know
+ * none; nothing here is measured against an hour.
  *
  * Twenty past midnight, behind the two jobs already there, so that the nightly
  * work does not contend for the same connection.

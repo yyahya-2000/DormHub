@@ -38,16 +38,6 @@ namespace App\Enums;
  */
 enum NotificationCategory: string
 {
-    /**
-     * FR-42. The one-time credential of a newly issued account.
-     *
-     * Not among FR-34's four occasions, and deliberately included all the same:
-     * it is the notification the system already sends, and leaving it outside
-     * the scheme would mean two dispatch paths where the requirement asks for
-     * one.
-     */
-    case AccountIssued = 'account_issued';
-
     /** FR-17. The duty officer has approved or refused a guest request. */
     case RequestDecision = 'request_decision';
 
@@ -133,7 +123,7 @@ enum NotificationCategory: string
     public function isMandatory(): bool
     {
         return match ($this) {
-            self::AccountIssued, self::VisitOverdue, self::DocumentSignature,
+            self::VisitOverdue, self::DocumentSignature,
             self::MandatoryAnnouncement => true,
             self::RequestDecision, self::MaintenanceStatus, self::Announcement,
             self::LostFoundClaim => false,
@@ -153,7 +143,6 @@ enum NotificationCategory: string
     public function label(): string
     {
         return match ($this) {
-            self::AccountIssued => 'Account and credentials',
             self::RequestDecision => 'Decision on a guest request',
             self::VisitOverdue => 'Guest overdue at the checkpoint',
             self::MaintenanceStatus => 'Maintenance request status',
@@ -170,7 +159,6 @@ enum NotificationCategory: string
     public function description(): string
     {
         return match ($this) {
-            self::AccountIssued => 'The one-time code for a new account, and changes to the way you sign in.',
             self::RequestDecision => 'Your guest request has been approved or refused.',
             self::VisitOverdue => 'A guest you invited has not left by the hour the rules of internal order set.',
             self::MaintenanceStatus => 'A maintenance request you filed has moved to another state.',
