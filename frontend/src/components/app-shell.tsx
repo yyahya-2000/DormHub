@@ -8,7 +8,6 @@ import {
   guestRequestBuildingsOf,
   maintenanceBuildingsOf,
   Permission,
-  showsAuditLink,
 } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -125,9 +124,6 @@ export function AppShell() {
     ...(unread !== null && unread > 0 ? { badge: unread } : {}),
   })
   tabs.push({ to: '/consents', label: t('app.section.personalData') })
-  if (showsAuditLink(user)) {
-    tabs.push({ to: '/audit-logs', label: t('app.section.audit') })
-  }
 
   return (
     <div className="flex min-h-dvh flex-col">

@@ -6,7 +6,6 @@ import { AppShell } from '@/components/app-shell'
 import { AnnouncementPublishPage } from '@/pages/announcement-publish-page'
 import { AnnouncementReadersPage } from '@/pages/announcement-readers-page'
 import { AnnouncementsPage } from '@/pages/announcements-page'
-import { AuditLogPage } from '@/pages/audit-log-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
@@ -156,7 +155,6 @@ export default function App() {
                 element={<NotificationSettingsPage />}
               />
               <Route path="consents" element={<ConsentHistoryPage />} />
-              <Route path="audit-logs" element={<AuditLogPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Route>
