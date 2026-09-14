@@ -141,6 +141,16 @@
  * rules of internal order and cannot be switched off, while a routine one
  * rests on nothing but convenience and can.
  *
+ * `lost_found_claim` is the whole of FR-26's exchange in one category:
+ * somebody has claimed a find, a claim has been accepted with a handover
+ * point, one has been declined, one has been referred to the warden, or
+ * the warden has decided it. The obvious split — one category towards the
+ * holder and another towards the claimant — would have put two switches
+ * on the same conversation, and a resident who silenced one half would be
+ * left holding an object nobody came for. Optional, and the one category
+ * whose messages name another resident: no telephone number, no address
+ * and no e-mail travels in either direction.
+ *
  * Four of them are mandatory and cannot be switched off — see
  * `NotificationSetting.mandatory` for the ground the line is drawn on.
  */
@@ -155,4 +165,5 @@ export const NotificationCategory = {
   document_signature: 'document_signature',
   announcement: 'announcement',
   mandatory_announcement: 'mandatory_announcement',
+  lost_found_claim: 'lost_found_claim',
 } as const;

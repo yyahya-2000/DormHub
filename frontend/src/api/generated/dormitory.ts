@@ -9348,9 +9348,14 @@ export const getReferLostFoundClaimUrl = (lostFoundClaim: number,) => {
  * two sides cannot settle», and two sides that have not spoken have not
  * failed to settle anything.
  *
- * The entry stays out of the feed while the disagreement is open: a
- * referred claim is outstanding, and offering the object to somebody else
- * while the warden is still looking at it is what the status prevents.
+ * **The referral moves the entry back to `claimed`.** The refusal that
+ * has to precede it already returned the find to the published list —
+ * FR-26's second criterion — and the referral makes that claim
+ * outstanding again, so the entry leaves the feed for the length of the
+ * disagreement: offering the object to somebody else while the warden is
+ * still looking at it is what the status prevents. The entry stays in
+ * `claimed` if the warden upholds the claim, for the holder to close, and
+ * returns to `published` if the warden does not.
  * @summary Refer a refused claim to the warden
  */
 export const referLostFoundClaim = async (lostFoundClaim: number,

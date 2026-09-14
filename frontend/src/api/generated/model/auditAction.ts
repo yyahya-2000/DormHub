@@ -184,4 +184,13 @@ export const AuditAction = {
   maintenance_requestoverdue: 'maintenance_request.overdue',
   maintenance_requestreopening_refused: 'maintenance_request.reopening_refused',
   maintenance_queueexported: 'maintenance_queue.exported',
+  announcementpublished: 'announcement.published',
+  announcementreaders_viewed: 'announcement.readers_viewed',
+  lost_found_itempublished: 'lost_found_item.published',
+  lost_found_claimfiled: 'lost_found_claim.filed',
+  lost_found_claimaccepted: 'lost_found_claim.accepted',
+  lost_found_claimdeclined: 'lost_found_claim.declined',
+  lost_found_claimreferred: 'lost_found_claim.referred',
+  lost_found_claimdecided_by_staff: 'lost_found_claim.decided_by_staff',
+  lost_found_itemresolved: 'lost_found_item.resolved',
 } as const;
