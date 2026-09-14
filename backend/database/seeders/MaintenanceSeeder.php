@@ -73,8 +73,8 @@ class MaintenanceSeeder extends Seeder
         $warden = $this->triageStaffOf($building);
 
         if ($residents === [] || $warden === null) {
-            // Nothing to seed against, exactly as the consent, notification
-            // and guest seeders decide in the same situation.
+            // Nothing to seed against, exactly as the notification and guest
+            // seeders decide in the same situation.
             return;
         }
 

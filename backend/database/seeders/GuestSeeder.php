@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
 use App\Enums\GuestVisitStatus;
 use App\Enums\RoleCode;
 use App\Guests\AccessCodeGenerator;
 use App\Models\Building;
-use App\Models\ConsentRecord;
 use App\Models\GuestRequest;
 use App\Models\GuestVisit;
 use App\Models\Role;
@@ -37,8 +35,8 @@ use Illuminate\Database\Seeder;
  *
  * The seeder runs after the housing register and the staff accounts, because
  * every request names a resident who invites and a dormitory they live in. It
- * seeds nothing when either is missing, exactly as the consent and
- * notification seeders do.
+ * seeds nothing when either is missing, exactly as the notification seeder
+ * does.
  */
 class GuestSeeder extends Seeder
 {
@@ -139,8 +137,6 @@ class GuestSeeder extends Seeder
             'decided_at' => $day->subHours(8),
         ]);
 
-        $this->guestConsent($request);
-
         GuestVisit::query()->create([
             'guest_request_id' => $request->getKey(),
             'checked_in_at' => $day->subHours(2),
@@ -174,8 +170,6 @@ class GuestSeeder extends Seeder
             'decided_at' => $yesterday->setTime(16, 0),
         ]);
 
-        $this->guestConsent($request);
-
         $due = $request->dueAt($building);
 
         GuestVisit::query()->create([
@@ -208,8 +202,6 @@ class GuestSeeder extends Seeder
             'decided_at' => $yesterday->setTime(11, 0),
         ]);
 
-        $this->guestConsent($request);
-
         GuestVisit::query()->create([
             'guest_request_id' => $request->getKey(),
             'checked_in_at' => $yesterday->setTime(13, 15),
@@ -233,27 +225,6 @@ class GuestSeeder extends Seeder
             'student_id' => $student->getKey(),
             'building_id' => $building->getKey(),
             'guest_full_name' => self::GUEST_NAMES[$index % count(self::GUEST_NAMES)],
-        ]);
-    }
-
-    /**
-     * The consent taken at the post (§2.7.1). Every request that produced a
-     * visit carries one, because without it the entry could not lawfully have
-     * been recorded — a stand whose register held entries with no consent
-     * behind them would be demonstrating the wrong thing.
-     */
-    private function guestConsent(GuestRequest $request): void
-    {
-        ConsentRecord::query()->create([
-            'user_id' => null,
-            'guest_request_id' => $request->getKey(),
-            'document_code' => ConsentDocument::GuestPersonalData->value,
-            'document_revision' => (string) config(
-                'dormitory.consent.revisions.'.ConsentDocument::GuestPersonalData->value
-            ),
-            'accepted_at' => now(),
-            // RFC 5737's documentation range, which cannot belong to anyone.
-            'ip_address' => '192.0.2.200',
         ]);
     }
 

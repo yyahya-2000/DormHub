@@ -24,15 +24,14 @@ class DatabaseSeeder extends Seeder
          * one, for the single block the staff seeder creates for itself.
          *
          * The personal-account seeders come last for the same kind of reason:
-         * a consent belongs to a person and a notification is addressed to
-         * one, so both need the accounts to exist. Neither invents a person of
-         * its own — if there are no residents, they seed nothing.
+         * a notification is addressed to a person, so it needs the accounts to
+         * exist. None of them invents a person of its own — if there are no
+         * residents, they seed nothing.
          */
         $this->call([
             RoleSeeder::class,
             HousingSeeder::class,
             DemoSeeder::class,
-            ConsentSeeder::class,
             NotificationSeeder::class,
             GuestSeeder::class,
             AnnouncementSeeder::class,

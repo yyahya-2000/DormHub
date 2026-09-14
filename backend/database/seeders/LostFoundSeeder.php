@@ -80,8 +80,8 @@ class LostFoundSeeder extends Seeder
         $warden = $this->staffOf($building, Permission::DecideLostFoundDisputes);
 
         if (count($residents) < 2) {
-            // Nothing to seed against, exactly as the consent, notification,
-            // guest and maintenance seeders decide in the same situation. The
+            // Nothing to seed against, exactly as the notification, guest and
+            // maintenance seeders decide in the same situation. The
             // module needs two residents and not one: every scenario in it is
             // one person answering another.
             return;

@@ -40,7 +40,7 @@ use Illuminate\Database\Seeder;
  *
  * The seeder runs after the housing register and the staff accounts, because
  * every notice names an author and a dormitory. It seeds nothing when either is
- * missing, exactly as the consent, notification and guest seeders do.
+ * missing, exactly as the notification and guest seeders do.
  */
 class AnnouncementSeeder extends Seeder
 {

@@ -7,7 +7,6 @@ namespace Database\Seeders;
 use App\Enums\RoleCode;
 use App\Models\Role;
 use App\Models\User;
-use App\Notifications\DocumentAwaitingSignature;
 use App\Notifications\GuestRequestDecided;
 use App\Notifications\GuestVisitOverdue;
 use App\Notifications\MaintenanceRequestStatusChanged;
@@ -21,7 +20,7 @@ use Illuminate\Support\Str;
  * directly rather than by dispatching the notifications, for two reasons. A
  * dispatch would go through the queue and through a mail transport, and a
  * seeder that needs a worker running is a seeder that fails half the time. And
- * the point of seeding here is the *state* of the personal account — four
+ * the point of seeding here is the *state* of the personal account — three
  * categories, one of them already read and the rest not — not the delivery,
  * which the tests cover on the path that matters.
  *
@@ -76,12 +75,6 @@ class NotificationSeeder extends Seeder
                 guestName: ['Yuliana Beketova', 'Prokhor Ovsyannikov', 'Rimma Khoroshilova'][$index % 3],
                 buildingName: 'Block A',
                 dueAt: now()->subDays(9)->setTime(23, 0),
-            ), null],
-            [new DocumentAwaitingSignature(
-                documentCode: 'accommodation_agreement',
-                revision: '2026-08-15',
-                title: 'Accommodation agreement, annexe 2',
-                dueAt: now()->addDays(14),
             ), null],
             [new MaintenanceRequestStatusChanged(
                 requestId: 3000 + $index,
