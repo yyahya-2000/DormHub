@@ -10,13 +10,10 @@ use Illuminate\Notifications\Messages\MailMessage;
 /**
  * FR-09 reaching the resident: the warden has published an announcement.
  *
- * **One category for every announcement, and it rests on consent.** The
- * message only saves the resident from opening the feed of FR-11, which is on
- * screen either way, so a resident who withdraws the consent of FR-35 stops
- * receiving it. There used to be a second category for the announcements a
- * resident was required to acknowledge; the acknowledgement is gone from the
- * MVP and the category went with it, because a label nothing can be
- * classified under is a label for nothing.
+ * **One category for every announcement.** There used to be a second, for the
+ * announcements a resident was required to acknowledge; the acknowledgement is
+ * gone from the MVP and the category went with it, because a label nothing can
+ * be classified under is a label for nothing.
  *
  * The message carries identifiers and a title rather than the body. The body
  * of an announcement can be long, the feed is one tap away, and a copy of it

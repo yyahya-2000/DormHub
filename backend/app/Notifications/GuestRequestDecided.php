@@ -20,10 +20,6 @@ use Illuminate\Notifications\Messages\MailMessage;
  * `GuestRequest`, which is what lets it be written and tested now and called
  * from `GuestRequestService::approve()` the day that service is written, with
  * no change here.
- *
- * The category rests on consent (see `NotificationCategory`): the decision is
- * on the resident's own screen either way, so the message is a convenience and
- * it stops when the consent behind it is withdrawn.
  */
 final class GuestRequestDecided extends EventNotification
 {

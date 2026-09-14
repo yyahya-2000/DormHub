@@ -7,7 +7,6 @@ namespace App\Services;
 use App\Enums\AuditAction;
 use App\Enums\AuditResult;
 use App\Enums\GuestRequestStatus;
-use App\Enums\NotificationCategory;
 use App\Exceptions\GuestQuotaExceededException;
 use App\Exceptions\IllegalTransitionException;
 use App\Guests\AccessCodeGenerator;
@@ -348,46 +347,21 @@ final readonly class GuestRequestService
      *
      * `GuestRequestDecided` takes plain values rather than a model — it was
      * written in increment 0 against a service that did not exist yet, and
-     * this is the call it was written for. The category rests on consent
-     * (`NotificationCategory::RequestDecision`), so a resident who has
-     * withdrawn that consent is not sent it; that gate lives in
-     * `User::notify()` and is not repeated here.
+     * this is the call it was written for.
      *
-     * **What is repeated here is the question, not the rule.** The gate drops
-     * the message silently, which is right — a withdrawal is not an error —
-     * but it left the log asserting a decision and saying nothing about the
-     * delivery, so a criterion phrased «the applicant is notified» could not be
-     * checked against the record at all. The undelivered decision is an event
-     * of its own (§3.9.6 counts the refusals among the events for the same
-     * reason), and it names the ground that was missing: a resident asking why
-     * they heard nothing gets an answer from the log rather than from the
-     * source.
+     * There is no longer anything between the decision and the message. The
+     * dispatch used to be gated on the consent of FR-35, and an undelivered
+     * decision was an audited event because a criterion phrased «the applicant
+     * is notified» could not otherwise be checked against the log; with FR-35
+     * out of the MVP the applicant is notified, full stop. A request whose
+     * author no longer exists is the one case that sends nothing, and it
+     * writes nothing either — there is nobody the message was owed to.
      */
     private function notifyApplicant(GuestRequest $request, bool $approved, ?string $comment): void
     {
         $student = $request->student()->first();
 
         if ($student === null) {
-            return;
-        }
-
-        $category = NotificationCategory::RequestDecision;
-
-        if (! $student->receivesNotificationsOf($category)) {
-            $this->audit->record(
-                action: AuditAction::GuestRequestDecisionNotDelivered,
-                actor: null,
-                subject: $request,
-                payload: [
-                    'building_id' => $request->building_id,
-                    'student_id' => $student->getKey(),
-                    'category' => $category->value,
-                    'approved' => $approved,
-                    'reason' => 'the consent this category rests on has been withdrawn',
-                ],
-                result: AuditResult::Denied,
-            );
-
             return;
         }
 

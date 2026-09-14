@@ -22,16 +22,13 @@ use Illuminate\Queue\SerializesModels;
  * lands on the queue rather than on a mail server. What is *not* queued by
  * that alone is the work of deciding who the residents are: an announcement to
  * a dormitory of several hundred places means a residency query and several
- * hundred passes through the notification gate, each one reading that person's
- * consent. Done inside the request, the warden waits on all of it, and
- * NFR-02's budget — five seconds between the event and the delivery being
- * *queued* — would be spent on arithmetic rather than on delivery.
+ * hundred messages queued one at a time. Done inside the request, the warden
+ * waits on all of it, and NFR-02's budget — five seconds between the event and
+ * the delivery being *queued* — would be spent on arithmetic rather than on
+ * delivery.
  *
  * So the publishing request dispatches this, and this resolves the audience
- * and hands it to `Notifier`. The gate is untouched: the fan-out still goes
- * through `User::notify()`, one person at a time, which is what keeps a
- * resident who has withdrawn the consent of FR-35 from being written to and
- * what the facade's own `Notification::send()` would have stepped over.
+ * and hands it to `Notifier`, which writes to one person at a time.
  *
  * **The payload is one identifier.** `SerializesModels` writes the
  * announcement as a class name and a primary key, so a worker that picks the

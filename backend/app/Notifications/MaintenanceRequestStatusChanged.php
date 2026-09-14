@@ -16,10 +16,6 @@ use Illuminate\Notifications\Messages\MailMessage;
  * and this message belongs to increment 0. When the state machine of §3.3.5 is
  * written, its enum's `->value` is what arrives here, and the class does not
  * change.
- *
- * The category rests on consent: the reporter sees the same movement on the
- * request itself, so the message is a convenience rather than something the
- * dormitory owes them.
  */
 final class MaintenanceRequestStatusChanged extends EventNotification
 {

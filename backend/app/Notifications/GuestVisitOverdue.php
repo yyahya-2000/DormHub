@@ -16,10 +16,8 @@ use Illuminate\Notifications\Messages\MailMessage;
  * internal order admits a guest between 08:00 and 23:00 and only in the
  * presence of the resident who invited them; the resident is the person
  * answerable for the departure, and the security post is the place that can
- * act on it. A notice of that kind is not a convenience resting on anybody's
- * agreement — it is the dormitory discharging an obligation it has under its
- * own rules, so `NotificationCategory::VisitOverdue` rests on no consent and a
- * withdrawal does not stop it.
+ * act on it. The dormitory sends this one discharging an obligation it has
+ * under its own rules rather than as a convenience.
  *
  * Raised by the scheduled sweep of §3.3.4 rather than by a request, which is
  * the other half of why it is queued: a cron entry has no user waiting on it,

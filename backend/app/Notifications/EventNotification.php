@@ -29,11 +29,11 @@ use Illuminate\Notifications\Notification;
  * queue worker of the compose file does the sending; what the application
  * promises, and what the tests measure, is that the message reached the queue.
  *
- * **The subclass says its category and nothing about delivery.** Whether this
- * person receives it at all is decided once, in `App\Models\User::notify()`,
- * against `App\Enums\NotificationCategory`. A notification that asked the
- * question itself would have to be edited whenever the rule changed, and one
- * that forgot to ask would write to a resident whose consent is withdrawn.
+ * **The subclass says its category and nothing about delivery.** The category
+ * is the label the personal account draws the message under; nothing in the
+ * MVP turns it into a decision about whether the message is sent, and a
+ * notification that reasoned about delivery for itself would be the one place
+ * a later rule was forgotten.
  */
 abstract class EventNotification extends Notification implements CategorisedNotification, ShouldQueue
 {

@@ -4,14 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Contracts\CategorisedNotification;
 use App\Enums\Citizenship;
-use App\Enums\ConsentDocument;
-use App\Enums\NotificationCategory;
 use App\Enums\Permission;
 use App\Enums\RoleCode;
 use App\Enums\UserStatus;
-use App\Services\ConsentRegistry;
 use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -51,15 +47,12 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory;
 
     /*
-     * The trait's own `notify()` is kept under a second name, because the
-     * method below has to wrap it: FR-34's second criterion is enforced on
-     * the way in, before anything is queued, and a trait method cannot be
-     * called with `parent::`.
+     * Plain, and deliberately so. The model used to wrap `notify()` in order
+     * to drop the messages whose ground was a consent the person had
+     * withdrawn; FR-35 has left the MVP and there is nothing left to ask, so
+     * a message addressed to this account is delivered to it.
      */
-    use Notifiable {
-        notify as private dispatchNotification;
-        notifyNow as private dispatchNotificationNow;
-    }
+    use Notifiable;
 
     /**
      * The ER model names the column `password_hash`, so the authentication
@@ -99,105 +92,6 @@ class User extends Authenticatable
     public function roleGrants(): HasMany
     {
         return $this->hasMany(RoleUser::class);
-    }
-
-    /**
-     * FR-35. Every act of consent this person has performed, newest first,
-     * withdrawn ones included — the history is the evidence and is never
-     * pruned (see the migration).
-     *
-     * @return HasMany<ConsentRecord, $this>
-     */
-    public function consentRecords(): HasMany
-    {
-        return $this->hasMany(ConsentRecord::class)
-            ->orderByDesc('accepted_at')
-            ->orderByDesc('id');
-    }
-
-    /**
-     * Whether consent to this document stands for this person today.
-     */
-    public function hasConsentedTo(ConsentDocument $document): bool
-    {
-        if ($this->relationLoaded('consentRecords')) {
-            return $this->consentRecords->contains(
-                fn (ConsentRecord $record): bool => $record->document_code === $document
-                    && $record->isInForce()
-            );
-        }
-
-        return app(ConsentRegistry::class)->hasInForce($this, $document);
-    }
-
-    /**
-     * The one road a notification takes to this person, and the gate on it.
-     *
-     * FR-35's fourth criterion is what the gate now enforces, and it is the
-     * model rather than a service so that no caller can go around it:
-     * `$user->notify(...)`, a queued job, a console command and the existing
-     * `ResidentAccountIssuer` all pass through this method unchanged.
-     * `App\Services\Notifier` fans out to several people by calling it, and
-     * the `Notification` facade's own fan-out is not used anywhere for exactly
-     * this reason — it dispatches to channels directly and would step over the
-     * gate.
-     *
-     * The question asked does not name a notification class: that is what lets
-     * a later increment add a category without touching this method.
-     *
-     * @param  mixed  $instance
-     */
-    public function notify($instance): void
-    {
-        if ($instance instanceof CategorisedNotification
-            && ! $this->receivesNotificationsOf($instance->category())) {
-            return;
-        }
-
-        $this->dispatchNotification($instance);
-    }
-
-    /**
-     * The same gate on the trait's other door.
-     *
-     * `notifyNow()` sends outside the queue and is what a console command or a
-     * test reaches for. It is overridden for one reason: the claim above —
-     * that this is the only road — has to be true, and a second entrance that
-     * skipped the gate would make the criterion hold everywhere except where
-     * somebody used the other method.
-     *
-     * @param  mixed  $instance
-     * @param  array<int, string>|null  $channels
-     */
-    public function notifyNow($instance, $channels = null): void
-    {
-        if ($instance instanceof CategorisedNotification
-            && ! $this->receivesNotificationsOf($instance->category())) {
-            return;
-        }
-
-        $this->dispatchNotificationNow($instance, $channels);
-    }
-
-    /**
-     * Whether this person is to be told about events of this category.
-     *
-     * One question, and it is about the legal ground rather than about a
-     * preference. The per-category switch of FR-34's second criterion is
-     * withdrawn from the MVP, so nothing a person sets stops a message any
-     * more; what stops one is the ground for it being gone.
-     *
-     * A category that rests on consent is processing of personal data whose
-     * only ground is that consent (§2.7.1), so when the resident withdraws it
-     * the message stops — this application's answer to the question FR-35's
-     * fourth criterion leaves open, «and then what». A category that does not
-     * rest on consent rests on the accommodation contract or on the rules of
-     * internal order, and there is nothing for it to depend on.
-     */
-    public function receivesNotificationsOf(NotificationCategory $category): bool
-    {
-        return ! $category->restsOnConsent()
-            || $this->hasConsentedTo(ConsentDocument::ResidentPersonalData);
     }
 
     /**

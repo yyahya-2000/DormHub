@@ -12,18 +12,12 @@ use Illuminate\Support\Collection;
  * The one way a notification of FR-34 leaves the application to more than one
  * person.
  *
- * It looks thin because the rule it enforces lives one level down, on the
- * model: `App\Models\User::notify()` is the gate that asks whether the ground
- * for writing to this person still stands. This class exists for the shape
- * most callers of the later increments have — «tell the duty officers on
- * shift», «tell the warden and the security post» — and it exists instead of
- * `Notification::send($recipients, $notification)`, which is the facade's
- * fan-out and goes **around** the model's `notify()` straight to the channel
- * dispatcher. A recipient reached that way would be written to on a consent
- * they had withdrawn, and FR-35's fourth criterion would be false for exactly
- * the routes nobody remembered to check.
- *
- * So: one road in, and it is this one.
+ * It is thin because there is nothing to decide: it walks the recipients and
+ * calls `notify()` on each. It exists for the shape most callers of the later
+ * increments have — «tell the duty officers on shift», «tell the warden and
+ * the security post» — and for `sendOnce()` below, which is the part a caller
+ * would otherwise get wrong: one event must not become two messages because
+ * the warden of a dormitory is also its duty officer.
  */
 final readonly class Notifier
 {

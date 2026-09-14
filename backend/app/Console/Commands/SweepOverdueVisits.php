@@ -101,11 +101,8 @@ final class SweepOverdueVisits extends Command
      * the security officers of that dormitory. `Notifier::sendOnce` is what
      * keeps an officer who is also on another grant from being told twice.
      *
-     * The category rests on no consent (`NotificationCategory::VisitOverdue`),
-     * so neither recipient can be silenced by a withdrawal — clause 2.2 makes
-     * the resident answerable for the departure, and a notice discharging an
-     * obligation under the rules of internal order is owed whatever anybody
-     * has agreed to.
+     * Clause 2.2 makes the resident answerable for the departure, so this is a
+     * notice the dormitory owes rather than one it offers.
      */
     private function announce(Notifier $notifier, GuestVisit $visit): void
     {
