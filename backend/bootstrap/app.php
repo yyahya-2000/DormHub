@@ -3,6 +3,7 @@
 use App\Exceptions\BedAlreadyOccupiedException;
 use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
+use App\Exceptions\ConfirmationWindowClosedException;
 use App\Exceptions\ConsentRequiredException;
 use App\Exceptions\CredentialAlreadySpentException;
 use App\Exceptions\EntryNotPermittedException;
@@ -199,6 +200,22 @@ return Application::configure(basePath: dirname(__DIR__))
          * «already refused» rather than «something went wrong».
          */
         $exceptions->render(fn (IllegalTransitionException $exception) => response()->json([
+            'message' => $exception->getMessage(),
+        ] + $exception->context(), 409));
+
+        /*
+         * FR-39, and the one refusal of the maintenance module a transition
+         * table cannot express. The reopening was offered after the
+         * confirmation window ran out; the state machine still admits
+         * `completed → accepted`, because that is the move FR-39 is about, and
+         * what has run out is the clock rather than the state.
+         *
+         * 409 for the same reason the illegal transition above is: the body is
+         * well formed and the caller is the right person, and the same call a
+         * day earlier would have succeeded. The body carries the window and
+         * the date it closed so the client can say which.
+         */
+        $exceptions->render(fn (ConfirmationWindowClosedException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ] + $exception->context(), 409));
 
