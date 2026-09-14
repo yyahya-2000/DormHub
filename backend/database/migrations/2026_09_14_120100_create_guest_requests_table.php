@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\GuestDocumentType;
 use App\Enums\GuestRequestStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -40,6 +39,20 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /**
+     * The document types this table once knew. Spelled out rather than read
+     * off an enum: the enum was deleted when the register stopped keeping the
+     * guest's papers, and a migration that has already run must still be
+     * replayable from an empty database.
+     */
+    private const DOCUMENT_TYPES = [
+        'internal_passport',
+        'foreign_passport',
+        'residence_permit',
+        'student_card',
+        'driving_licence',
+    ];
+
     public function up(): void
     {
         Schema::create('guest_requests', function (Blueprint $table) {
@@ -108,7 +121,7 @@ return new class extends Migration
 
         DB::statement(
             'ALTER TABLE guest_requests ADD CONSTRAINT guest_requests_doc_type_known'
-            ." CHECK (guest_doc_type IN ('".implode("','", GuestDocumentType::values())."'))"
+            ." CHECK (guest_doc_type IN ('".implode("','", self::DOCUMENT_TYPES)."'))"
         );
 
         /*
