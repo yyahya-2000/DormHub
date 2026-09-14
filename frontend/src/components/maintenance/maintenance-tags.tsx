@@ -69,17 +69,8 @@ export function MaintenanceUrgencyTag({
  * FR-40, second criterion. The flag is configuration and not code: it arrives
  * true or false on the row, measured against a threshold a warden can change
  * without a deployment, and this component draws it and never works it out.
- *
- * The threshold is named beside the mark where the row carries it, because
- * «late» without «after how long» invites the reader to guess a rule.
  */
-export function OverdueTag({
-  afterDays,
-  className,
-}: {
-  afterDays?: number
-  className?: string
-}) {
+export function OverdueTag({ className }: { className?: string }) {
   const { t } = useTranslation()
 
   return (
@@ -88,11 +79,6 @@ export function OverdueTag({
         'inline-block border border-brick/50 bg-brick-wash px-2 py-0.5 font-medium text-brick',
         className,
       )}
-      title={
-        afterDays === undefined
-          ? undefined
-          : t('maintenance.overdueThreshold', { count: afterDays })
-      }
     >
       {t('maintenance.overdue')}
     </span>

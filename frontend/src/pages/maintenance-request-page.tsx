@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { UseMutationResult } from '@tanstack/react-query'
@@ -148,9 +148,7 @@ export function MaintenanceRequestPage() {
             caption={t('maintenance.cardHeading')}
             aside={
               <span className="flex flex-wrap gap-2">
-                {isOverdue(request) ? (
-                  <OverdueTag afterDays={request.overdue_after_days} />
-                ) : null}
+                {isOverdue(request) ? <OverdueTag /> : null}
                 <MaintenanceStatusTag status={request.status} label={request.status_label} />
               </span>
             }
@@ -182,24 +180,10 @@ export function MaintenanceRequestPage() {
               <FieldRow label={t('maintenance.fields.reporter')}>
                 {request.reporter_name ?? t('common.empty')}
               </FieldRow>
-              <FieldRow
-                label={t('maintenance.fields.filed')}
-                note={
-                  request.age_days === undefined
-                    ? undefined
-                    : t('maintenance.ageNote', { count: request.age_days })
-                }
-              >
+              <FieldRow label={t('maintenance.fields.filed')}>
                 {formatters.dateTime(request.created_at)}
               </FieldRow>
-              <FieldRow
-                label={t('maintenance.fields.targetDate')}
-                note={
-                  request.target_date === null || request.target_date === undefined
-                    ? t('maintenance.noTargetYet')
-                    : undefined
-                }
-              >
+              <FieldRow label={t('maintenance.fields.targetDate')}>
                 {request.target_date === null || request.target_date === undefined
                   ? t('common.empty')
                   : formatters.date(request.target_date)}
@@ -207,22 +191,11 @@ export function MaintenanceRequestPage() {
               <FieldRow label={t('maintenance.fields.assignee')}>
                 {request.assignee_name ?? t('maintenance.unassigned')}
               </FieldRow>
-              <FieldRow
-                label={t('maintenance.fields.photos')}
-                note={t('maintenance.photos.storedNote')}
-              >
+              <FieldRow label={t('maintenance.fields.photos')}>
                 {t('maintenance.photos.stored', {
                   count: request.photo_count ?? (request.photo_paths?.length ?? 0),
                 })}
               </FieldRow>
-              {request.reopen_count !== undefined && request.reopen_count > 0 ? (
-                <FieldRow
-                  label={t('maintenance.fields.reopened')}
-                  note={t('maintenance.reopenNote')}
-                >
-                  {t('maintenance.reopenCount', { count: request.reopen_count })}
-                </FieldRow>
-              ) : null}
               {/*
                 FR-39. `closed_at` is written by three different endings and the
                 card must not confuse them. A refusal is not a closure at all —
@@ -261,10 +234,7 @@ export function MaintenanceRequestPage() {
 
           {triages ? <TriagePanel request={request} /> : null}
 
-          <Panel
-            caption={t('maintenance.log.heading')}
-            aside={t('maintenance.log.appendOnly')}
-          >
+          <Panel caption={t('maintenance.log.heading')}>
             <WorkLog entries={request.work_log ?? []} />
           </Panel>
         </>
@@ -294,13 +264,6 @@ function ReporterDecision({ request }: { request: MaintenanceRequest }) {
   return (
     <Panel caption={t('maintenance.reporterHeading')}>
       <div className="grid gap-4 px-4 py-4">
-        <p className="m-0 text-ink">{t('maintenance.reporterLead')}</p>
-        <p className="m-0 text-steel">
-          {t('maintenance.windowOpen', {
-            count: request.confirmation_window_days ?? 0,
-          })}
-        </p>
-
         {confirm.isError ? (
           <RequestRefusal error={confirm.error} vocabulary="maintenance" />
         ) : null}
@@ -308,11 +271,7 @@ function ReporterDecision({ request }: { request: MaintenanceRequest }) {
           <RequestRefusal error={reopen.error} vocabulary="maintenance" />
         ) : null}
 
-        <FormField
-          id="maintenance-reporter-comment"
-          label={t('maintenance.fields.comment')}
-          note={t('maintenance.fields.reporterCommentNote')}
-        >
+        <FormField id="maintenance-reporter-comment" label={t('maintenance.fields.comment')}>
           <textarea
             id="maintenance-reporter-comment"
             className={`${selectClassName} h-24 py-2`}
@@ -387,7 +346,6 @@ function TriagePanel({ request }: { request: MaintenanceRequest }) {
     return (
       <TransitionPanel
         caption={t('maintenance.startHeading')}
-        lead={t('maintenance.startLead')}
         action={t('maintenance.start')}
         fieldId={`start-${request.id}`}
         request={request}
@@ -401,7 +359,6 @@ function TriagePanel({ request }: { request: MaintenanceRequest }) {
     return (
       <TransitionPanel
         caption={t('maintenance.completeHeading')}
-        lead={t('maintenance.completeLead')}
         action={t('maintenance.complete')}
         fieldId={`complete-${request.id}`}
         request={request}
@@ -458,6 +415,7 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
    */
   const staff = useListBuildingUsers<listBuildingUsersResponse, ApiError>(
     request.building_id,
+    { per_page: 100 },
     { query: { retry: false } },
   )
   const people = staff.data?.status === 200 ? staff.data.data.data : null
@@ -495,8 +453,6 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
   return (
     <Panel caption={t('maintenance.triageHeading')}>
       <div className="grid gap-4 px-4 py-4">
-        <p className="m-0 text-ink">{t('maintenance.triageLead')}</p>
-
         {accept.isError ? (
           <RequestRefusal error={accept.error} vocabulary="maintenance" />
         ) : null}
@@ -509,11 +465,10 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
             className="grid gap-3 border-l-4 border-brick bg-brick-wash px-3 py-3"
             onSubmit={sendRejection}
           >
-            <p className="m-0 text-ink">{t('maintenance.reasonRequired')}</p>
             <FormField
               id={`maintenance-reason-${request.id}`}
               label={t('maintenance.fields.reason')}
-              note={t('maintenance.fields.reasonNote')}
+              required
             >
               <textarea
                 id={`maintenance-reason-${request.id}`}
@@ -553,7 +508,7 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
             <FormField
               id={`maintenance-target-${request.id}`}
               label={t('maintenance.fields.targetDate')}
-              note={t('maintenance.fields.targetDateNote')}
+              required
             >
               <Input
                 id={`maintenance-target-${request.id}`}
@@ -568,7 +523,6 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
             <FormField
               id={`maintenance-assignee-${request.id}`}
               label={t('maintenance.fields.assignee')}
-              note={t('maintenance.fields.assigneeNote')}
             >
               <select
                 id={`maintenance-assignee-${request.id}`}
@@ -588,7 +542,6 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
             <FormField
               id={`maintenance-urgency-${request.id}`}
               label={t('maintenance.fields.urgency')}
-              note={t('maintenance.fields.urgencyTriageNote')}
             >
               <select
                 id={`maintenance-urgency-${request.id}`}
@@ -687,7 +640,6 @@ function ending(
 }
 function TransitionPanel<TResponse>({
   caption,
-  lead,
   action,
   fieldId,
   request,
@@ -695,7 +647,6 @@ function TransitionPanel<TResponse>({
   onDone,
 }: {
   caption: string
-  lead: ReactNode
   action: string
   fieldId: string
   request: MaintenanceRequest
@@ -708,8 +659,6 @@ function TransitionPanel<TResponse>({
   return (
     <Panel caption={caption}>
       <div className="grid gap-4 px-4 py-4">
-        <p className="m-0 text-ink">{lead}</p>
-
         {move.isError ? (
           <RequestRefusal error={move.error} vocabulary="maintenance" />
         ) : null}

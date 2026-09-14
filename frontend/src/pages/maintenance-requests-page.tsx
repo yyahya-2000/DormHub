@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { keepPreviousData } from '@tanstack/react-query'
 
 import {
   useFileMaintenanceRequest,
@@ -26,11 +27,14 @@ import {
   OverdueTag,
 } from '@/components/maintenance/maintenance-tags'
 import { PhotoPicker } from '@/components/maintenance/photo-picker'
+import { ScopeTabs, type MaintenanceScope } from '@/components/maintenance/scope-tabs'
 import { Panel } from '@/components/panel'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
+import { lastPageOf, usePagination } from '@/hooks/use-pagination'
 import { useFormatters } from '@/lib/format'
 import {
   MAINTENANCE_CATEGORIES,
@@ -47,23 +51,11 @@ import { useMaintenanceRefresh } from '@/lib/maintenance-cache'
  * resident's own room the request is bound to the room of their active
  * residency record, read from the housing register by the server — a client
  * that could name a room could name somebody else's. The form therefore asks
- * *which kind of place* and not *which place*: the own room, which the register
- * resolves, or a common area, which has no row in the register at all and is
- * named in words. The screen says which room the request will be bound to only
- * after the server has said it, on the card that comes back.
+ * *which kind of place* and not *which place*.
  *
- * **A resident with no active residency record cannot file**, and the answer is
- * 403 rather than 422 — nothing about the body is wrong, and the check is a
- * question put to the register. The form is still drawn for anybody the mirror
- * believes lives here, because the mirror cannot read that register (FR-05):
- * better a refusal with the reason on it than a screen missing without
- * explanation.
- *
- * **The list here takes no parameter naming a person.** The route filters by the
- * identifier of the token, so there is no way to phrase a request for somebody
- * else's defects. The staff queue is a different route, a sub-resource of the
- * building, and it carries filters, an age, an overdue flag and an export —
- * none of which means anything on «my own three requests».
+ * **The list here takes no parameter naming a person.** The route filters by
+ * the identifier of the token, so there is no way to phrase a request for
+ * somebody else's defects.
  */
 
 type ReportFields = {
@@ -86,18 +78,19 @@ export function MaintenanceRequestsPage() {
   const user = session.status === 'authenticated' ? session.user : null
   const buildings = user === null ? [] : maintenanceBuildingsOf(user)
 
+  const [scope, setScope] = useState<MaintenanceScope>('open')
+  const paging = usePagination({ resetKey: scope })
+
   const mine = useListMyMaintenanceRequests<listMyMaintenanceRequestsResponse, ApiError>(
-    undefined,
-    { query: { retry: false } },
+    { scope, ...paging.params },
+    { query: { retry: false, placeholderData: keepPreviousData } },
   )
-  const requests = mine.data?.status === 200 ? mine.data.data.data : null
+  const body = mine.data?.status === 200 ? mine.data.data : null
+  const requests = body?.data ?? null
 
   return (
     <div className="grid grid-cols-1 gap-8">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-semibold text-ink">{t('maintenance.heading')}</h1>
-        <p className="mt-1 text-steel">{t('maintenance.lead')}</p>
-      </div>
+      <h1 className="text-2xl font-semibold text-ink">{t('maintenance.heading')}</h1>
 
       {buildings.length === 0 ? (
         <section className="border border-rule bg-paper-raised px-4 py-6">
@@ -107,14 +100,9 @@ export function MaintenanceRequestsPage() {
         <ReportForm buildings={buildings} />
       )}
 
-      <Panel
-        caption={t('maintenance.mineHeading')}
-        aside={
-          requests !== null
-            ? t('maintenance.mineCount', { count: requests.length })
-            : undefined
-        }
-      >
+      <ScopeTabs scope={scope} onChange={setScope} />
+
+      <Panel caption={t('maintenance.mineHeading')}>
         {mine.isError ? (
           <div className="px-4 py-4">
             <RequestRefusal error={mine.error} vocabulary="maintenance" />
@@ -141,6 +129,13 @@ export function MaintenanceRequestsPage() {
             ))}
           </ul>
         ) : null}
+
+        <Pagination
+          page={paging.page}
+          lastPage={lastPageOf(body?.meta)}
+          onPageChange={paging.setPage}
+          disabled={mine.isFetching}
+        />
       </Panel>
     </div>
   )
@@ -224,16 +219,6 @@ function ReportForm({ buildings }: { buildings: number[] }) {
           <h2 className="m-0 text-lg font-semibold text-ink">
             {t('maintenance.filedTitle', { number: filed.id })}
           </h2>
-          {/*
-            The place as the server resolved it, and the first time the resident
-            sees it. `place` is the register's answer for an own-room request and
-            the typed note for a common area, so one field says both.
-          */}
-          <p className="mt-2 mb-0 text-ink">
-            {t('maintenance.filedBody', {
-              place: filed.place ?? t('common.empty'),
-            })}
-          </p>
           <p className="mt-2 mb-0">
             <Link
               className="font-medium text-prussian underline"
@@ -252,7 +237,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
           ) : null}
 
           {buildings.length > 1 ? (
-            <FormField id="maintenance-building" label={t('maintenance.fields.building')}>
+            <FormField id="maintenance-building" label={t('maintenance.fields.building')} required>
               <select
                 id="maintenance-building"
                 className={selectClassName}
@@ -269,11 +254,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             </FormField>
           ) : null}
 
-          <FormField
-            id="maintenance-category"
-            label={t('maintenance.fields.category')}
-            note={t('maintenance.fields.categoryNote')}
-          >
+          <FormField id="maintenance-category" label={t('maintenance.fields.category')} required>
             <select
               id="maintenance-category"
               className={selectClassName}
@@ -290,15 +271,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             </select>
           </FormField>
 
-          <FormField
-            id="maintenance-location"
-            label={t('maintenance.fields.location')}
-            note={
-              commonArea
-                ? t('maintenance.fields.locationNoteCommon')
-                : t('maintenance.fields.locationNoteOwn')
-            }
-          >
+          <FormField id="maintenance-location" label={t('maintenance.fields.location')} required>
             <select
               id="maintenance-location"
               className={selectClassName}
@@ -320,7 +293,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             <FormField
               id="maintenance-note"
               label={t('maintenance.fields.locationName')}
-              note={t('maintenance.fields.locationNameNote')}
+              required
             >
               <Input
                 id="maintenance-note"
@@ -333,11 +306,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             </FormField>
           ) : null}
 
-          <FormField
-            id="maintenance-title"
-            label={t('maintenance.fields.title')}
-            note={t('maintenance.fields.titleNote')}
-          >
+          <FormField id="maintenance-title" label={t('maintenance.fields.title')}>
             <Input
               id="maintenance-title"
               value={form.title}
@@ -350,7 +319,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
           <FormField
             id="maintenance-description"
             label={t('maintenance.fields.description')}
-            note={t('maintenance.fields.descriptionNote')}
+            required
           >
             <textarea
               id="maintenance-description"
@@ -363,11 +332,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             />
           </FormField>
 
-          <FormField
-            id="maintenance-urgency"
-            label={t('maintenance.fields.urgency')}
-            note={t('maintenance.fields.urgencyNote')}
-          >
+          <FormField id="maintenance-urgency" label={t('maintenance.fields.urgency')} required>
             <select
               id="maintenance-urgency"
               className={selectClassName}
@@ -384,11 +349,7 @@ function ReportForm({ buildings }: { buildings: number[] }) {
             </select>
           </FormField>
 
-          <FormField
-            id="maintenance-photos"
-            label={t('maintenance.fields.photos')}
-            note={t('maintenance.fields.photosNote')}
-          >
+          <FormField id="maintenance-photos" label={t('maintenance.fields.photos')}>
             <PhotoPicker
               id="maintenance-photos"
               value={photos}
@@ -431,13 +392,8 @@ function MyRequestRow({ request }: { request: MaintenanceRequest }) {
           </Link>
         </h3>
         <div className="flex flex-wrap gap-2">
-          {isOverdue(request) ? (
-            <OverdueTag afterDays={request.overdue_after_days} />
-          ) : null}
-          <MaintenanceStatusTag
-            status={request.status}
-            label={request.status_label}
-          />
+          {isOverdue(request) ? <OverdueTag /> : null}
+          <MaintenanceStatusTag status={request.status} label={request.status_label} />
         </div>
       </div>
 
@@ -445,12 +401,7 @@ function MyRequestRow({ request }: { request: MaintenanceRequest }) {
         <dt className="label-caps">{t('maintenance.fields.place')}</dt>
         <dd className="m-0 break-words text-ink">{request.place ?? t('common.empty')}</dd>
         <dt className="label-caps">{t('maintenance.fields.filed')}</dt>
-        <dd className="m-0 text-ink">
-          {formatters.dateTime(request.created_at)}
-          {request.age_days === undefined
-            ? null
-            : ` · ${t('maintenance.ageDays', { count: request.age_days })}`}
-        </dd>
+        <dd className="m-0 text-ink">{formatters.dateTime(request.created_at)}</dd>
         {request.target_date !== null && request.target_date !== undefined ? (
           <>
             <dt className="label-caps">{t('maintenance.fields.targetDate')}</dt>
@@ -461,10 +412,7 @@ function MyRequestRow({ request }: { request: MaintenanceRequest }) {
 
       <div className="flex flex-wrap gap-2">
         {request.urgency !== undefined ? (
-          <MaintenanceUrgencyTag
-            urgency={request.urgency}
-            label={request.urgency_label}
-          />
+          <MaintenanceUrgencyTag urgency={request.urgency} label={request.urgency_label} />
         ) : null}
       </div>
     </article>
