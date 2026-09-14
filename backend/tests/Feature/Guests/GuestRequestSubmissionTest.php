@@ -14,6 +14,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\BuildsAGuestScenario;
 use Tests\TestCase;
@@ -81,6 +82,54 @@ final class GuestRequestSubmissionTest extends TestCase
         foreach (['guest_doc_type', 'guest_doc_number', 'guest_doc_number_masked', 'purpose'] as $gone) {
             $this->assertArrayNotHasKey($gone, $body);
         }
+    }
+
+    /**
+     * The table carries no document of the guest, and the schema says so.
+     *
+     * **The acceptance finding of 15.09.2026, and the reason it is a schema
+     * test rather than another submission test.** Withdrawing FR-23 stopped
+     * the application filling in `guest_doc_type` and the four columns beside
+     * it; the migration that drops them is `2026_09_14_180000`. On a stand
+     * where that migration had not been run the columns were still there and
+     * still NOT NULL, so **every** guest request answered 500 with
+     * `SQLSTATE[23502]` and the module could not be used at all — while the
+     * submission tests, which run against a freshly migrated database, passed
+     * throughout.
+     *
+     * A test of the shape of the table is the one that would have caught it:
+     * it fails wherever the schema and the code disagree, whether the cause is
+     * a column somebody forgot to drop or a migration somebody forgot to run.
+     */
+    public function test_the_register_keeps_no_document_of_the_guest(): void
+    {
+        $withdrawn = [
+            'guest_doc_type',
+            'guest_doc_number',
+            'is_foreign_document',
+            'purpose',
+            'responsible_officer_mark',
+            'responsible_officer_mark_by',
+            'responsible_officer_mark_at',
+        ];
+
+        foreach ($withdrawn as $column) {
+            $this->assertFalse(
+                Schema::hasColumn('guest_requests', $column),
+                sprintf('guest_requests still carries «%s», which nothing fills in any more.', $column),
+            );
+
+            $this->assertFalse(
+                Schema::hasColumn('guest_visits', $column),
+                sprintf('guest_visits carries «%s», which belongs to no requirement of the MVP.', $column),
+            );
+        }
+
+        // And the register still takes a request, which is the half of the
+        // statement a schema assertion cannot make on its own.
+        Sanctum::actingAs($this->resident);
+
+        $this->postJson('/api/v1/guest-requests', $this->payload())->assertStatus(201);
     }
 
     /**
