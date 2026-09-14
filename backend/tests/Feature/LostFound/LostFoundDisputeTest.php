@@ -11,6 +11,7 @@ use App\Enums\RoleCode;
 use App\Models\AuditLog;
 use App\Models\Building;
 use App\Models\LostFoundClaim;
+use App\Models\LostFoundItem;
 use App\Models\User;
 use App\Notifications\LostFoundClaimDecided;
 use App\Notifications\LostFoundClaimFiled;
@@ -63,6 +64,188 @@ final class LostFoundDisputeTest extends TestCase
         CarbonImmutable::setTestNow();
 
         parent::tearDown();
+    }
+
+    /**
+     * FR-26 end to end, by the routes a client actually calls: publication,
+     * claim, refusal, referral, the warden's decision, the return of the
+     * object.
+     *
+     * **The path this test exists for is the one that was broken.** A refusal
+     * returns the find to the published list — FR-26's second criterion — and
+     * the referral of that refusal was leaving the entry there. The warden
+     * then upheld the claim, the person holding the object pressed «returned»,
+     * and the module answered 409: the item table admits no
+     * `published → resolved` edge, deliberately, so FR-26's first criterion in
+     * its second form — closure «on a warden's decision on a referred claim» —
+     * could not be performed at all. The entry's status now follows the
+     * claim's: outstanding again on the referral, out of the feed for the
+     * length of the dispute, closed at the end of it.
+     */
+    public function test_the_dispute_runs_from_the_publication_to_the_return_of_the_object(): void
+    {
+        Notification::fake();
+
+        // 1. The finder publishes.
+        Sanctum::actingAs($this->finder);
+
+        $itemId = $this->postJson('/api/v1/lost-found', $this->publication($this->building))
+            ->assertStatus(201)
+            ->json('data.id');
+
+        $this->assertSame(LostFoundItemStatus::Published, LostFoundItem::query()->findOrFail($itemId)->status);
+
+        // 2. The owner claims it, and the entry leaves the feed.
+        Sanctum::actingAs($this->owner);
+
+        $claimId = $this->postJson('/api/v1/lost-found/'.$itemId.'/claims', $this->claimBody())
+            ->assertStatus(201)
+            ->json('data.id');
+
+        $this->assertSame(LostFoundItemStatus::Claimed, LostFoundItem::query()->findOrFail($itemId)->status);
+
+        // 3. The finder refuses, and FR-26's second criterion puts the entry
+        //    back into the published list — nothing is outstanding on it.
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decline', [
+            'reason' => 'The marks you describe are not the ones on this umbrella.',
+        ])->assertStatus(200)->assertJsonPath('data.status', LostFoundClaimStatus::Declined->value);
+
+        $this->assertSame(LostFoundItemStatus::Published, LostFoundItem::query()->findOrFail($itemId)->status);
+
+        // 4. The owner refers the refusal. The claim is outstanding again, so
+        //    the entry leaves the feed again — which is the fix.
+        Sanctum::actingAs($this->owner);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/referral', [
+            'note' => 'I can describe the inside of the case as well; please look again.',
+        ])->assertStatus(200)->assertJsonPath('data.status', LostFoundClaimStatus::Referred->value);
+
+        $this->assertSame(LostFoundItemStatus::Claimed, LostFoundItem::query()->findOrFail($itemId)->status);
+
+        // And the contract's promise, checked against the feed rather than
+        // against the column: the object is not offered to anybody else while
+        // the warden is looking at it.
+        $this->getJson('/api/v1/lost-found')->assertStatus(200)->assertJsonCount(0, 'data');
+
+        // 5. The warden upholds the claim.
+        Sanctum::actingAs($this->warden);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decision', [
+            'upheld' => true,
+            'handover_point' => 'The warden\'s office, on a weekday morning',
+            'note' => 'The claimant described the inside of the case correctly.',
+        ])->assertStatus(200)->assertJsonPath('data.status', LostFoundClaimStatus::Accepted->value);
+
+        $this->assertSame(LostFoundItemStatus::Claimed, LostFoundItem::query()->findOrFail($itemId)->status);
+
+        // 6. The object changes hands and the person holding it says so. This
+        //    is the call that used to answer 409.
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found/'.$itemId.'/resolve')
+            ->assertStatus(200)
+            ->assertJsonPath('data.status', LostFoundItemStatus::Resolved->value);
+
+        $closed = LostFoundItem::query()->findOrFail($itemId);
+
+        $this->assertSame(LostFoundItemStatus::Resolved, $closed->status);
+        $this->assertNotNull($closed->resolved_at);
+
+        // FR-26, third criterion: after closure the record is gone from the
+        // public list on any filter.
+        Sanctum::actingAs($this->owner);
+
+        $this->getJson('/api/v1/lost-found')->assertStatus(200)->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/lost-found?status=claimed')->assertStatus(200)->assertJsonCount(0, 'data');
+    }
+
+    /**
+     * The other ending of the same path: the warden does not uphold the claim,
+     * and the entry the referral withdrew goes back into the feed.
+     *
+     * The mirror of the test above, and the reason the withdrawal is safe —
+     * every refusal, the warden's included, runs the same question about what
+     * is still outstanding, so the entry cannot be left stranded in `claimed`.
+     */
+    public function test_a_dispute_the_warden_refuses_puts_the_entry_back_into_the_feed(): void
+    {
+        $claim = $this->declinedClaim();
+
+        $item = $claim->item()->firstOrFail();
+
+        // The refusal returned it to the list; the referral takes it out.
+        $this->assertSame(LostFoundItemStatus::Published, $item->fresh()?->status);
+
+        Sanctum::actingAs($this->owner);
+        $this->postJson('/api/v1/lost-found/claims/'.$claim->getKey().'/referral')->assertStatus(200);
+
+        $this->assertSame(LostFoundItemStatus::Claimed, $item->fresh()?->status);
+
+        Sanctum::actingAs($this->warden);
+        $this->postJson('/api/v1/lost-found/claims/'.$claim->getKey().'/decision', [
+            'upheld' => false,
+            'note' => 'Neither description matches the object in the office.',
+        ])->assertStatus(200);
+
+        $this->assertSame(LostFoundItemStatus::Published, $item->fresh()?->status);
+
+        Sanctum::actingAs($this->owner);
+        $this->getJson('/api/v1/lost-found')
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.id', $item->getKey());
+
+        // And nothing has been accepted, so the entry cannot be closed.
+        Sanctum::actingAs($this->finder);
+        $this->postJson('/api/v1/lost-found/'.$item->getKey().'/resolve')->assertStatus(409);
+    }
+
+    /**
+     * A find that has gone home has nothing left to dispute.
+     *
+     * The consequence of the entry's status following the claim's, stated
+     * deliberately rather than discovered: the referral has to take the entry
+     * out of the feed, and `resolved` is final in the item table, so a refusal
+     * referred after somebody else's claim closed the entry is 409. It could
+     * not be anything else that helps — the warden may uphold a claim but the
+     * module has no way to un-return an object, so a referral admitted here
+     * would end in a decision nobody could act on.
+     */
+    public function test_a_refusal_cannot_be_referred_once_the_find_has_gone_home(): void
+    {
+        $refused = $this->declinedClaim();
+
+        $item = $refused->item()->firstOrFail();
+
+        // Somebody else describes it correctly, and the object changes hands.
+        $neighbour = $this->residentOf($this->building, 'neighbour@example.test', '118');
+
+        Sanctum::actingAs($neighbour);
+
+        $rightful = $this->postJson('/api/v1/lost-found/'.$item->getKey().'/claims', $this->claimBody([
+            'message' => 'The chip is on the upper side of the handle, and the tape is red rather than blue.',
+        ]))->assertStatus(201)->json('data.id');
+
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$rightful.'/accept', [
+            'handover_point' => 'Room 412, any evening this week',
+        ])->assertStatus(200);
+
+        $this->postJson('/api/v1/lost-found/'.$item->getKey().'/resolve')->assertStatus(200);
+
+        // And the earlier refusal now goes nowhere.
+        Sanctum::actingAs($this->owner);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$refused->getKey().'/referral')
+            ->assertStatus(409)
+            ->assertJsonPath('status', LostFoundItemStatus::Resolved->value)
+            ->assertJsonPath('attempted_status', LostFoundItemStatus::Claimed->value);
+
+        $this->assertSame(LostFoundClaimStatus::Declined, $refused->fresh()?->status);
+        $this->assertNull($refused->fresh()?->referred_at);
+        $this->assertSame(LostFoundItemStatus::Resolved, $item->fresh()?->status);
     }
 
     /**
@@ -352,17 +535,34 @@ final class LostFoundDisputeTest extends TestCase
     /**
      * A claim the person holding the object has refused, which is the state
      * the referral starts from.
+     *
+     * **Filed and refused through the routes, not written to the table.** The
+     * earlier version of this helper built the row with the factory and forced
+     * the entry to `claimed` by hand, which is a state the application never
+     * produces at this point: a refusal puts the entry back into the feed
+     * (FR-26's second criterion), so the real dispute starts from `published`.
+     * Every assertion about the entry in this file was therefore being made
+     * against a fixture rather than against the module, and the gap that hid
+     * is the one `test_the_dispute_runs_from_the_publication_to_the_return_of_the_object`
+     * now closes.
      */
     private function declinedClaim(): LostFoundClaim
     {
         $item = $this->findOf($this->finder, $this->building);
-        $item->update(['status' => LostFoundItemStatus::Claimed]);
 
-        return LostFoundClaim::factory()
-            ->on($item)
-            ->by($this->owner)
-            ->declined($this->finder, 'The marks you describe are not the ones on this umbrella.')
-            ->create();
+        Sanctum::actingAs($this->owner);
+
+        $claimId = $this->postJson('/api/v1/lost-found/'.$item->getKey().'/claims', $this->claimBody())
+            ->assertStatus(201)
+            ->json('data.id');
+
+        Sanctum::actingAs($this->finder);
+
+        $this->postJson('/api/v1/lost-found/claims/'.$claimId.'/decline', [
+            'reason' => 'The marks you describe are not the ones on this umbrella.',
+        ])->assertStatus(200);
+
+        return LostFoundClaim::query()->findOrFail($claimId);
     }
 
     private function referredClaim(): LostFoundClaim
