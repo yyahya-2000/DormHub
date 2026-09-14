@@ -5,27 +5,25 @@ declare(strict_types=1);
 namespace App\Enums;
 
 /**
- * What an announcement is about (FR-09, FR-11).
+ * The catalogue of announcement subjects the client offers first (FR-09, FR-11).
  *
- * FR-11 asks for a feed «filterable by category», which only means something
- * if the categories are a closed list somebody can draw as a row of tabs. A
- * free-text label would give every warden a vocabulary of his own and the
- * filter would stop being a filter.
+ * **This is a list of suggestions and no longer the vocabulary of the column.**
+ * `announcements.category` is a free string of at most 32 characters, checked
+ * by `StoreAnnouncementRequest` and by nothing else; the CHECK constraint that
+ * used to close the list was dropped by
+ * `2026_09_14_200100_open_the_announcement_category_to_a_free_label`.
  *
- * **The category is not the mandatory flag, and the two must not be merged.**
- * FR-12 speaks of «announcements of category mandatory», and the ER model of
- * §3.4.3 nevertheless carries `category` and `is_mandatory` as separate
- * columns. That is deliberate: the subject of a notice and the obligation to
- * read it vary independently. A water shutoff is `utilities` and is normally
- * mandatory; a fire drill is `safety` and always is; a film evening is
- * `events` and never is. Folding the obligation into the list would mean a
- * warden could not announce a shutoff that nobody has to acknowledge, and the
- * filter of FR-11 would be answering a question about duty rather than about
- * subject.
+ * The reason for the change is the one FR-11's filter actually has. A closed
+ * list keeps two wardens from writing «Ремонт» and «ремонт» and getting two
+ * headings, which is worth something; it also forces every subject the five
+ * cases did not foresee into `general`, which is worth less than nothing,
+ * because a residual heading that collects half the feed is a filter that
+ * filters nothing. Offering the five first and admitting a typed label keeps
+ * most of the agreement and loses none of the subjects.
  *
- * The five are the subjects a warden actually posts, read off the notice
- * boards described in §2.3.2. `general` is the residue and exists so that
- * nothing has to be miscategorised to be published.
+ * The cases are the subjects a warden actually posts, read off the notice
+ * boards described in §2.3.2. `general` is the residue. The list is served to
+ * the client at `GET /announcement-categories`.
  */
 enum AnnouncementCategory: string
 {
@@ -44,6 +42,9 @@ enum AnnouncementCategory: string
     /** Everything that fits none of the four above. */
     case General = 'general';
 
+    /** The longest label the column will hold, and what the request validates. */
+    public const MAX_LENGTH = 32;
+
     public function label(): string
     {
         return match ($this) {
@@ -61,5 +62,32 @@ enum AnnouncementCategory: string
     public static function values(): array
     {
         return array_map(static fn (self $case): string => $case->value, self::cases());
+    }
+
+    /**
+     * The list the client draws the dropdown from before the field is opened
+     * for typing: a stored value and the name beside it, in the order the
+     * cases are declared. Shaped exactly as `Citizenship::options()`, because
+     * `GET /announcement-categories` and `GET /citizenships` are the same kind
+     * of answer and a client that reads one should not have to learn a second
+     * shape for the other.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function options(): array
+    {
+        return array_map(
+            static fn (self $case): array => ['value' => $case->value, 'label' => $case->label()],
+            self::cases(),
+        );
+    }
+
+    /**
+     * The name to show beside a stored category, which for a label somebody
+     * typed is the label itself.
+     */
+    public static function labelFor(string $category): string
+    {
+        return self::tryFrom($category)?->label() ?? $category;
     }
 }

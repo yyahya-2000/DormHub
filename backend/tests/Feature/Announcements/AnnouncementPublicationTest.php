@@ -6,6 +6,7 @@ namespace Tests\Feature\Announcements;
 
 use App\Enums\AnnouncementCategory;
 use App\Enums\AuditAction;
+use App\Enums\ConsentDocument;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\Announcement;
@@ -13,6 +14,7 @@ use App\Models\AuditLog;
 use App\Models\Building;
 use App\Models\User;
 use App\Notifications\AnnouncementPublished;
+use App\Services\ConsentRegistry;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -55,6 +57,8 @@ final class AnnouncementPublicationTest extends TestCase
 
     private User $residentOfA;
 
+    private User $neighbourOfA;
+
     private User $residentOfB;
 
     protected function setUp(): void
@@ -74,6 +78,7 @@ final class AnnouncementPublicationTest extends TestCase
         $this->administrator = $this->staff(RoleCode::Administrator, null, 'admin@example.test');
 
         $this->residentOfA = $this->residentOf($this->blockA, 'resident.a@example.test', '305');
+        $this->neighbourOfA = $this->residentOf($this->blockA, 'neighbour.a@example.test', '306');
         $this->residentOfB = $this->residentOf($this->blockB, 'resident.b@example.test', '412');
     }
 
@@ -98,8 +103,7 @@ final class AnnouncementPublicationTest extends TestCase
                 ->assertJsonPath('data.building_id', $this->blockA->getKey())
                 ->assertJsonPath('data.author_id', $author->getKey())
                 ->assertJsonPath('data.category', AnnouncementCategory::Utilities->value)
-                ->assertJsonPath('data.addresses_every_building', false)
-                ->assertJsonPath('data.is_mandatory', false);
+                ->assertJsonPath('data.addresses_every_building', false);
         }
 
         $this->assertSame(2, Announcement::query()->count());
@@ -156,6 +160,92 @@ final class AnnouncementPublicationTest extends TestCase
             ->assertStatus(201)
             ->assertJsonPath('data.building_id', null)
             ->assertJsonPath('data.addresses_every_building', true);
+    }
+
+    /**
+     * The other half of the administrator's addressee, and the half a form
+     * that only ever offered him «all dormitories» would have hidden: he picks
+     * one block by naming it, in either direction, and `building_id` is the
+     * only field that says so.
+     */
+    public function test_the_administrator_addresses_one_dormitory_by_naming_it(): void
+    {
+        Sanctum::actingAs($this->administrator);
+
+        foreach ([$this->blockA, $this->blockB] as $building) {
+            $this->postJson('/api/v1/announcements', $this->payload([
+                'building_id' => $building->getKey(),
+                'title' => 'Cold water off in '.$building->name,
+            ]))
+                ->assertStatus(201)
+                ->assertJsonPath('data.building_id', $building->getKey())
+                ->assertJsonPath('data.addresses_every_building', false);
+        }
+
+        // And the notice reaches only the dormitory it names.
+        Sanctum::actingAs($this->residentOfB);
+
+        $this->getJson('/api/v1/announcements')
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.building_id', $this->blockB->getKey());
+    }
+
+    /**
+     * FR-09's category, which is now a label and not a choice from a list.
+     *
+     * Two properties of it are asserted together because they are one rule:
+     * anything up to 32 characters is accepted and comes back as it was
+     * stored, and the bound is enforced rather than truncated — the column is
+     * `VARCHAR(32)` and a request the database would cut short is refused
+     * before it reaches the database.
+     */
+    public function test_the_category_is_a_free_label_bounded_at_thirty_two_characters(): void
+    {
+        Sanctum::actingAs($this->wardenOfA);
+
+        $this->postJson('/api/v1/announcements', $this->payload([
+            'category' => '  Водоснабжение  ',
+        ]))
+            ->assertStatus(201)
+            // Trimmed, so that a stray space does not make a second heading.
+            ->assertJsonPath('data.category', 'Водоснабжение')
+            ->assertJsonPath('data.category_label', 'Водоснабжение');
+
+        $this->postJson('/api/v1/announcements', $this->payload([
+            'category' => str_repeat('a', 33),
+        ]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('category');
+
+        $this->postJson('/api/v1/announcements', $this->payload(['category' => '']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('category');
+
+        $this->assertSame(1, Announcement::query()->count());
+    }
+
+    /**
+     * The catalogue the form offers before it lets the author type one of
+     * their own, shaped as `GET /citizenships` is.
+     */
+    public function test_the_catalogue_of_categories_is_offered_to_the_client(): void
+    {
+        Sanctum::actingAs($this->wardenOfA);
+
+        $response = $this->getJson('/api/v1/announcement-categories')
+            ->assertStatus(200)
+            ->assertJsonPath('max_length', 32);
+
+        $this->assertSame(
+            AnnouncementCategory::values(),
+            $response->json('data.*.value'),
+        );
+
+        $this->assertSame(
+            AnnouncementCategory::General->label(),
+            $response->json('data.4.label'),
+        );
     }
 
     /**
@@ -293,7 +383,6 @@ final class AnnouncementPublicationTest extends TestCase
 
         $this->postJson('/api/v1/announcements', $this->payload([
             'building_id' => null,
-            'is_mandatory' => true,
         ]))->assertStatus(201);
 
         $entry = AuditLog::query()
@@ -302,7 +391,6 @@ final class AnnouncementPublicationTest extends TestCase
 
         $this->assertSame($this->administrator->getKey(), $entry->user_id);
         $this->assertNull($entry->payload['building_id']);
-        $this->assertTrue($entry->payload['is_mandatory']);
         $this->assertSame(AnnouncementCategory::Utilities->value, $entry->payload['category']);
     }
 
@@ -311,21 +399,20 @@ final class AnnouncementPublicationTest extends TestCase
      * module.
      *
      * The fan-out runs through `User::notify()` — the one gate — so a resident
-     * who has switched the routine category off receives nothing, and the same
-     * resident still receives an announcement they are required to
-     * acknowledge. That asymmetry is the reason there are two notification
-     * categories rather than one: the mandatory half rests on clause 4.2.7 of
-     * the rules of internal order, and a switch must not be able to hollow out
-     * the evidence FR-12 is for.
+     * who has withdrawn the consent the announcement category rests on
+     * receives nothing, and a resident of another dormitory hears about none
+     * of it either. There is one announcement category now: the second,
+     * unsilenceable one existed only for the notices FR-12 required a resident
+     * to acknowledge.
      */
-    public function test_the_audience_is_notified_and_only_the_routine_category_can_be_silenced(): void
+    public function test_the_audience_is_notified_and_a_withdrawal_silences_it(): void
     {
         Notification::fake();
 
-        $this->residentOfA->notificationPreferences()->create([
-            'category' => NotificationCategory::Announcement->value,
-            'enabled' => false,
-        ]);
+        app(ConsentRegistry::class)->withdraw(
+            $this->residentOfA,
+            ConsentDocument::ResidentPersonalData,
+        );
 
         Sanctum::actingAs($this->wardenOfA);
 
@@ -333,19 +420,14 @@ final class AnnouncementPublicationTest extends TestCase
 
         Notification::assertNotSentTo($this->residentOfA, AnnouncementPublished::class);
 
-        $this->postJson('/api/v1/announcements', $this->payload([
-            'title' => 'Fire drill on the twenty-second',
-            'category' => AnnouncementCategory::Safety->value,
-            'is_mandatory' => true,
-        ]))->assertStatus(201);
-
+        // The neighbour, whose consent stands, is told.
         Notification::assertSentTo(
-            $this->residentOfA,
-            fn (AnnouncementPublished $notification): bool => $notification->mandatory
-                && $notification->category() === NotificationCategory::MandatoryAnnouncement,
+            $this->neighbourOfA,
+            fn (AnnouncementPublished $notification): bool => $notification->category()
+                === NotificationCategory::Announcement,
         );
 
-        // And nobody outside the audience hears about either of them.
+        // And nobody outside the audience hears about it.
         Notification::assertNotSentTo($this->residentOfB, AnnouncementPublished::class);
     }
 
@@ -360,7 +442,6 @@ final class AnnouncementPublicationTest extends TestCase
             'title' => 'Cold water off on Wednesday, 09:00 to 17:00',
             'body' => 'The riser on floors three to five is being replaced.',
             'category' => AnnouncementCategory::Utilities->value,
-            'is_mandatory' => false,
         ], $overrides);
     }
 }

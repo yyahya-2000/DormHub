@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\AnnouncementCategory;
 use App\Models\Announcement;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * One announcement as the resident reads it in the feed (FR-09, FR-11, FR-12).
+ * One announcement as the resident reads it in the feed (FR-09, FR-11).
  *
- * **`is_unread` is computed and not stored.** The feed left-joins
- * `announcement_acks` on the reader and selects `acknowledged_at` as an alias
- * (§4.6.1), so the mark FR-11 asks for travels with the row. On an
- * announcement fetched without that join the attribute is absent, and the
- * resource says «unread» rather than inventing a date — a response shaped from
- * a row that was never asked the question must not claim it was answered.
+ * **`category` is whatever was stored and `category_label` is what to show.**
+ * The column is a free label of at most 32 characters, so the label is the
+ * name from `AnnouncementCategory` when the value is one of the catalogue's
+ * and the value itself when the author typed their own. A client that simply
+ * draws `category_label` is right in both cases.
  *
  * **`building_id` null is shown as an audience and not as a missing field.**
  * The client draws «all dormitories», which is what NULL means (§3.4.2), so
@@ -32,7 +32,7 @@ final class AnnouncementResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $acknowledgedAt = $this->resource->getAttribute('acknowledged_at');
+        $category = (string) $this->category;
 
         return [
             'id' => $this->id,
@@ -46,21 +46,13 @@ final class AnnouncementResource extends JsonResource
 
             'title' => $this->title,
             'body' => $this->body,
-            'category' => $this->category->value,
-            'category_label' => $this->category->label(),
-
-            // FR-12 turns on this flag: a mandatory announcement is one the
-            // reader is asked to acknowledge and one the warden may then run a
-            // readers report on.
-            'is_mandatory' => (bool) $this->is_mandatory,
+            'category' => $category,
+            'category_label' => AnnouncementCategory::labelFor($category),
 
             'published_at' => $this->published_at?->toIso8601String(),
             // Null: the announcement does not expire. Otherwise this is the
             // moment it leaves the feed for the archive (FR-09).
             'expires_at' => $this->expires_at?->toIso8601String(),
-
-            'acknowledged_at' => $acknowledgedAt?->toIso8601String(),
-            'is_unread' => $acknowledgedAt === null,
 
             'created_at' => $this->created_at?->toIso8601String(),
         ];

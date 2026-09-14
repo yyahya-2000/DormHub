@@ -14,6 +14,11 @@ use Illuminate\Foundation\Http\FormRequest;
  * which one person could ask for another's feed: the audience is computed from
  * the token's own grants, exactly as the notification routes compute their
  * scope, so the filter that keeps the boundary is not one a caller can reach.
+ *
+ * **The category filter matches a stored label and no longer a closed list.**
+ * A heading the register does not hold is now an empty feed rather than a 422:
+ * the column admits anything up to 32 characters, so there is no such thing as
+ * an unknown category to refuse — only one nobody has posted under yet.
  */
 final class ListAnnouncementsRequest extends FormRequest
 {
@@ -28,7 +33,7 @@ final class ListAnnouncementsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'category' => ['sometimes', 'string', 'in:'.implode(',', AnnouncementCategory::values())],
+            'category' => ['sometimes', 'string', 'max:'.AnnouncementCategory::MAX_LENGTH],
             /*
              * FR-09's «moves to the archive», asked for explicitly. The
              * archive is not a table anybody moves rows into — it is the other
@@ -40,11 +45,17 @@ final class ListAnnouncementsRequest extends FormRequest
         ];
     }
 
-    public function category(): ?AnnouncementCategory
+    public function category(): ?string
     {
         $category = $this->query('category');
 
-        return is_string($category) ? AnnouncementCategory::tryFrom($category) : null;
+        if (! is_string($category)) {
+            return null;
+        }
+
+        $category = trim($category);
+
+        return $category === '' ? null : $category;
     }
 
     public function archived(): bool
