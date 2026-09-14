@@ -5,7 +5,8 @@ info:
   version: 0.1.0
   summary: >-
     Role model, authentication, audit log, the housing register, staff, the
-    personal account, and the guest module
+    personal account, and the guest, announcement, maintenance and
+    lost-and-found modules
   description: |
     The implemented part of the REST contract of §3.3.6, in five slices. The
     first is FR-07 (role model), FR-08 (authentication and sessions) and FR-33
@@ -37,10 +38,25 @@ info:
     passes: FR-39's automatic closure of a request nobody confirmed, and FR-40's
     nightly flagging of the requests past the configured threshold.
 
-    The remaining routes of §3.3.6 — lost-and-found — belong to a later increment
-    and are deliberately absent from this document rather than described as
-    unimplemented: the file is the input for client generation, and a generated
-    client should not carry methods that answer 404.
+    The eighth is the lost-and-found module of increment 4: FR-24 (publishing a
+    find), FR-25 (the list of finds for one's own dormitory) and FR-26 (the
+    claim, the holder's answer, the referral of a disagreement and the warden's
+    decision). Two properties of it are worth reading before the paths, because
+    both are refusals rather than features. **Publication passes through no
+    staff approval step** — the module is peer-to-peer, the finder keeps the
+    object and decides on claims, and a moderation queue would cost the module
+    its only advantage over a message board. And **the find card carries
+    neither the name nor the contacts of the person who published it** — the
+    exchange runs through claims inside the system, otherwise a dormitory's
+    feed becomes an open list of residents' telephone numbers. A member of
+    staff enters in two cases only: an object deposited with the administration
+    for safekeeping, and a claim the two sides could not settle.
+
+    FR-27, the control of the six-month retention period of Civil Code art. 228
+    cl. 1, is Could priority and outside the MVP. There is no route for it and
+    no scheduled pass behind one; the two dates it will be counted from —
+    `happened_on` and `declared_on` — are in the model all the same, because a
+    declaration date cannot be retrofitted onto records created without one.
 
     Nine properties of the contract are worth reading before the paths.
 
@@ -170,6 +186,14 @@ tags:
       resident who reported it is the only person who can close it. A request
       nobody confirms closes itself after a configurable window, marked as
       automatically closed rather than as confirmed.
+  - name: Lost and found
+    description: >-
+      FR-24, FR-25 and FR-26. Peer-to-peer by default: the resident who found
+      something publishes it with no approval step in the way, keeps it, and
+      accepts or declines the claims made against it. The card shows neither the
+      name nor the contacts of whoever published it. A member of staff enters in
+      two cases only — an object deposited with the administration for
+      safekeeping, and a claim the two sides could not settle.
   - name: Audit
     description: FR-33. Append-only, readable by the administrator alone.
 
@@ -3012,6 +3036,597 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /lost-found:
+    get:
+      tags: [Lost and found]
+      summary: The finds of the caller's own dormitory
+      description: |
+        FR-25. **The route takes no building parameter**, and that absence is
+        the first acceptance criterion: the dormitories are computed from the
+        grants of the token, so there is no way to phrase a request for another
+        one. The boundary is a missing parameter rather than a policy somebody
+        has to remember to call — the same arrangement the announcement feed
+        and the notification routes are built on. The administrator's grant
+        names no dormitory and is therefore not confined to one.
+
+        **The default is `published` alone, which is what «the published list»
+        means.** FR-26's second criterion — «a declined claim returns the find
+        to the published list» — only says something if a claimed entry is not
+        in that list, so it is not; a claimed entry is read by asking for it
+        with `status=claimed`.
+
+        **`resolved` is not a value this route takes.** FR-26's third criterion
+        is «after closure the record disappears from the public list», so the
+        value is refused as a 422 naming the field rather than accepted and
+        answered with an empty page a client would have to interpret. The
+        person who published an entry still reads it at
+        `GET /lost-found/{id}` after it has closed: it has left the feed and
+        not the application.
+
+        A resident whose residency record has ended stops reading that
+        dormitory's feed on the stated date (FR-05).
+      operationId: listLostFound
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: >-
+            `published` (the default) or `claimed`. Any other value is 422,
+            including `resolved`.
+          schema:
+            type: string
+            enum: [published, claimed]
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LostFoundItemKind'
+        - name: search
+          in: query
+          required: false
+          description: A substring of the object or of the place it turned up.
+          schema: { type: string, maxLength: 120 }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: >-
+            One page of the feed, newest find first — by the day of the finding
+            rather than by the day of the entry, which is the date the reader is
+            shown.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LostFoundItem'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Lost and found]
+      summary: Publish a find
+      description: |
+        FR-24, `multipart/form-data` because of the photograph.
+
+        **The entry is in the feed the moment this answers 201.** FR-24's
+        fourth criterion is «publication passes through no staff approval
+        step», and §2.5.4 gives the reason: routing every find through a member
+        of staff would put back the delay the module exists to remove. There is
+        no moderation state in the vocabulary for an entry to wait in, and no
+        field on this form by which one could be asked for.
+
+        **The reporter is never in the body.** The record is bound to the
+        publishing account as the finder (FR-24, second criterion); a client
+        that could name a reporter could publish in somebody else's name. The
+        identifier is not in the response either — see `LostFoundItem`.
+
+        **`custody` says which of §2.5.4's two paths the find took.** The
+        default is `finder`: the object stays with the resident who found it,
+        who hands it over in person and decides on claims. `administration` is
+        an object handed in at the security post or deposited for safekeeping —
+        the case Civil Code art. 227 cl. 1 para. 2 addresses, in which the
+        person representing the owner of the premises acquires the rights and
+        bears the duties of the finder — and only an account holding the
+        capability in that dormitory may assert it. A resident sending it gets
+        403: nothing about the value is malformed, and it is the account that
+        may not make that statement about the university.
+
+        **`declared_on` is offered and required on neither path.** It is the day
+        the find was declared to the police or to a local self-government body
+        (art. 227 cl. 2), null while nothing has been declared. The six-month
+        period of art. 228 cl. 1 runs from it and never from the registration.
+        FR-27 counts those days and is outside the MVP; the field is here
+        because a declaration date cannot be retrofitted onto records created
+        without one.
+
+        Who may publish: anybody whose residency record in that dormitory is
+        current, and any account holding the safekeeping capability there. A
+        resident of block A publishing into block B gets 403.
+      operationId: publishLostFoundItem
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LostFoundItemInput'
+            encoding:
+              photo:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '201':
+          description: >-
+            Published, in status `published`, and in the feed of that dormitory
+            straight away. Recorded in the audit log as
+            `lost_found_item.published`, with the path the find took and the
+            declaration date in the payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundItem'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: >-
+            The account neither lives in that dormitory nor holds the
+            safekeeping capability there — or it sent `custody=administration`
+            without holding that capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/{lostFoundItem}:
+    get:
+      tags: [Lost and found]
+      summary: One find, without the person who published it
+      description: |
+        FR-25, second criterion: **the card displays neither the name nor the
+        contacts of the registering user**. There is no `reporter_id`, no
+        `reporter_name`, no telephone and no e-mail anywhere in this response.
+
+        The omission lives in the API Resource and not in the query. The
+        service needs `reporter_id` to answer «whose decision is this» and the
+        policy needs it to let the publisher read their own closed entry, so a
+        query that did not select it would break the module; a Resource that
+        never serialises the column cannot leak it through a later change to
+        the query. §3.5.3 gives the reason it matters: a feed read by several
+        hundred people with a name beside every entry is a directory of who
+        found what and lives where.
+
+        Who reads it: anybody attached to that dormitory, the person who
+        published it — in any state, including after closure — and anybody
+        whose claim is on it.
+
+        `claim_count` says how many claims the entry carries and never what any
+        of them says; the marks are read at
+        `GET /lost-found/{id}/claims` by the three people party to them.
+      operationId: showLostFoundItem
+      parameters:
+        - $ref: '#/components/parameters/LostFoundItemId'
+      responses:
+        '200':
+          description: The card, with no registering user in it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundItem'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /lost-found/{lostFoundItem}/claims:
+    get:
+      tags: [Lost and found]
+      summary: The claims made against one find
+      description: |
+        FR-26. The person who has to answer them — the finder on the ordinary
+        path, the staff of the dormitory for an object deposited with them —
+        and the warden or manager who may be asked to review a refusal. Another
+        resident of the same dormitory gets 403: the identifying marks are the
+        one thing that makes a claim checkable, and a list of them readable by
+        everybody would tell the next claimant exactly what to write.
+      operationId: listLostFoundClaims
+      parameters:
+        - $ref: '#/components/parameters/LostFoundItemId'
+      responses:
+        '200':
+          description: The claims of this entry, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Lost and found]
+      summary: Claim a find
+      description: |
+        FR-26: «the resident submits a claim describing identifying features».
+
+        **A claim on one's own entry is 422 and not 403**, and the difference is
+        deliberate: the account may claim any number of other finds, so nothing
+        about its rights is in question — what is wrong is the object the
+        request names, and the body says which. A 403 would also be written to
+        the audit log as an access denial, which this is not. A notice of a
+        loss is refused the same way: a claim is «that is mine», and the author
+        of a loss is holding nothing.
+
+        One person holds one outstanding claim per entry. A second attempt
+        while the first is unanswered is 422; a claim that has been settled
+        does not block a later one.
+
+        The first claim moves the entry from `published` to `claimed`; a second
+        leaves it where it is, because several claims may coexist (§3.5.5). A
+        claim on an entry that has gone home is 403.
+
+        The person holding the object is notified, with the marks and without
+        the claimant's contacts.
+      operationId: claimLostFoundItem
+      parameters:
+        - $ref: '#/components/parameters/LostFoundItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LostFoundClaimInput'
+      responses:
+        '201':
+          description: Filed, in status `new`, and the entry is now `claimed`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The entry has been closed as returned since the page was drawn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/claims/{lostFoundClaim}/accept:
+    post:
+      tags: [Lost and found]
+      summary: Accept a claim, naming where the object changes hands
+      description: |
+        FR-26, §2.4.4, first scenario. **The person holding the object, and
+        nobody else** — the finder on the ordinary path, the staff of the
+        dormitory for an object deposited with them. Not another resident, not
+        the claimant, and not the warden, whose one way into a claim is a
+        referral. §2.5.4: the module is peer-to-peer and a member of staff
+        deciding an ordinary claim would be the moderation step it was built to
+        do without.
+
+        «The claimant is notified with the handover point» — so
+        `handover_point` is required, is a required argument of the service
+        behind it, and is a CHECK constraint on the table. It is the one piece
+        of location this module ever publishes, and it is a place the person
+        holding the object chose.
+
+        **The entry is not closed by this.** It stays `claimed` until the object
+        actually changes hands and somebody says so at
+        `POST /lost-found/{id}/resolve`. An acceptance that closed the entry
+        would be the system recording a handover that had not happened.
+      operationId: acceptLostFoundClaim
+      parameters:
+        - $ref: '#/components/parameters/LostFoundClaimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LostFoundAcceptanceInput'
+      responses:
+        '200':
+          description: Accepted, with the handover point on the claim and in the notification.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The claim has already been answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/claims/{lostFoundClaim}/decline:
+    post:
+      tags: [Lost and found]
+      summary: Decline a claim
+      description: |
+        FR-26, §2.4.4, second scenario. The same circle as the acceptance: the
+        person holding the object.
+
+        «The find returns to the published list» — and §3.5.5 says when: «the
+        entry returns to Published if none of them is confirmed». So with two
+        claims on the table the first refusal changes nothing about the entry
+        and the second puts it back.
+
+        **The reason is optional, and that is a decision.** FR-37 makes a
+        refusal without a reason impossible for a maintenance request; FR-26
+        makes no such demand of a claim, and a required field here would be a
+        rule the requirement does not carry, put in front of a resident who is
+        doing the dormitory a favour by answering at all. What the requirement
+        puts in its place is the offer below.
+
+        The claimant is notified, and `may_be_referred` comes back true: FR-26
+        gives them the option of putting the refusal to the warden.
+      operationId: declineLostFoundClaim
+      parameters:
+        - $ref: '#/components/parameters/LostFoundClaimId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LostFoundDeclineInput'
+      responses:
+        '200':
+          description: >-
+            Declined. The entry is back in the published list if nothing else is
+            outstanding on it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The claim has already been answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/claims/{lostFoundClaim}/referral:
+    post:
+      tags: [Lost and found]
+      summary: Refer a refused claim to the warden
+      description: |
+        FR-26: «a claim the two sides cannot settle is referred to the warden,
+        who decides». **The claimant's own route**, and the first of §2.5.4's
+        two occasions for a member of staff. Nobody refers on somebody else's
+        behalf — not the person whose refusal is under review, and not the
+        warden, who would then be handing themselves a case.
+
+        A claim may be referred once. A second attempt is 409, and so is a
+        referral of a claim nobody has answered: the warden gets «a claim the
+        two sides cannot settle», and two sides that have not spoken have not
+        failed to settle anything.
+
+        The entry stays out of the feed while the disagreement is open: a
+        referred claim is outstanding, and offering the object to somebody else
+        while the warden is still looking at it is what the status prevents.
+      operationId: referLostFoundClaim
+      parameters:
+        - $ref: '#/components/parameters/LostFoundClaimId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LostFoundReferralInput'
+      responses:
+        '200':
+          description: Referred. The warden and the manager of that dormitory are notified.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            The claim is not one that can go to the warden: it has not been
+            refused, or it has already been referred once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/claims/{lostFoundClaim}/decision:
+    post:
+      tags: [Lost and found]
+      summary: The warden's decision on a referred claim
+      description: |
+        FR-26, first criterion: «a warden's decision on a referred claim». The
+        second of §2.5.4's two occasions for a member of staff, and the only
+        decision in the module taken over the head of the person holding the
+        object.
+
+        **The warden or the manager of that dormitory, and nobody else** — not
+        the security officer, who keeps objects and settles nothing; not the
+        administrator, for the reason they are outside `guest-requests/approve`;
+        not the person whose refusal is under review; not the claimant.
+
+        **Only a referred claim.** A claim nobody referred is 409, not 403: the
+        caller holds the capability perfectly well and what is missing is the
+        referral that would have put the decision in their hands. There is no
+        route by which a member of staff reaches an ordinary claim at all.
+
+        **`upheld` is a boolean and not two routes**, which is where this module
+        departs from the shape the guest and maintenance modules use. There,
+        approve and reject are separate acts with separate bodies; here it is
+        one act — the warden read the claim, the refusal and the marks, and says
+        which of the two residents is right — and the body is the same either
+        way. `note` is required in both directions, because a decision that
+        overrides a person entitled to make it is one nobody can answer if
+        nobody explained it.
+
+        **Upholding does not close the entry either.** It makes the claim
+        `accepted`, which is the ground FR-26's first criterion admits for a
+        closure; the closure itself is still the act of the person handing the
+        object over.
+      operationId: decideLostFoundClaim
+      parameters:
+        - $ref: '#/components/parameters/LostFoundClaimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LostFoundDecisionInput'
+      responses:
+        '200':
+          description: >-
+            Decided, and in the audit log as
+            `lost_found_claim.decided_by_staff`. Both the claimant and the
+            person holding the object are told.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundClaim'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The claim was never referred, or it has already been decided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllegalTransitionError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /lost-found/{lostFoundItem}/resolve:
+    post:
+      tags: [Lost and found]
+      summary: Mark a find returned to its owner
+      description: |
+        FR-26, §2.4.4: «when the finder then marks the item returned, the status
+        becomes resolved with the time and the record no longer appears in the
+        public list of available finds».
+
+        **The «only» of FR-26's first criterion lives here.** A find closes as
+        returned on a claim the finder accepted or on a warden's decision on a
+        referred one, and both of those arrive at one place — a claim in status
+        `accepted`. An entry nobody has claimed, or one whose claims are all
+        outstanding, is 409 with the number of claims still waiting.
+
+        The route belongs to the person holding the object and to nobody wider.
+        A warden who upheld a referred claim has made the closure *admissible*
+        and has not performed it: the closure records that an object changed
+        hands, and the only person who can know that it did is the person who
+        handed it over.
+      operationId: resolveLostFoundItem
+      parameters:
+        - $ref: '#/components/parameters/LostFoundItemId'
+      responses:
+        '200':
+          description: >-
+            Closed, with `resolved_at` set, and out of the public list. In the
+            audit log as `lost_found_item.resolved`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LostFoundItem'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            No claim on the entry has been accepted, so there is no ground on
+            which FR-26 admits the closure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoAcceptedClaimError'
+
+
 components:
 
   securitySchemes:
@@ -3078,6 +3693,20 @@ components:
       name: maintenanceRequest
       in: path
       required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    LostFoundItemId:
+      name: lostFoundItem
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    LostFoundClaimId:
+      name: lostFoundClaim
+      in: path
+      required: true
+      description: >-
+        The claim identifier alone: it is enough to find the entry, and a path
+        that repeated the entry too would invite a client to send a pair that
+        does not match.
       schema: { type: integer, format: int64, minimum: 1 }
     GuestVisitId:
       name: guestVisit
@@ -4867,6 +5496,347 @@ components:
         maintenance_request_id: { type: integer, format: int64 }
         confirmation_window_days: { type: integer }
         window_closed_on: { type: [string, 'null'], format: date }
+
+    LostFoundItemKind:
+      type: string
+      description: |
+        `LOST_FOUND_ITEM.kind` of the ER model: «lost or found». One table and
+        two directions of the same notice, because a find and a loss share
+        every attribute the model lists and differ in one thing only — which
+        side of the exchange is holding the object.
+
+        Only a `found` entry admits a claim. A claim is the sentence «that is
+        mine», and there is nothing to say it about a notice whose author has
+        lost something and is holding nothing.
+      enum: [found, lost]
+
+    LostFoundCustody:
+      type: string
+      description: |
+        Who is physically holding the object: the one column that records which
+        of §2.5.4's two paths a find took.
+
+        `finder` is the default and is the module's ordinary path — the object
+        stays with the resident who found it, who publishes it, hands it over
+        in person and decides on claims. No member of staff is involved.
+
+        `administration` is an object handed in at the security post or
+        deposited for safekeeping. That is the case Civil Code art. 227 cl. 1
+        para. 2 addresses: a thing found on premises and handed to the person
+        representing the owner of those premises, who thereby acquires the
+        rights and bears the duties of the finder. On the default path no
+        hand-over within the meaning of that paragraph takes place, and nothing
+        in the provision requires one; the system records which path a find
+        took rather than imposing one.
+
+        The practical consequence is the one FR-26 needs: claims on an entry
+        are answered by whoever is holding the object.
+      enum: [finder, administration]
+
+    LostFoundItemStatus:
+      type: string
+      description: |
+        The three states of §3.5.5's diagram the MVP reaches.
+
+        §3.5.5 draws seven. `draft` belongs to a publication flow §2.5.4
+        refuses — «publication passes through no staff approval step» — so
+        there is nothing for an entry to wait in. `archived` is the ninety-day
+        and thirty-day passes, whose intervals that section itself calls
+        configuration subject to agreement with the campus directorate.
+        `withdrawn` and `hidden` are the author's retraction and the warden's
+        removal of an improper entry, and none of FR-24, FR-25 or FR-26 asks
+        for either. A state no route reaches would make this enumeration
+        describe a system that does not exist.
+
+        `published` is the public list and `claimed` is not, which is what
+        makes FR-26's «a declined claim returns the find to the published list»
+        say something. `resolved` is outside the feed altogether, on any
+        filter, which is FR-26's third criterion.
+      enum: [published, claimed, resolved]
+
+    LostFoundClaimStatus:
+      type: string
+      description: |
+        `LOST_FOUND_CLAIM.status` of the ER model — «new accepted declined» —
+        plus the one state FR-26 adds to it.
+
+        `referred` is the requirement's own word: «a claim the two sides cannot
+        settle is referred to the warden, who decides». A referral is neither an
+        acceptance nor a refusal and neither is it a fresh claim — the person
+        holding the object has already answered, and what is outstanding is a
+        disagreement. Folding it back into `new` would lose the fact the warden
+        needs, that somebody has already said no.
+
+        The ending of a referred claim is one of the two the model already has:
+        the warden upholds it and the claim is `accepted`, or the warden does
+        not and it is `declined`. `decided_by` is what tells a claim the finder
+        accepted from a claim the warden did.
+      enum: [new, accepted, declined, referred]
+
+    LostFoundItem:
+      type: object
+      description: |
+        One find as the dormitory reads it.
+
+        **There is no `reporter_id` here, no `reporter_name`, no telephone and
+        no e-mail**, and the omission is FR-25's second acceptance criterion:
+        «the find card displays neither the name nor the contacts of the
+        registering user». The exchange runs through claims inside the system,
+        because a feed read by several hundred people with a name beside every
+        entry is a directory of who found what and lives where (§3.5.3).
+
+        `happened_on` and `declared_on` are two dates that must not be confused
+        (§3.4.2). The first is the day the object was found; the second is the
+        day the find was declared to the police or to a local self-government
+        body, null while nothing has been declared. The six-month period of
+        Civil Code art. 228 cl. 1 runs from the second and never from
+        `created_at`. FR-27 counts it and is outside the MVP.
+
+        `photo_path` is a path in the object store and not a URL: a signed URL
+        expires, so one embedded in a list is stale by the time somebody
+        scrolls to it. The path is meaningless without the store's credentials,
+        which is what makes it safe to serialise.
+
+        `claim_count` says how many claims the entry carries and never what any
+        of them says. `can_claim` is the three facts a claim would be refused on
+        — it is not the reader's own entry, it is a find rather than a loss, and
+        it has not gone home — so a client draws the button from the same facts
+        the form would refuse it on rather than offering one that answers 422.
+      required: [id, building_id, kind, title, place, happened_on, status]
+      properties:
+        id: { type: integer, format: int64 }
+        building_id: { type: integer, format: int64 }
+        building_name: { type: string }
+        kind:
+          $ref: '#/components/schemas/LostFoundItemKind'
+        kind_label: { type: string }
+        custody:
+          $ref: '#/components/schemas/LostFoundCustody'
+        custody_label: { type: string }
+        title:
+          type: string
+          description: >-
+            FR-24's «category», in the shape a dormitory uses it — the short
+            line naming the object.
+        description: { type: [string, 'null'] }
+        place:
+          type: string
+          description: Where it turned up, in words. The register holds rooms, not landings.
+        happened_on:
+          type: string
+          format: date
+          description: The day of the finding, which is not the day of the entry.
+        declared_on:
+          type: [string, 'null']
+          format: date
+          description: >-
+            The day the find was declared to the police or to a local
+            self-government body (Civil Code art. 227 cl. 2). Null while nothing
+            has been declared, in which case no period has begun.
+        photo_path: { type: [string, 'null'] }
+        has_photograph: { type: boolean }
+        status:
+          $ref: '#/components/schemas/LostFoundItemStatus'
+        status_label: { type: string }
+        resolved_at: { type: [string, 'null'], format: date-time }
+        claim_count: { type: integer, minimum: 0 }
+        can_claim:
+          type: [boolean, 'null']
+          description: Whether the reading account is in a position to claim this entry at all.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    LostFoundClaim:
+      type: object
+      description: |
+        One claim as the three people party to it read it: the claimant,
+        whoever is holding the object, and the warden on a referral.
+
+        **The claimant's name is here and the entry's author's is not**, and the
+        asymmetry is deliberate (§3.5.3). A claim is read by three people
+        arranging a handover, and the person handing an umbrella over has to
+        know who to hand it to; the find card is read by the whole dormitory,
+        which is why it carries nobody at all. No contacts travel in either
+        direction — the exchange meets at the handover point, which is the one
+        piece of location this module publishes and is a place the person
+        holding the object chose.
+
+        `may_be_referred` is the offer of §2.4.4 — «the claimant is offered the
+        option of referring the decision to the warden» — as a flag rather than
+        something a client infers from a status. It goes false once the
+        referral has been made.
+      required: [id, lost_found_item_id, claimant_id, message, status]
+      properties:
+        id: { type: integer, format: int64 }
+        lost_found_item_id: { type: integer, format: int64 }
+        claimant_id: { type: integer, format: int64 }
+        claimant_name: { type: string }
+        message:
+          type: string
+          description: >-
+            FR-26's «identifying features» — the substance of the claim, and the
+            only thing the holder judges it on.
+        status:
+          $ref: '#/components/schemas/LostFoundClaimStatus'
+        status_label: { type: string }
+        handover_point:
+          type: [string, 'null']
+          description: >-
+            Where the object changes hands. Null until somebody accepts the
+            claim, and required from the moment they do.
+        decided_by:
+          type: [integer, 'null']
+          format: int64
+          description: >-
+            Whoever answered it. FR-26's first criterion turns on this: a claim
+            the finder accepted and a claim the warden decided both end at
+            `accepted`, and only this tells them apart.
+        decided_by_name: { type: string }
+        decided_at: { type: [string, 'null'], format: date-time }
+        decision_note: { type: [string, 'null'] }
+        referred_at: { type: [string, 'null'], format: date-time }
+        may_be_referred: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    LostFoundItemInput:
+      type: object
+      description: |
+        FR-24's publication form, `multipart/form-data`.
+
+        There is no `status` field and no `reporter_id` field, and neither is an
+        omission: publication passes through no approval step, so there is no
+        state to ask for, and the record is bound to the publishing account, so
+        there is nobody to name.
+      required: [building_id, title, place, happened_on]
+      properties:
+        building_id: { type: integer, format: int64 }
+        title:
+          type: string
+          minLength: 3
+          maxLength: 255
+          description: >-
+            FR-24's «category», in the shape a dormitory uses it — the short
+            line naming the object.
+        description: { type: string, maxLength: 2000 }
+        place:
+          type: string
+          minLength: 3
+          maxLength: 255
+        happened_on:
+          type: string
+          format: date
+          description: >-
+            The day of the finding. Not later than today; nothing refuses an old
+            one, because somebody clearing a desk drawer in December may well be
+            publishing what they picked up in September.
+        declared_on:
+          type: string
+          format: date
+          description: >-
+            The day the find was declared to the police or to a local
+            self-government body. Optional on both paths and required on
+            neither: art. 227 cl. 2 puts the duty on the finder where the
+            entitled person is unknown, and whether the university files such
+            declarations is the university's to settle. Not before
+            `happened_on`, and not in the future.
+        kind:
+          $ref: '#/components/schemas/LostFoundItemKind'
+        custody:
+          $ref: '#/components/schemas/LostFoundCustody'
+        photo:
+          type: string
+          format: binary
+          description: >-
+            FR-24, third criterion: optional, and at most one. Validated for
+            type and size; the stored name is generated and never the client's.
+
+    LostFoundClaimInput:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 10
+          maxLength: 2000
+          description: >-
+            FR-26's identifying features. The floor is real: a claim that says
+            «it's mine» gives the person holding the object nothing to judge,
+            and the whole peer-to-peer arrangement of §2.5.4 rests on their
+            refusals being answerable.
+
+    LostFoundAcceptanceInput:
+      type: object
+      required: [handover_point]
+      properties:
+        handover_point:
+          type: string
+          minLength: 3
+          maxLength: 255
+          description: >-
+            Where the owner collects it. §2.4.4: «the claimant is notified with
+            the handover point».
+        note: { type: string, maxLength: 1000 }
+
+    LostFoundDeclineInput:
+      type: object
+      description: >-
+        FR-26 asks for no reason on a refusal, so none is required. The claimant
+        is told either way, and the offer of a referral is what the requirement
+        puts in its place.
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    LostFoundReferralInput:
+      type: object
+      description: >-
+        The referral is the claimant repeating a claim the warden can read in
+        full on the row, so a second statement of it is a courtesy.
+      properties:
+        note: { type: string, maxLength: 1000 }
+
+    LostFoundDecisionInput:
+      type: object
+      description: >-
+        One act and not two routes: the warden read the claim, the refusal and
+        the marks, and says which of the two residents is right.
+      required: [upheld, note]
+      properties:
+        upheld:
+          type: boolean
+          description: True upholds the claim; false leaves the refusal standing.
+        note:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          description: >-
+            Required in both directions. A decision that overrides a person
+            entitled to make it is one nobody can answer if nobody explained it.
+        handover_point:
+          type: string
+          minLength: 3
+          maxLength: 255
+          description: Required when `upheld` is true, for the reason the acceptance requires it.
+
+    NoAcceptedClaimError:
+      type: object
+      description: |
+        FR-26's «only», and the one refusal of this module a transition table
+        cannot express. The entry is `claimed` and `claimed → resolved` is a
+        move the table admits — correctly, because that is the move FR-26 is
+        about. What is missing is a row in another table: no claim on the entry
+        has been accepted.
+
+        409 rather than 422: the body is well formed and the caller is the
+        person holding the object, and the same call after an acceptance would
+        succeed.
+      required: [message]
+      properties:
+        message: { type: string }
+        lost_found_item_id: { type: integer, format: int64 }
+        outstanding_claims:
+          type: integer
+          minimum: 0
+          description: How many claims on the entry are still waiting for an answer.
 
     Error:
       type: object
