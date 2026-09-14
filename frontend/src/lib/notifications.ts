@@ -23,7 +23,6 @@ export const NotificationType = {
   guestRequestDecided: 'GuestRequestDecided',
   guestVisitOverdue: 'GuestVisitOverdue',
   maintenanceStatusChanged: 'MaintenanceRequestStatusChanged',
-  documentAwaitingSignature: 'DocumentAwaitingSignature',
   /*
    * The two of the lost-and-found module, and between them they carry the whole
    * of the module the screens cannot show. A claimant never reads the claims on

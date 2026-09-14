@@ -160,20 +160,6 @@ export function useNotificationMessage(notification: Notification): Notification
     if (note !== null) {
       details.push(t('notifications.comment', { comment: note }))
     }
-  } else if (notification.type === NotificationType.documentAwaitingSignature) {
-    const title = textOf(payload, 'title')
-    headline =
-      title === null
-        ? t('notificationCategory.document_signature.label')
-        : t('notifications.documentAwaiting', { title })
-    const dueAt = textOf(payload, 'due_at')
-    if (dueAt !== null) {
-      details.push(t('notifications.documentDue', { date: formatters.dateTime(dueAt) }))
-    }
-    const revision = textOf(payload, 'document_revision')
-    if (revision !== null) {
-      details.push(t('notifications.documentRevision', { revision }))
-    }
   }
 
   return { headline, details }
