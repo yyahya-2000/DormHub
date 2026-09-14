@@ -3483,9 +3483,14 @@ paths:
         two sides cannot settle», and two sides that have not spoken have not
         failed to settle anything.
 
-        The entry stays out of the feed while the disagreement is open: a
-        referred claim is outstanding, and offering the object to somebody else
-        while the warden is still looking at it is what the status prevents.
+        **The referral moves the entry back to `claimed`.** The refusal that
+        has to precede it already returned the find to the published list —
+        FR-26's second criterion — and the referral makes that claim
+        outstanding again, so the entry leaves the feed for the length of the
+        disagreement: offering the object to somebody else while the warden is
+        still looking at it is what the status prevents. The entry stays in
+        `claimed` if the warden upholds the claim, for the holder to close, and
+        returns to `published` if the warden does not.
       operationId: referLostFoundClaim
       parameters:
         - $ref: '#/components/parameters/LostFoundClaimId'
@@ -3515,7 +3520,11 @@ paths:
         '409':
           description: >-
             The claim is not one that can go to the warden: it has not been
-            refused, or it has already been referred once.
+            refused, or it has already been referred once, or the find has
+            already gone home on somebody else's claim — a closed entry cannot
+            be taken out of the feed again, and there is nothing left to
+            dispute. In that last case `status` and `attempted_status` carry
+            the entry's states (`resolved`, `claimed`) rather than the claim's.
           content:
             application/json:
               schema:
@@ -3857,6 +3866,15 @@ components:
         - maintenance_request.overdue
         - maintenance_request.reopening_refused
         - maintenance_queue.exported
+        - announcement.published
+        - announcement.readers_viewed
+        - lost_found_item.published
+        - lost_found_claim.filed
+        - lost_found_claim.accepted
+        - lost_found_claim.declined
+        - lost_found_claim.referred
+        - lost_found_claim.decided_by_staff
+        - lost_found_item.resolved
 
     AuditResult:
       type: string
@@ -4449,6 +4467,16 @@ components:
         rules of internal order and cannot be switched off, while a routine one
         rests on nothing but convenience and can.
 
+        `lost_found_claim` is the whole of FR-26's exchange in one category:
+        somebody has claimed a find, a claim has been accepted with a handover
+        point, one has been declined, one has been referred to the warden, or
+        the warden has decided it. The obvious split — one category towards the
+        holder and another towards the claimant — would have put two switches
+        on the same conversation, and a resident who silenced one half would be
+        left holding an object nobody came for. Optional, and the one category
+        whose messages name another resident: no telephone number, no address
+        and no e-mail travels in either direction.
+
         Four of them are mandatory and cannot be switched off — see
         `NotificationSetting.mandatory` for the ground the line is drawn on.
       enum:
@@ -4459,6 +4487,7 @@ components:
         - document_signature
         - announcement
         - mandatory_announcement
+        - lost_found_claim
 
     Notification:
       type: object
