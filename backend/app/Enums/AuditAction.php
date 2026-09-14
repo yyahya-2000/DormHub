@@ -33,7 +33,6 @@ enum AuditAction: string
     // because it records an attempt.
     case BuildingCreated = 'building.created';
     case BuildingUpdated = 'building.updated';
-    case BuildingArchived = 'building.archived';
     case BuildingDeleted = 'building.deleted';
     case BuildingDeletionBlocked = 'building.deletion_blocked';
 
@@ -63,25 +62,16 @@ enum AuditAction: string
     case StaffRevoked = 'staff.revoked';
 
     // FR-42. An account handed to an incoming resident, and the moment that
-    // resident replaced the one-time credential with a password of their own.
+    // resident replaced the password the office gave them with one of their
+    // own.
+    //
+    // The account entry says that an account was issued, by whom, in which
+    // dormitory and with which role. It does not say what the password was:
+    // the log is read by people who have no business signing in as a resident,
+    // and the generated password exists in readable form only in the body of
+    // the response that created the account.
     case ResidentAccountIssued = 'resident.account_issued';
     case PasswordSet = 'auth.password_set';
-
-    // FR-42, the credential rather than the account.
-    //
-    // Two events and not one, because they commit at different moments and
-    // can fail independently. The account is written inside a transaction; the
-    // credential is handed to the queue after that transaction has committed,
-    // since a worker that reached the row before the commit would find no such
-    // user. The first version of this recorded «delivered to: email» inside
-    // the transaction, which meant a queue that refused the job left the log
-    // asserting a delivery that never happened — the one claim an audit log
-    // may not make. This entry is written after the dispatch returns, and
-    // never before.
-    //
-    // `reissue` tells the first code from a replacement, so the log shows how
-    // many codes an account was sent and by whom.
-    case ResidentCredentialIssued = 'resident.credential_issued';
 
     // FR-35. Consent to the processing of personal data, given and withdrawn.
     //
@@ -148,16 +138,11 @@ enum AuditAction: string
     // and never twice for the same visit.
     case GuestVisitOverdue = 'guest_visit.overdue';
 
-    // FR-21. The register is read, exported, and corrected — and a correction
-    // is a new row here rather than an edit there, because the visit itself is
+    // FR-21. The register is read and corrected — and a correction is a new
+    // row here rather than an edit there, because the visit itself is
     // immutable (NFR-14).
     case VisitRegisterViewed = 'visit_register.viewed';
-    case VisitRegisterExported = 'visit_register.exported';
     case GuestVisitCorrected = 'guest_visit.corrected';
-
-    // NFR-06. The document number is stored encrypted and shown masked; asking
-    // for it in full is a separate act and is recorded as one.
-    case GuestDocumentNumberViewed = 'guest_request.document_viewed';
 
     /*
      * FR-37 … FR-40. The maintenance module, and a deliberately short list.
@@ -187,9 +172,6 @@ enum AuditAction: string
     // has run out, recorded outside the transaction it refuses — a refusal
     // written inside one is carried away by the rollback.
     case MaintenanceReopeningRefused = 'maintenance_request.reopening_refused';
-
-    // FR-40, third criterion: the queue exported over a period.
-    case MaintenanceQueueExported = 'maintenance_queue.exported';
 
     // FR-09. What was announced, to which dormitory, by whom and until when.
     // A mandatory announcement is the ground a disciplinary conversation later

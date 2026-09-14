@@ -93,6 +93,26 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Housing register (FR-01 … FR-03)
+    |---------------------------------------------------------------------------
+    |
+    | A dormitory of several hundred rooms and as many residents is more than
+    | one screen, so the room register and the roll of a building are read a
+    | page at a time. `per_page` on the request overrides the default, up to the
+    | ceiling below.
+    |
+    */
+
+    'housing' => [
+
+        'page_size' => (int) env('HOUSING_PAGE_SIZE', 20),
+
+        'max_page_size' => (int) env('HOUSING_MAX_PAGE_SIZE', 100),
+
+    ],
+
+    /*
+    |---------------------------------------------------------------------------
     | Notifications (FR-34, NFR-02)
     |---------------------------------------------------------------------------
     */
@@ -206,12 +226,14 @@ return [
         'photo_directory' => env('MAINTENANCE_PHOTO_DIRECTORY', 'maintenance'),
 
         /*
-        | FR-40. The page a queue or a period export is read in. A dormitory
-        | over an academic year accumulates thousands of requests, and a client
-        | that asked for all of them at once would get a timeout instead of an
-        | answer — the same argument the visitor register makes.
+        | FR-40. The page the queue and the archive behind it are read in, and
+        | the default when the client names none. A dormitory over an academic
+        | year accumulates thousands of requests, and a client that asked for
+        | all of them at once would get a timeout instead of an answer. A
+        | client may ask for a different page, up to
+        | `MaintenanceQueue::MAX_PAGE_SIZE`.
         */
-        'queue_page_size' => (int) env('MAINTENANCE_QUEUE_PAGE_SIZE', 50),
+        'queue_page_size' => (int) env('MAINTENANCE_QUEUE_PAGE_SIZE', 20),
 
     ],
 
@@ -329,33 +351,15 @@ return [
         'daily_quota_per_building' => (int) env('GUESTS_DAILY_QUOTA_PER_BUILDING', 60),
 
         /*
-        | FR-23, first criterion: «attaches the warning about the procedure in
-        | force at the university».
-        |
-        | The text is configuration because the procedure is the university's
-        | and not the program's, and because §2.7.4 leaves open a question the
-        | legal service has to answer — whether a dormitory counts as an
-        | accommodation facility under art. 20 part 3 of Federal Law
-        | No. 109-FZ, which is the difference between one working day and
-        | seven. Both deadlines are named and neither is asserted.
+        | The page a list of guest requests and the visitor register are read
+        | in. The register of a dormitory over an academic year is tens of
+        | thousands of rows, and a client that asked for all of them at once
+        | would get a timeout instead of an answer. `per_page` on the request
+        | overrides it, up to a hundred.
         */
-        'foreign_document_warning' => env('GUESTS_FOREIGN_WARNING', <<<'TEXT'
-            This guest presents a foreign document. A visit that ends the same day creates no place of
-            stay: art. 2 cl. 4 of Federal Law No. 109-FZ requires premises the person regularly uses
-            for sleep and rest. An overnight stay is a different matter — the arrival notification is
-            the receiving party's duty under art. 20 part 2, within seven working days, or one working
-            day if the dormitory falls within the class of accommodation facilities of art. 20 part 3.
-            The system does not submit that notification. Before approving an interval that runs past
-            midnight, obtain the mark of the officer responsible for migration registration.
-            TEXT),
+        'page_size' => (int) env('GUESTS_PAGE_SIZE', 20),
 
-        /*
-        | FR-21. The page a period export is read in. The register of a
-        | dormitory over an academic year is tens of thousands of rows, and a
-        | client that asked for all of them at once would get a timeout instead
-        | of an answer.
-        */
-        'register_page_size' => (int) env('GUESTS_REGISTER_PAGE_SIZE', 100),
+        'max_page_size' => (int) env('GUESTS_MAX_PAGE_SIZE', 100),
 
     ],
 

@@ -5,19 +5,15 @@ use App\Exceptions\BedNotAssignableException;
 use App\Exceptions\CapacityExceededException;
 use App\Exceptions\ConfirmationWindowClosedException;
 use App\Exceptions\ConsentRequiredException;
-use App\Exceptions\CredentialAlreadySpentException;
 use App\Exceptions\EntryNotPermittedException;
 use App\Exceptions\GuestQuotaExceededException;
 use App\Exceptions\IllegalTransitionException;
 use App\Exceptions\InvalidCredentialsException;
-use App\Exceptions\InvalidPasswordTokenException;
 use App\Exceptions\LoginLockedException;
 use App\Exceptions\MandatoryNotificationCategoryException;
 use App\Exceptions\NoAcceptedClaimException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
-use App\Exceptions\ResidentOfAnotherDormitoryException;
-use App\Exceptions\ResponsibleOfficerMarkRequiredException;
 use App\Exceptions\VisitAlreadyClosedException;
 use App\Http\Resources\ResidencyResource;
 use App\Services\AccessDenialRecorder;
@@ -82,37 +78,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 app(AccessDenialRecorder::class)->record($request, $exception);
             }
         });
-
-        /*
-         * FR-42: the one-time credential did not resolve — no such address, or
-         * a token that is spent, expired or invented. 422 rather than 401: the
-         * caller is not claiming a session, they are presenting a code, and the
-         * code is the thing the request got wrong. The message says nothing
-         * about which of the four causes it was (see the exception).
-         */
-        $exceptions->render(fn (InvalidPasswordTokenException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ], 422));
-
-        /*
-         * FR-42, the re-issue of a one-time code. Two refusals, and the
-         * difference between them is the difference between «not here» and
-         * «not now».
-         *
-         * 404: the account is not a resident of the dormitory in the path, so
-         * inside the scope the caller works in there is nothing to act on.
-         *
-         * 409: the account already carries a password of its own, and sending
-         * it a fresh code would be a password reset in the hands of a member of
-         * staff. See the exception.
-         */
-        $exceptions->render(fn (ResidentOfAnotherDormitoryException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ], 404));
-
-        $exceptions->render(fn (CredentialAlreadySpentException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ], 409));
 
         /*
          * FR-01, second criterion: the deletion is blocked and the reason is
@@ -246,15 +211,6 @@ return Application::configure(basePath: dirname(__DIR__))
          * the dormitory's sixtieth.
          */
         $exceptions->render(fn (GuestQuotaExceededException $exception) => response()->json([
-            'message' => $exception->getMessage(),
-        ] + $exception->context(), 422));
-
-        /*
-         * FR-23, second criterion. 422 rather than 409: the same call with the
-         * responsible officer's mark attached succeeds, so what is wrong is
-         * the request and not the state of the world.
-         */
-        $exceptions->render(fn (ResponsibleOfficerMarkRequiredException $exception) => response()->json([
             'message' => $exception->getMessage(),
         ] + $exception->context(), 422));
 
