@@ -146,5 +146,11 @@ export interface BuildingInput {
   visiting_from?: string;
   visiting_to?: string;
   curfew_at?: string;
+  /**
+     * FR-16, first criterion. Hours of notice required before a visit may begin; zero means none. The cap is a month, past which the setting stops being a notice period and becomes a refusal to admit guests.
+     * @minimum 0
+     * @maximum 720
+     */
+  guest_lead_time_hours?: number;
   is_active?: boolean;
 }

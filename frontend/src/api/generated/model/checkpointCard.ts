@@ -131,22 +131,36 @@ import type { CheckpointCardVisit } from './checkpointCardVisit';
 import type { GuestRequestStatus } from './guestRequestStatus';
 
 /**
- * FR-18's five fields — guest, inviting resident, room, departure deadline, status — with the verdict on admission beside them.
+ * FR-18's five fields — guest, inviting resident, room, departure
+ * deadline, status — with the verdict on admission beside them.
+ *
+ * **A card does not always name anybody.** A withdrawn, refused or
+ * expired request still answers to its access code, deliberately: a guest
+ * who turns up anyway is told the visit was cancelled rather than that no
+ * such code exists. But there is then no visit about to be recorded and
+ * therefore no ground for showing the guest's name, the host's name or
+ * the host's room (§2.7.1, NFR-06). `disclosed` is false on such a card
+ * and `guest`, `inviting_resident`, `room`, `due_at`,
+ * `permitted_interval` and `access_code` are all null; `status`,
+ * `status_label` and `admission` still say what the officer has to tell
+ * the person at the desk.
  */
 export interface CheckpointCard {
-  guest_request_id?: number;
+  guest_request_id: number;
+  /** Whether this card names anybody. False for a request that can no longer lead to an entry and never led to one. */
+  disclosed: boolean;
   access_code?: string | null;
   guest?: CheckpointCardGuest;
   inviting_resident?: CheckpointCardInvitingResident;
-  /** Null when the housing register holds no bed for the host — an account issued before a place was assigned. Shown as absent rather than guessed at. */
+  /** Null when the housing register holds no bed for the host — an account issued before a place was assigned — and on a card that names nobody. Shown as absent rather than guessed at. */
   room?: string | null;
-  due_at?: string;
-  permitted_interval?: string;
-  status?: GuestRequestStatus;
-  status_label?: string;
+  due_at?: string | null;
+  permitted_interval?: string | null;
+  status: GuestRequestStatus;
+  status_label: string;
   visit?: CheckpointCardVisit;
   /** Whether the guest has consented at this post. False means the entry cannot yet be written (§2.7.1). */
   consent_on_record?: boolean;
-  admission?: CheckpointCardAdmission;
-  checked_at?: string;
+  admission: CheckpointCardAdmission;
+  checked_at: string;
 }

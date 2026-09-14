@@ -132,4 +132,4 @@ export type CheckpointCardGuest = {
   document_type_label?: string;
   document_number_masked?: string;
   is_foreign_document?: boolean;
-};
+} | null;

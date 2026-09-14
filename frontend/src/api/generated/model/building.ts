@@ -135,5 +135,11 @@ export interface Building {
   visiting_from?: string;
   visiting_to?: string;
   curfew_at?: string;
+  /**
+     * FR-16, first criterion: the notice this dormitory wants before a guest arrives. Zero — the default — means none, which is what the HSE rules of internal order say; clause 2.2 fixes the hours and is silent about how far ahead a resident must ask.
+     * @minimum 0
+     * @maximum 720
+     */
+  guest_lead_time_hours?: number;
   is_active: boolean;
 }

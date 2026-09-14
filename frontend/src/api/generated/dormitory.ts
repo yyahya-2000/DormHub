@@ -265,6 +265,7 @@ import type {
   ValidationError,
   ValidationFailedResponse,
   VerifyGuestAtCheckpoint200,
+  VerifyGuestAtCheckpoint404,
   VisitAlreadyClosedError,
   WithdrawConsent200
 } from './model';
@@ -5931,7 +5932,7 @@ export type verifyGuestAtCheckpointResponse403 = {
 }
 
 export type verifyGuestAtCheckpointResponse404 = {
-  data: Error
+  data: VerifyGuestAtCheckpoint404
   status: 404
 }
 
@@ -6012,7 +6013,7 @@ return apiFetch<verifyGuestAtCheckpointResponse>(getVerifyGuestAtCheckpointUrl()
 
 export const getVerifyGuestAtCheckpointMutationKey = () => ['verifyGuestAtCheckpoint'] as const;
 
-export const getVerifyGuestAtCheckpointMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | Error | ValidationFailedResponse,
+export const getVerifyGuestAtCheckpointMutationOptions = <TError = UnauthenticatedResponse | ForbiddenResponse | VerifyGuestAtCheckpoint404 | ValidationFailedResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyGuestAtCheckpoint>>, TError,VerifyGuestAtCheckpointMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof verifyGuestAtCheckpoint>>, TError,VerifyGuestAtCheckpointMutationVariables, TContext> => {
 
@@ -6041,13 +6042,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type VerifyGuestAtCheckpointMutationResult = NonNullable<Awaited<ReturnType<typeof verifyGuestAtCheckpoint>>>
     export type VerifyGuestAtCheckpointMutationBody = CheckpointSearchInput
-    export type VerifyGuestAtCheckpointMutationError = UnauthenticatedResponse | ForbiddenResponse | Error | ValidationFailedResponse
+    export type VerifyGuestAtCheckpointMutationError = UnauthenticatedResponse | ForbiddenResponse | VerifyGuestAtCheckpoint404 | ValidationFailedResponse
     export type VerifyGuestAtCheckpointMutationVariables = {data: CheckpointSearchInput}
 
     /**
  * @summary Find a guest at the security post
  */
-export const useVerifyGuestAtCheckpoint = <TError = UnauthenticatedResponse | ForbiddenResponse | Error | ValidationFailedResponse,
+export const useVerifyGuestAtCheckpoint = <TError = UnauthenticatedResponse | ForbiddenResponse | VerifyGuestAtCheckpoint404 | ValidationFailedResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyGuestAtCheckpoint>>, TError,VerifyGuestAtCheckpointMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof verifyGuestAtCheckpoint>>,

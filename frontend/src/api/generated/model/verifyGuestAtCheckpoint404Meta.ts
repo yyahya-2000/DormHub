@@ -124,64 +124,9 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { VerifyGuestAtCheckpoint404MetaMatches } from './verifyGuestAtCheckpoint404MetaMatches';
 
-export type AuditAction = typeof AuditAction[keyof typeof AuditAction];
-
-
-export const AuditAction = {
-  authlogin_succeeded: 'auth.login_succeeded',
-  authlogin_failed: 'auth.login_failed',
-  authlogin_locked: 'auth.login_locked',
-  authlogin_blocked: 'auth.login_blocked',
-  authlogout_succeeded: 'auth.logout_succeeded',
-  accessdenied: 'access.denied',
-  buildingviewed: 'building.viewed',
-  buildingusers_viewed: 'building.users_viewed',
-  audit_logviewed: 'audit_log.viewed',
-  buildingcreated: 'building.created',
-  buildingupdated: 'building.updated',
-  buildingarchived: 'building.archived',
-  buildingdeleted: 'building.deleted',
-  buildingdeletion_blocked: 'building.deletion_blocked',
-  buildingrooms_viewed: 'building.rooms_viewed',
-  roomcreated: 'room.created',
-  roomupdated: 'room.updated',
-  roomupdate_refused: 'room.update_refused',
-  bedcreated: 'bed.created',
-  bedcreation_refused: 'bed.creation_refused',
-  residencyassigned: 'residency.assigned',
-  residencyassignment_refused: 'residency.assignment_refused',
-  residencyterminated: 'residency.terminated',
-  residentcard_viewed: 'resident.card_viewed',
-  staffappointed: 'staff.appointed',
-  staffrevoked: 'staff.revoked',
-  residentaccount_issued: 'resident.account_issued',
-  residentcredential_issued: 'resident.credential_issued',
-  authpassword_set: 'auth.password_set',
-  consentgranted: 'consent.granted',
-  consentwithdrawn: 'consent.withdrawn',
-  guest_requestsubmitted: 'guest_request.submitted',
-  guest_requestapproved: 'guest_request.approved',
-  guest_requestrejected: 'guest_request.rejected',
-  guest_requestcancelled: 'guest_request.cancelled',
-  guest_requestexpired: 'guest_request.expired',
-  guest_requestdecision_refused: 'guest_request.decision_refused',
-  guest_requestdecision_not_delivered: 'guest_request.decision_not_delivered',
-  guest_requestdocument_viewed: 'guest_request.document_viewed',
-  checkpointguest_verified: 'checkpoint.guest_verified',
-  checkpointentry_recorded: 'checkpoint.entry_recorded',
-  checkpointentry_refused: 'checkpoint.entry_refused',
-  checkpointadmitted_on_decision: 'checkpoint.admitted_on_decision',
-  checkpointexit_recorded: 'checkpoint.exit_recorded',
-  guest_visitoverdue: 'guest_visit.overdue',
-  guest_visitcorrected: 'guest_visit.corrected',
-  visit_registerviewed: 'visit_register.viewed',
-  visit_registerexported: 'visit_register.exported',
-  maintenance_requestaccepted: 'maintenance_request.accepted',
-  maintenance_requestrejected: 'maintenance_request.rejected',
-  maintenance_requestreopened: 'maintenance_request.reopened',
-  maintenance_requestauto_closed: 'maintenance_request.auto_closed',
-  maintenance_requestoverdue: 'maintenance_request.overdue',
-  maintenance_requestreopening_refused: 'maintenance_request.reopening_refused',
-  maintenance_queueexported: 'maintenance_queue.exported',
-} as const;
+export type VerifyGuestAtCheckpoint404Meta = {
+  matches?: VerifyGuestAtCheckpoint404MetaMatches;
+  read_only?: boolean;
+};

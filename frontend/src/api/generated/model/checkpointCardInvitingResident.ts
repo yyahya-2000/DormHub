@@ -128,4 +128,4 @@
 export type CheckpointCardInvitingResident = {
   id?: number | null;
   full_name?: string | null;
-};
+} | null;
