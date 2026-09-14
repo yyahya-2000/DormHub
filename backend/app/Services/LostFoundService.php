@@ -303,11 +303,25 @@ final readonly class LostFoundService
      * who decides».
      *
      * The claimant's own act, and the first of §2.5.4's two occasions for a
-     * member of staff. It moves the claim and never the entry: the entry is
-     * already out of the feed while the disagreement is open, because a
-     * referred claim is outstanding — offering the object to somebody else
-     * while the warden is still looking at it is precisely what the status is
-     * for.
+     * member of staff.
+     *
+     * **It moves the entry as well as the claim, and that is the correction of
+     * an earlier reading of this method.** The refusal that has to precede a
+     * referral already put the entry back into the feed — `decline()` asks
+     * `restoreTheEntryIfNothingIsOutstanding()` and, with the only claim
+     * refused, nothing was outstanding. The referral makes that claim
+     * outstanding again, so the entry leaves the feed again: offering the
+     * object to somebody else while the warden is still looking at it is
+     * precisely what `claimed` is for, and an entry left in `published`
+     * through the whole dispute could not be closed at the end of it —
+     * `resolve()` admits no `published → resolved` edge, and FR-26's closure
+     * on «a warden's decision on a referred claim» was unreachable.
+     *
+     * The entry's status follows the claim's in both directions: the warden
+     * upholding the claim leaves the entry in `claimed` for the holder to
+     * close, and the warden refusing it sends the entry back to the feed
+     * through the same `restoreTheEntryIfNothingIsOutstanding()` every refusal
+     * goes through.
      *
      * **A claim may be referred once.** A second attempt raises the same
      * exception with the same message — «a claim that is “Declined” cannot
@@ -343,13 +357,19 @@ final readonly class LostFoundService
         }
 
         [$referred, $entry] = DB::transaction(function () use ($claimant, $claim, $note, $ipAddress): array {
+            // §3.3.4: the entry first and the claim under it, always in that
+            // order — the order `answer()` takes them in, which is what keeps
+            // a referral and a decision arriving at once from deadlocking
+            // against each other.
+            $entry = LostFoundItem::query()->lockForUpdate()->findOrFail($claim->lost_found_item_id);
             $locked = LostFoundClaim::query()->lockForUpdate()->findOrFail($claim->getKey());
-            $entry = LostFoundItem::query()->findOrFail($locked->lost_found_item_id);
 
             $this->claims->assert(
                 $locked->status ?? LostFoundClaimStatus::New,
                 LostFoundClaimStatus::Referred,
             );
+
+            $entryFrom = $entry->status ?? LostFoundItemStatus::Published;
 
             $locked->status = LostFoundClaimStatus::Referred;
             $locked->referred_at = now();
@@ -360,6 +380,8 @@ final readonly class LostFoundService
 
             $locked->save();
 
+            $this->withdrawTheEntryWhileTheDisputeIsOpen($entry);
+
             $this->audit->record(
                 action: AuditAction::LostFoundClaimReferred,
                 actor: $claimant,
@@ -367,6 +389,8 @@ final readonly class LostFoundService
                 payload: [
                     'lost_found_item_id' => $entry->getKey(),
                     'building_id' => $entry->building_id,
+                    'item_from_status' => $entryFrom->value,
+                    'item_to_status' => $entry->status?->value,
                     'note' => $note,
                 ],
                 ipAddress: $ipAddress,
@@ -669,6 +693,38 @@ final readonly class LostFoundService
         $this->items->assert(LostFoundItemStatus::Claimed, LostFoundItemStatus::Published);
 
         $entry->status = LostFoundItemStatus::Published;
+        $entry->save();
+    }
+
+    /**
+     * The mirror of the method above, and the other half of FR-26's second
+     * criterion.
+     *
+     * A refusal returns the find to the published list; a referral of that
+     * refusal takes it out again, because a referred claim is outstanding
+     * (`LostFoundClaimStatus::isOutstanding()`) and an entry with something
+     * outstanding on it is not on offer to anybody else. Without this the
+     * entry spent the whole dispute in `published` and the closure FR-26's
+     * first criterion promises on a warden's decision could not be performed
+     * at all — the item table has no `published → resolved` edge, by design.
+     *
+     * Inside the transaction of the referral, so the entry and the claim are
+     * never seen disagreeing. `Resolved` is refused here rather than silently
+     * skipped: an entry already handed back has nothing left to dispute, and
+     * the transition table is the one place that says so.
+     */
+    private function withdrawTheEntryWhileTheDisputeIsOpen(LostFoundItem $entry): void
+    {
+        if ($entry->status === LostFoundItemStatus::Claimed) {
+            return;
+        }
+
+        $this->items->assert(
+            $entry->status ?? LostFoundItemStatus::Published,
+            LostFoundItemStatus::Claimed,
+        );
+
+        $entry->status = LostFoundItemStatus::Claimed;
         $entry->save();
     }
 
