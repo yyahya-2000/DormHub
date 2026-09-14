@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ListBuildingRoomsRequest;
+use App\Http\Requests\Api\V1\ShowBuildingFloorsRequest;
 use App\Http\Requests\Api\V1\ShowRoomRequest;
 use App\Http\Requests\Api\V1\StoreRoomRequest;
 use App\Http\Requests\Api\V1\UpdateRoomRequest;
@@ -30,8 +31,30 @@ final class RoomController extends Controller
         RoomQuery $rooms,
     ): AnonymousResourceCollection {
         return RoomResource::collection(
-            $rooms->ofBuilding($request->user(), $building, $request->ip())
+            $rooms->ofBuilding(
+                viewer: $request->user(),
+                building: $building,
+                search: $request->search(),
+                onlyFree: $request->onlyFree(),
+                perPage: $request->perPage(),
+                ipAddress: $request->ip(),
+            )
         );
+    }
+
+    /**
+     * FR-02: the floors of this dormitory, each with its rooms and places
+     * counted. One aggregate query, so the summary of a twelve-storey block
+     * costs what the summary of a single floor does.
+     *
+     * @return array{data: list<array<string, int>>}
+     */
+    public function floors(
+        ShowBuildingFloorsRequest $request,
+        Building $building,
+        RoomQuery $rooms,
+    ): array {
+        return ['data' => $rooms->floorsOf($building)];
     }
 
     public function store(

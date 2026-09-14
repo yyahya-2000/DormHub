@@ -281,6 +281,126 @@ final class RoomRegisterTest extends TestCase
         ])->assertCreated();
     }
 
+    public function test_the_room_register_is_read_a_page_at_a_time(): void
+    {
+        Room::factory()->for($this->first)->count(25)->create(['capacity' => 2]);
+
+        Sanctum::actingAs($this->warden);
+
+        $first = $this->getJson("/api/v1/buildings/{$this->first->id}/rooms")
+            ->assertOk()
+            ->assertJsonCount(20, 'data')
+            ->assertJsonPath('meta.total', 25)
+            ->assertJsonPath('meta.per_page', 20)
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 2);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?page=2")
+            ->assertOk()
+            ->assertJsonCount(5, 'data');
+
+        // And the whole register is never one query: a size above the ceiling
+        // is refused rather than quietly lowered.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?per_page=500")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('per_page');
+
+        $this->assertSame(25, $first->json('meta.total'));
+    }
+
+    public function test_the_room_register_is_searched_by_number_and_narrowed_to_the_free_rooms(): void
+    {
+        $free = Room::factory()->for($this->first)->withBeds(2)->create([
+            'number' => '305',
+            'capacity' => 2,
+        ]);
+
+        $taken = Room::factory()->for($this->first)->withBeds(1)->create([
+            'number' => '405',
+            'capacity' => 1,
+        ]);
+
+        $taken->beds()->update(['status' => BedStatus::Occupied]);
+
+        Sanctum::actingAs($this->warden);
+
+        // Part of a number, and nothing else comes back.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?q=05")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?q=405")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $taken->id);
+
+        // «Where can I put somebody» is the other filter, and it is asked of
+        // the places rather than of the rooms: a room whose every place is
+        // held is not free however many places it has.
+        $this->getJson("/api/v1/buildings/{$this->first->id}/rooms?free=1")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $free->id);
+    }
+
+    public function test_the_floor_summary_counts_the_rooms_and_the_places_of_each_floor(): void
+    {
+        $occupied = Room::factory()->for($this->first)->withBeds(2)->create([
+            'number' => '301',
+            'floor' => 3,
+            'capacity' => 2,
+        ]);
+
+        $occupied->beds()->update(['status' => BedStatus::Occupied]);
+
+        Room::factory()->for($this->first)->withBeds(3)->create([
+            'number' => '302',
+            'floor' => 3,
+            'capacity' => 3,
+        ]);
+
+        Room::factory()->for($this->first)->withBeds(1)->create([
+            'number' => '401',
+            'floor' => 4,
+            'capacity' => 1,
+        ]);
+
+        Sanctum::actingAs($this->warden);
+
+        $floors = $this->getJson("/api/v1/buildings/{$this->first->id}/floors")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame([
+            [
+                'floor' => 3,
+                'rooms_count' => 2,
+                // One of the two rooms of the floor still takes somebody …
+                'rooms_with_free_beds' => 1,
+                'beds_count' => 5,
+                // … and it is the one holding all three free places.
+                'free_beds' => 3,
+            ],
+            [
+                'floor' => 4,
+                'rooms_count' => 1,
+                'rooms_with_free_beds' => 1,
+                'beds_count' => 1,
+                'free_beds' => 1,
+            ],
+        ], $floors);
+    }
+
+    public function test_the_warden_of_building_1_reads_no_floor_summary_of_building_2(): void
+    {
+        Room::factory()->for($this->second)->withBeds(1)->create(['number' => '101', 'capacity' => 1]);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->first->id}/floors")->assertOk();
+        $this->getJson("/api/v1/buildings/{$this->second->id}/floors")->assertStatus(403);
+    }
+
     private function userWith(RoleCode $role, ?Building $building, ?string $email = null): User
     {
         $factory = User::factory()->withRole($role, $building);
