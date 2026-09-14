@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
+import { Clock, Layers, Pencil } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import {
-  useArchiveBuilding,
   useCreateBuilding,
   useDeleteBuilding,
   useListBuildings,
@@ -32,15 +32,10 @@ import { useHousingRefresh } from '@/lib/housing-cache'
  * where a signed-in person lands — the same route serves as the register and as
  * the way into a building.
  *
- * Creating, editing, archiving and deleting are the administrator's, and the
- * controls are drawn only for him. The decision is still the server's; a token
- * that is not his gets 403 and the refusal is shown in place of the row.
- *
- * Archiving and deleting are two different answers to «this dormitory is
- * closed». Archiving keeps the row and with it the residency history; deleting
- * removes it and is refused while rooms are attached, with the count of what
- * stands in the way — the second criterion of FR-01, rendered as a sentence
- * rather than as a status code.
+ * A row carries one control, and it opens the form. Deleting lives inside that
+ * form: it is the rare end of a dormitory's life, it is refused while rooms are
+ * attached, and a button for it beside every row of the register is a button
+ * pressed by accident.
  */
 
 type BuildingFields = {
@@ -49,8 +44,6 @@ type BuildingFields = {
   floorsCount: string
   visitingFrom: string
   visitingTo: string
-  curfewAt: string
-  isActive: boolean
 }
 
 const EMPTY_FORM: BuildingFields = {
@@ -59,8 +52,6 @@ const EMPTY_FORM: BuildingFields = {
   floorsCount: '1',
   visitingFrom: '08:00',
   visitingTo: '23:00',
-  curfewAt: '23:00',
-  isActive: true,
 }
 
 /** `<input type="time">` speaks `HH:MM`; the contract speaks `HH:MM:SS`. */
@@ -79,8 +70,6 @@ function formOf(building: Building): BuildingFields {
     floorsCount: String(building.floors_count ?? 1),
     visitingFrom: toTimeField(building.visiting_from),
     visitingTo: toTimeField(building.visiting_to),
-    curfewAt: toTimeField(building.curfew_at),
-    isActive: building.is_active,
   }
 }
 
@@ -91,8 +80,6 @@ function payloadOf(form: BuildingFields): BuildingInput {
     floors_count: Number(form.floorsCount),
     visiting_from: toContractTime(form.visitingFrom),
     visiting_to: toContractTime(form.visitingTo),
-    curfew_at: toContractTime(form.curfewAt),
-    is_active: form.isActive,
   }
 }
 
@@ -116,9 +103,6 @@ export function BuildingRegisterPage() {
     <div className="grid grid-cols-1 gap-6">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-ink">{t('register.heading')}</h1>
-        <p className="mt-1 text-steel">
-          {keepsRegister ? t('register.leadAdmin') : t('register.leadScoped')}
-        </p>
       </div>
 
       {buildings.isError ? <RequestRefusal error={buildings.error} /> : null}
@@ -180,11 +164,7 @@ export function BuildingRegisterPage() {
   )
 }
 
-/**
- * One dormitory of the register. The two writes that act on a single building —
- * archiving and deleting — hold their mutations here, so that a refusal lands
- * under the row it concerns instead of at the top of a list of twelve.
- */
+/** One dormitory of the register: the name, where it is, and the way in. */
 function BuildingRow({
   building,
   keepsRegister,
@@ -196,108 +176,47 @@ function BuildingRow({
 }) {
   const { t } = useTranslation()
   const formatters = useFormatters()
-  const refresh = useHousingRefresh()
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-
-  const archive = useArchiveBuilding<ApiError>()
-  const remove = useDeleteBuilding<ApiError>()
 
   return (
-    <div className="grid gap-2 px-4 py-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <div className="flex items-start justify-between gap-3 px-4 py-4">
+      <div className="grid min-w-0 gap-1">
         <h3 className="m-0 min-w-0 text-lg font-semibold text-ink">
           <Link className="text-prussian underline" to={`/buildings/${building.id}`}>
             {building.name}
           </Link>
         </h3>
-        <span
-          className={
-            building.is_active
-              ? 'border border-prussian/25 bg-prussian-wash px-2 py-0.5 text-prussian'
-              : 'border border-rule bg-paper px-2 py-0.5 text-steel'
-          }
-        >
-          {building.is_active ? t('building.active') : t('building.inactive')}
-        </span>
+
+        <p className="m-0 break-words text-steel">{building.address}</p>
+
+        <p className="m-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-steel">
+          <span className="inline-flex items-center gap-1.5">
+            <Layers aria-hidden="true" className="size-4" />
+            <span className="sr-only">{t('building.fields.floors')}</span>
+            {formatters.count(building.floors_count)}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Clock aria-hidden="true" className="size-4" />
+            <span className="sr-only">{t('building.fields.visiting')}</span>
+            {t('building.visitingWindow', {
+              from: formatters.clock(building.visiting_from),
+              to: formatters.clock(building.visiting_to),
+            })}
+          </span>
+        </p>
       </div>
 
-      <p className="m-0 break-words text-steel">{building.address}</p>
-
-      <dl className="m-0 grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1">
-        <dt className="label-caps">{t('building.fields.id')}</dt>
-        <dd className="m-0">{formatters.count(building.id)}</dd>
-        <dt className="label-caps">{t('building.fields.floors')}</dt>
-        <dd className="m-0">{formatters.count(building.floors_count)}</dd>
-        <dt className="label-caps">{t('building.fields.visiting')}</dt>
-        <dd className="m-0">
-          {t('building.visitingWindow', {
-            from: formatters.clock(building.visiting_from),
-            to: formatters.clock(building.visiting_to),
-          })}
-        </dd>
-      </dl>
-
       {keepsRegister ? (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
-            {t('register.edit')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={archive.isPending || !building.is_active}
-            onClick={() =>
-              archive.mutate({ building: building.id }, { onSuccess: () => refresh() })
-            }
-          >
-            {building.is_active ? t('register.archive') : t('register.archived')}
-          </Button>
-          {confirmingDelete ? (
-            <>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={remove.isPending}
-                onClick={() =>
-                  remove.mutate(
-                    { building: building.id },
-                    {
-                      onSuccess: () => {
-                        setConfirmingDelete(false)
-                        refresh()
-                      },
-                    },
-                  )
-                }
-              >
-                {remove.isPending ? `${t('common.saving')}…` : t('register.deleteConfirm')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmingDelete(false)}
-              >
-                {t('common.cancel')}
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmingDelete(true)}
-            >
-              {t('register.delete')}
-            </Button>
-          )}
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
+          aria-label={t('register.edit')}
+          title={t('register.edit')}
+          onClick={onEdit}
+        >
+          <Pencil aria-hidden="true" className="size-5" />
+        </Button>
       ) : null}
-
-      {archive.isError ? <RequestRefusal error={archive.error} /> : null}
-      {remove.isError ? <RequestRefusal error={remove.error} /> : null}
     </div>
   )
 }
@@ -341,7 +260,7 @@ function BuildingForm({
       <form className="grid gap-4 px-4 py-4" onSubmit={submit}>
         {error !== null ? <RequestRefusal error={error} /> : null}
 
-        <FormField id="building-name" label={t('fields.name')}>
+        <FormField id="building-name" label={t('fields.name')} required>
           <Input
             id="building-name"
             value={form.name}
@@ -351,7 +270,7 @@ function BuildingForm({
           />
         </FormField>
 
-        <FormField id="building-address" label={t('fields.address')}>
+        <FormField id="building-address" label={t('fields.address')} required>
           <Input
             id="building-address"
             value={form.address}
@@ -361,7 +280,7 @@ function BuildingForm({
           />
         </FormField>
 
-        <FormField id="building-floors" label={t('fields.floors_count')}>
+        <FormField id="building-floors" label={t('fields.floors_count')} required>
           <Input
             id="building-floors"
             type="number"
@@ -374,12 +293,8 @@ function BuildingForm({
           />
         </FormField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            id="building-visiting-from"
-            label={t('fields.visiting_from')}
-            note={t('building.visitingNote')}
-          >
+        <FormField id="building-visiting-from" label={t('building.fields.visiting')} required>
+          <div className="flex items-center gap-2">
             <Input
               id="building-visiting-from"
               type="time"
@@ -387,48 +302,83 @@ function BuildingForm({
               required
               onChange={(event) => set('visitingFrom', event.target.value)}
             />
-          </FormField>
-
-          <FormField id="building-visiting-to" label={t('fields.visiting_to')}>
+            <span aria-hidden="true" className="text-steel">
+              —
+            </span>
             <Input
               id="building-visiting-to"
               type="time"
+              aria-label={t('fields.visiting_to')}
               value={form.visitingTo}
               required
               onChange={(event) => set('visitingTo', event.target.value)}
             />
-          </FormField>
-        </div>
-
-        <FormField id="building-curfew" label={t('fields.curfew_at')}>
-          <Input
-            id="building-curfew"
-            type="time"
-            value={form.curfewAt}
-            required
-            onChange={(event) => set('curfewAt', event.target.value)}
-          />
+          </div>
         </FormField>
 
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            className="size-5 accent-prussian"
-            checked={form.isActive}
-            onChange={(event) => set('isActive', event.target.checked)}
-          />
-          <span>{t('fields.is_active')}</span>
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={pending}>
+              {pending ? `${t('common.saving')}…` : t('common.save')}
+            </Button>
+            <Button type="button" variant="outline" onClick={onDone}>
+              {t('common.cancel')}
+            </Button>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={pending}>
-            {pending ? `${t('common.saving')}…` : t('common.save')}
-          </Button>
-          <Button type="button" variant="outline" onClick={onDone}>
-            {t('common.cancel')}
-          </Button>
+          {building !== null ? <DeleteBuilding building={building} onDone={onDone} /> : null}
         </div>
       </form>
     </Panel>
+  )
+}
+
+/**
+ * Deleting is two presses rather than one, and it stays inside the form: the
+ * server refuses it while rooms are attached and says how many stand in the
+ * way, so the refusal belongs where the rest of the form's refusals are.
+ */
+function DeleteBuilding({ building, onDone }: { building: Building; onDone: () => void }) {
+  const { t } = useTranslation()
+  const refresh = useHousingRefresh()
+  const [confirming, setConfirming] = useState(false)
+  const remove = useDeleteBuilding<ApiError>()
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
+        {confirming ? (
+          <>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={remove.isPending}
+              onClick={() =>
+                remove.mutate(
+                  { building: building.id },
+                  {
+                    onSuccess: () => {
+                      refresh()
+                      onDone()
+                    },
+                  },
+                )
+              }
+            >
+              {remove.isPending ? `${t('common.saving')}…` : t('register.deleteConfirm')}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
+              {t('common.cancel')}
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
+            {t('register.delete')}
+          </Button>
+        )}
+      </div>
+
+      {remove.isError ? <RequestRefusal error={remove.error} /> : null}
+    </div>
   )
 }
