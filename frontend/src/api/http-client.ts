@@ -51,6 +51,19 @@ async function readBody(response: Response): Promise<unknown> {
   if (response.status === 204) {
     return null
   }
+  /*
+   * An image is not text, and reading it as text destroys it: the two
+   * photograph routes answer with the file itself wherever the object store
+   * cannot sign a URL, and `text()` over those bytes returns a string nothing
+   * can turn back into a picture. The body is handed on as a `Blob` instead,
+   * and the screen that asked for it makes an object URL out of it. Which of
+   * the two shapes arrived is the content type's answer and nobody else's —
+   * the same route answers JSON on a deployment whose store signs links.
+   */
+  const contentType = response.headers.get('Content-Type') ?? ''
+  if (contentType.startsWith('image/')) {
+    return await response.blob()
+  }
   const text = await response.text()
   if (text.length === 0) {
     return null
