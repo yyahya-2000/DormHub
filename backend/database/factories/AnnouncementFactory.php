@@ -14,9 +14,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 /**
  * Invented notices only (C-05).
  *
- * A row made without states is a current announcement of the general category
- * that nobody has to acknowledge — the ordinary case, so that a test which
- * cares about something else does not have to say so.
+ * A row made without states is a current announcement about a planned water
+ * shutoff — the ordinary case, so that a test which cares about something else
+ * does not have to say so.
  *
  * @extends Factory<Announcement>
  */
@@ -32,8 +32,7 @@ class AnnouncementFactory extends Factory
             'author_id' => User::factory(),
             'title' => 'Cold water shut off on the ninth',
             'body' => 'The riser on floors three to five is being replaced. Water returns the same evening.',
-            'category' => AnnouncementCategory::Utilities,
-            'is_mandatory' => false,
+            'category' => AnnouncementCategory::Utilities->value,
             'published_at' => now(),
             'expires_at' => null,
         ];
@@ -59,20 +58,16 @@ class AnnouncementFactory extends Factory
         return $this->state(fn (): array => ['author_id' => $author->getKey()]);
     }
 
-    public function ofCategory(AnnouncementCategory $category): static
-    {
-        return $this->state(fn (): array => ['category' => $category]);
-    }
-
     /**
-     * FR-12: an announcement the resident is required to acknowledge.
+     * The category is a free label, so this takes one: a case of the catalogue
+     * reads as `AnnouncementCategory::Safety->value`, and a heading somebody
+     * typed reads as itself.
      */
-    public function mandatory(): static
+    public function ofCategory(AnnouncementCategory|string $category): static
     {
-        return $this->state(fn (): array => [
-            'is_mandatory' => true,
-            'category' => AnnouncementCategory::HouseRules,
-        ]);
+        $label = $category instanceof AnnouncementCategory ? $category->value : $category;
+
+        return $this->state(fn (): array => ['category' => $label]);
     }
 
     public function publishedAt(CarbonInterface $moment): static

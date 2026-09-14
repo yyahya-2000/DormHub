@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Announcements;
 
+use App\Enums\AnnouncementCategory;
 use App\Models\Announcement;
-use App\Models\AnnouncementAck;
-use App\Services\AnnouncementQuery;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,9 +19,9 @@ use Tests\TestCase;
  * relies on at the demonstration. What matters here is what makes the module's
  * two invisible behaviours visible: a feed with a history of different ages, so
  * that FR-09's expiry is something already shown rather than something waited
- * for; and a mandatory notice acknowledged by some residents and not by
- * others, so that FR-12's list of those who have not read is not empty — the
- * one state that would prove nothing.
+ * for; and a heading outside the catalogue, so that FR-11's filter is shown
+ * working on a label somebody typed and not only on the five the enumeration
+ * suggests.
  */
 final class AnnouncementSeederTest extends TestCase
 {
@@ -54,30 +53,17 @@ final class AnnouncementSeederTest extends TestCase
         $this->assertTrue(Announcement::query()->whereNull('building_id')->exists());
     }
 
-    public function test_the_stand_carries_a_mandatory_notice_that_some_have_read_and_some_have_not(): void
+    public function test_the_stand_carries_a_category_from_outside_the_catalogue(): void
     {
         $this->seed(DatabaseSeeder::class);
 
-        $mandatory = Announcement::query()
-            ->where('is_mandatory', true)
-            ->whereNotNull('building_id')
-            ->orderBy('id')
-            ->first();
+        $typed = Announcement::query()
+            ->whereNotIn('category', AnnouncementCategory::values())
+            ->exists();
 
-        $this->assertNotNull($mandatory, 'The stand has no mandatory announcement.');
-
-        $acknowledged = AnnouncementAck::query()
-            ->where('announcement_id', $mandatory->getKey())
-            ->count();
-
-        $this->assertGreaterThan(0, $acknowledged, 'Nobody has acknowledged the mandatory notice.');
-
-        $audience = app(AnnouncementQuery::class)->recipientsOf($mandatory)->count();
-
-        $this->assertGreaterThan(
-            $acknowledged,
-            $audience,
-            'Everybody has acknowledged the mandatory notice, so FR-12 has an empty list to show.',
+        $this->assertTrue(
+            $typed,
+            'Every heading on the stand comes from the catalogue, so a free label is never demonstrated.',
         );
     }
 
@@ -86,11 +72,9 @@ final class AnnouncementSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $announcements = Announcement::query()->count();
-        $acks = AnnouncementAck::query()->count();
 
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame($announcements, Announcement::query()->count());
-        $this->assertSame($acks, AnnouncementAck::query()->count());
     }
 }
