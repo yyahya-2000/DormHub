@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
-use App\Consent\ConsentText;
 use App\Models\User;
-use App\Services\ConsentRegistry;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -39,25 +37,6 @@ final class UserResource extends JsonResource
              * could appear in.
              */
             'password_change_required' => (bool) $this->password_change_required,
-            /*
-             * FR-35, first criterion: the consent has to be *displayed* at
-             * first sign-in, and the client can only display it if the answer
-             * to the sign-in says one is outstanding. The field carries the
-             * document codes and not the texts: the texts are long, they are
-             * fetched from `GET /consents/pending`, and putting them here
-             * would mean every `GET /auth/me` shipped a legal document.
-             *
-             * It appears only where the history was loaded — the sign-in
-             * answer and `GET /auth/me` — so the listings of people, which use
-             * this same resource, ask the consent table nothing.
-             */
-            'consent_required' => $this->when(
-                $this->resource->relationLoaded('consentRecords'),
-                fn (): array => array_map(
-                    static fn (ConsentText $text): string => $text->document->value,
-                    app(ConsentRegistry::class)->pendingFor($this->resource),
-                ),
-            ),
             'roles' => RoleGrantResource::collection($this->whenLoaded('roleGrants')),
         ];
     }
