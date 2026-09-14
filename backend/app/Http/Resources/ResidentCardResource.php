@@ -12,8 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
 
 /**
- * FR-06, the card itself: name, study status, citizenship, contact, current
- * bed, residency history and open obligations.
+ * FR-06, the card itself: name, citizenship, contact, current bed, residency
+ * history and open obligations.
  *
  * `open_obligations` deserves its note. The MVP model of §3.4.3 knows one kind
  * of outstanding obligation a resident can carry — an accommodation contract
@@ -61,9 +61,8 @@ final class ResidentCardResource extends JsonResource
         return [
             'id' => $this->id,
             'full_name' => $this->full_name,
-            'study_status' => $this->study_status?->value,
-            'study_status_label' => $this->study_status?->label(),
-            'citizenship' => $this->citizenship,
+            'citizenship' => $this->citizenship?->value,
+            'citizenship_label' => $this->citizenship?->label(),
             'contact' => [
                 'email' => $this->email,
                 'phone' => $this->phone,

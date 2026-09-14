@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Contracts\CategorisedNotification;
+use App\Enums\Citizenship;
 use App\Enums\ConsentDocument;
 use App\Enums\NotificationCategory;
 use App\Enums\Permission;
 use App\Enums\RoleCode;
-use App\Enums\StudyStatus;
 use App\Enums\UserStatus;
 use App\Services\ConsentRegistry;
 use App\Services\NotificationPreferences;
@@ -40,7 +40,6 @@ use Laravel\Sanctum\HasApiTokens;
     'full_name',
     'email',
     'phone',
-    'study_status',
     'citizenship',
     'password_hash',
     'password_change_required',
@@ -80,11 +79,8 @@ class User extends Authenticatable
         return [
             'password_hash' => 'hashed',
             'password_change_required' => 'boolean',
-            // FR-42: the address was proved by a one-time code being spent on
-            // it. Null for every account still waiting for its first password.
-            'email_confirmed_at' => 'datetime',
             'status' => UserStatus::class,
-            'study_status' => StudyStatus::class,
+            'citizenship' => Citizenship::class,
         ];
     }
 

@@ -43,8 +43,6 @@ class DemoSeeder extends Seeder
                 'floors_count' => 9,
                 'visiting_from' => '08:00:00',
                 'visiting_to' => '23:00:00',
-                'curfew_at' => '23:00:00',
-                'is_active' => true,
             ],
         );
 
