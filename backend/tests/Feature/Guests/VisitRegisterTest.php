@@ -320,6 +320,171 @@ final class VisitRegisterTest extends TestCase
         $visit->delete();
     }
 
+    /**
+     * The half of the register the guarantee used to miss.
+     *
+     * Three of clause 2.1.2's six fields — the guest, the document, and through
+     * the host the premises — are columns of `guest_requests`, and the
+     * write-once trigger created with `guest_visits` never covered them. The
+     * export then showed a substituted name and said nothing about the
+     * substitution, which is the one thing a register may not do.
+     */
+    public function test_the_database_refuses_to_substitute_the_guest_named_on_a_decided_request(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/write-once/');
+
+        DB::table('guest_requests')
+            ->where('id', $visit->guest_request_id)
+            ->update(['guest_full_name' => 'Somebody Else']);
+    }
+
+    public function test_the_database_refuses_to_move_the_interval_a_visit_was_judged_by(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/write-once/');
+
+        DB::table('guest_requests')
+            ->where('id', $visit->guest_request_id)
+            ->update(['planned_to' => '23:30:00']);
+    }
+
+    /**
+     * The decision is evidence in its own right: FR-17's first criterion keeps
+     * the deciding user and the moment, and a row that can be re-decided after
+     * the fact attributes an approval to whoever edited it last.
+     */
+    public function test_the_database_refuses_to_re_decide_a_request(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/decision on request/');
+
+        DB::table('guest_requests')
+            ->where('id', $visit->guest_request_id)
+            ->update(['decided_by' => $this->warden->getKey()]);
+    }
+
+    public function test_the_database_refuses_to_delete_a_decided_request(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        // The foreign key holds only while a visit exists; the refusal has to
+        // hold for a request the guest never turned up on either.
+        $refused = GuestRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->rejected($this->warden)
+            ->create(['visit_date' => '2026-09-10']);
+
+        $this->assertSame(0, GuestVisit::query()->where('guest_request_id', $refused->getKey())->count());
+        $this->assertNotNull($visit->guest_request_id);
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/append-only/');
+
+        DB::table('guest_requests')->where('id', $refused->getKey())->delete();
+    }
+
+    public function test_the_model_refuses_to_delete_a_decided_request(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        $this->expectException(ImmutableRecordException::class);
+
+        GuestRequest::query()->findOrFail($visit->guest_request_id)->delete();
+    }
+
+    /**
+     * The other side of the line, and the reason it is drawn at the decision
+     * rather than at the entry: a request nobody has looked at is a form. The
+     * resident may still correct a mistyped surname and withdraw it, and the
+     * duty officer's decision is itself written onto the row from this state.
+     */
+    public function test_a_request_nobody_has_decided_on_is_still_a_draft(): void
+    {
+        $draft = GuestRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->create([
+                'guest_full_name' => 'Ostap Vergin',
+                'visit_date' => '2026-09-20',
+                'status' => GuestRequestStatus::PendingReview,
+            ]);
+
+        DB::table('guest_requests')
+            ->where('id', $draft->getKey())
+            ->update(['guest_full_name' => 'Ostap Verigin']);
+
+        $this->assertSame('Ostap Verigin', $draft->fresh()->guest_full_name);
+
+        $this->assertSame(1, DB::table('guest_requests')->where('id', $draft->getKey())->delete());
+    }
+
+    /**
+     * §2.4.2, second scenario. The note is the written ground on which the
+     * officer admitted a guest against the interval, and the only evidence
+     * that the exception was reasoned at all — the CHECK refuses an override
+     * without one. It was left out of the visit's own trigger, so it could be
+     * rewritten afterwards into any ground at all.
+     */
+    public function test_the_database_refuses_to_rewrite_the_ground_a_guest_was_admitted_on(): void
+    {
+        $visit = $this->admittedOnDecision('The duty officer authorised the entry by telephone.');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/admitted/');
+
+        DB::table('guest_visits')
+            ->where('id', $visit->getKey())
+            ->update(['admission_note' => 'The guest was within the interval after all.']);
+    }
+
+    /**
+     * `status` was unguarded, so a closed evening could be set back to
+     * `in_building` and the visit would reappear among those inside.
+     */
+    public function test_the_database_refuses_to_reopen_a_closed_visit(): void
+    {
+        $visit = $this->visitOn('2026-09-10', '13:15:00', '16:40:00', 'Ostap Verigin');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/cannot move from/');
+
+        DB::table('guest_visits')
+            ->where('id', $visit->getKey())
+            ->update(['status' => GuestVisitStatus::InBuilding->value]);
+    }
+
+    private function admittedOnDecision(string $note): GuestVisit
+    {
+        $request = GuestRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->approved($this->warden)
+            ->create([
+                'guest_full_name' => 'Ostap Verigin',
+                'visit_date' => '2026-09-10',
+                'planned_from' => '12:00:00',
+                'planned_to' => '22:00:00',
+                'status' => GuestRequestStatus::InProgress,
+            ]);
+
+        return GuestVisit::factory()
+            ->forRequest($request, $this->guard)
+            ->enteredAt('2026-09-10 23:40:00')
+            ->create([
+                'due_at' => $request->dueAt($this->building),
+                'admitted_on_decision' => true,
+                'admission_note' => $note,
+            ]);
+    }
+
     private function visitOn(string $date, string $in, string $out, string $guest): GuestVisit
     {
         $request = GuestRequest::factory()

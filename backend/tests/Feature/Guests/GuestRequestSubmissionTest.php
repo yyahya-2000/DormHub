@@ -184,6 +184,35 @@ final class GuestRequestSubmissionTest extends TestCase
         ]))->assertStatus(201);
     }
 
+    /**
+     * The same criterion, configured the way an administrator has to configure
+     * it: over the API rather than with a direct write to the column.
+     *
+     * The setting existed and could not be reached — it was in neither the
+     * form rules of `PATCH /buildings/{id}` nor `BuildingResource` nor the
+     * contract — so the validator above was reading a column nobody could
+     * change. NFR-09 asks for a setting, and a column only psql can move is
+     * not one.
+     */
+    public function test_the_lead_time_set_over_the_api_is_the_one_the_submission_is_judged_by(): void
+    {
+        Sanctum::actingAs($this->staff(RoleCode::Administrator, null, 'admin@example.test'));
+
+        $this->patchJson("/api/v1/buildings/{$this->building->id}", ['guest_lead_time_hours' => 24])
+            ->assertOk()
+            ->assertJsonPath('data.guest_lead_time_hours', 24);
+
+        Sanctum::actingAs($this->resident);
+
+        $this->postJson('/api/v1/guest-requests', $this->payload())
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('visit_date');
+
+        $this->postJson('/api/v1/guest-requests', $this->payload([
+            'visit_date' => '2026-09-16',
+        ]))->assertStatus(201);
+    }
+
     public function test_a_dormitory_that_asks_for_no_notice_accepts_a_visit_later_the_same_day(): void
     {
         Sanctum::actingAs($this->resident);

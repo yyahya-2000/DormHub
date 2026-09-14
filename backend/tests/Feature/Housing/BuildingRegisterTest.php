@@ -7,6 +7,7 @@ namespace Tests\Feature\Housing;
 use App\Enums\AuditAction;
 use App\Enums\ResidencyStatus;
 use App\Enums\RoleCode;
+use App\Models\AuditLog;
 use App\Models\Building;
 use App\Models\Room;
 use App\Models\User;
@@ -183,6 +184,104 @@ final class BuildingRegisterTest extends TestCase
         $read = $this->getJson("/api/v1/buildings/{$created['id']}")->assertOk()->json('data');
 
         $this->assertSame($created, $read);
+    }
+
+    /**
+     * FR-16, first criterion: «the request is submitted no later than the lead
+     * time **configured for the building**».
+     *
+     * The column has been read by the validator of a guest request since it was
+     * added, and there was no way to configure it: it appeared in neither the
+     * form rules nor the resource nor the contract's `Building`, so a PATCH
+     * carrying it answered 200, wrote «nothing changed» to the audit log and
+     * saved nothing. A setting that can only be changed with psql is not a
+     * setting (NFR-09).
+     */
+    public function test_the_lead_time_a_dormitory_asks_for_is_read_and_written_over_the_api(): void
+    {
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $this->getJson("/api/v1/buildings/{$this->building->id}")
+            ->assertOk()
+            ->assertJsonPath('data.guest_lead_time_hours', 0);
+
+        $this->patchJson("/api/v1/buildings/{$this->building->id}", ['guest_lead_time_hours' => 24])
+            ->assertOk()
+            ->assertJsonPath('data.guest_lead_time_hours', 24);
+
+        $this->assertSame(24, $this->building->fresh()->guest_lead_time_hours);
+
+        $this->getJson("/api/v1/buildings/{$this->building->id}")
+            ->assertOk()
+            ->assertJsonPath('data.guest_lead_time_hours', 24);
+
+        // FR-33: the log says what changed, and a change nobody recorded is
+        // how the defect stayed invisible on the stand.
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::BuildingUpdated->value,
+            'subject_id' => $this->building->id,
+        ]);
+
+        $this->assertContains(
+            'guest_lead_time_hours',
+            AuditLog::query()
+                ->where('action', AuditAction::BuildingUpdated->value)
+                ->latest('id')
+                ->sole()
+                ->payload['changed'],
+        );
+    }
+
+    /**
+     * NFR-09, and the dormitory `TimeWindow` was written for.
+     *
+     * A window from 08:00 to 02:00 is fifteen hours ending after midnight. The
+     * create refused it — `visiting_to` carried `after:visiting_from` and read
+     * the window as empty — while the edit accepted it, so the only way to the
+     * regime was to create a lawful building and amend it. A register that
+     * admits a configuration it cannot issue is two rules, not one.
+     */
+    public function test_a_dormitory_whose_window_runs_past_midnight_can_be_created_and_not_only_amended(): void
+    {
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $created = $this->postJson('/api/v1/buildings', [
+            'name' => 'Block 35',
+            'address' => '3 Olkhovaya Street, Zarechny',
+            'floors_count' => 5,
+            'visiting_from' => '08:00:00',
+            'visiting_to' => '02:00:00',
+            'curfew_at' => '02:00:00',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.visiting_to', '02:00:00')
+            ->json('data');
+
+        $window = Building::query()
+            ->findOrFail($created['id'])
+            ->visitingWindowOn(CarbonImmutable::parse('2026-09-14'));
+
+        $this->assertTrue($window->crossesMidnight());
+        $this->assertSame('2026-09-15 02:00:00', $window->to->format('Y-m-d H:i:s'));
+    }
+
+    public function test_a_dormitory_is_created_with_the_lead_time_it_is_given(): void
+    {
+        Sanctum::actingAs($this->userWith(RoleCode::Administrator, null));
+
+        $this->postJson('/api/v1/buildings', [
+            'name' => 'Block 34',
+            'address' => '11 Kedrovaya Street, Zarechny',
+            'floors_count' => 6,
+            'guest_lead_time_hours' => 4,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.guest_lead_time_hours', 4);
+
+        $this->patchJson(
+            "/api/v1/buildings/{$this->building->id}",
+            ['guest_lead_time_hours' => -1]
+        )->assertStatus(422)->assertJsonValidationErrors('guest_lead_time_hours');
     }
 
     public function test_the_name_of_a_dormitory_is_unique_in_the_database_and_not_only_in_the_form(): void

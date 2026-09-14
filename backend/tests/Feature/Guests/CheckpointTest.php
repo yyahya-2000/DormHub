@@ -258,16 +258,146 @@ final class CheckpointTest extends TestCase
 
         Sanctum::actingAs($this->guard);
 
+        // The contract declares a message on this answer, and the body used to
+        // carry none: a terminal typed against it received an empty array and
+        // a field that was never sent. The two misses read differently at the
+        // desk, so they say different things.
         $this->postJson('/api/v1/checkpoint/verify', [
             'building_id' => $this->building->getKey(),
             'code' => $theirRequest->access_code,
-        ])->assertStatus(404);
+        ])
+            ->assertStatus(404)
+            ->assertJsonPath('message', 'No visit in this dormitory answers to that code.')
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.matches', 0);
+
+        $this->postJson('/api/v1/checkpoint/verify', [
+            'building_id' => $this->building->getKey(),
+            'surname' => 'Nobodyhere',
+        ])
+            ->assertStatus(404)
+            ->assertJsonPath('message', 'No guest of that name is expected in this dormitory today.');
 
         // And the officer of this post cannot simply name the other building.
         $this->postJson('/api/v1/checkpoint/verify', [
             'building_id' => $elsewhere->getKey(),
             'code' => $theirRequest->access_code,
         ])->assertStatus(403);
+    }
+
+    /**
+     * The code outlives the withdrawal on purpose; the card must not.
+     *
+     * A resident may withdraw an approved request, and the access code stays
+     * on the row so that a guest who turns up anyway is met with «this visit
+     * was cancelled» rather than «no such code» — the migration says so in as
+     * many words. The entry was refused correctly all along. What the card
+     * still did was hand whoever held the withdrawn code the guest's name, the
+     * host's name and the host's room number, and none of those has a ground
+     * any more (§2.7.1, NFR-06): the ground was the visit that is now not
+     * going to happen.
+     */
+    public function test_a_withdrawn_request_still_answers_to_its_code_and_names_nobody(): void
+    {
+        $this->atTwentyPastTwo();
+
+        Sanctum::actingAs($this->resident);
+
+        $this->postJson("/api/v1/guest-requests/{$this->request->id}/cancellation")->assertOk();
+
+        Sanctum::actingAs($this->guard);
+
+        $card = $this->postJson('/api/v1/checkpoint/verify', [
+            'building_id' => $this->building->getKey(),
+            'code' => $this->request->access_code,
+        ])->assertOk();
+
+        // The officer is told what to say at the desk.
+        $card
+            ->assertJsonPath('data.0.disclosed', false)
+            ->assertJsonPath('data.0.status', GuestRequestStatus::Cancelled->value)
+            ->assertJsonPath('data.0.admission.allowed', false)
+            ->assertJsonPath('data.0.admission.reason_code', EntryNotPermittedException::NOT_APPROVED)
+            ->assertJsonPath('data.0.admission.override_available', false);
+
+        // And nobody is named.
+        $card
+            ->assertJsonPath('data.0.guest', null)
+            ->assertJsonPath('data.0.inviting_resident', null)
+            ->assertJsonPath('data.0.room', null)
+            ->assertJsonPath('data.0.access_code', null)
+            ->assertJsonPath('data.0.due_at', null)
+            ->assertJsonPath('data.0.permitted_interval', null);
+
+        $body = (string) $card->getContent();
+
+        $this->assertStringNotContainsString('Ostap Verigin', $body);
+        $this->assertStringNotContainsString((string) $this->resident->full_name, $body);
+        $this->assertStringNotContainsString('305', $body);
+
+        // The entry keeps being refused, which it always was.
+        $this->postJson('/api/v1/checkpoint/check-in', [
+            'guest_request_id' => $this->request->getKey(),
+        ])->assertStatus(409);
+    }
+
+    /**
+     * The same for a refusal by the duty officer. A guest turned away at the
+     * decision has no more claim on the register than a withdrawn one.
+     */
+    public function test_a_refused_request_names_nobody_at_the_post_either(): void
+    {
+        $this->atTwentyPastTwo();
+
+        $refused = GuestRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->rejected($this->staff(RoleCode::DutyOfficer, $this->building, 'duty2@example.test'))
+            ->create([
+                'guest_full_name' => 'Pyotr Nezvanov',
+                'visit_date' => '2026-09-14',
+            ]);
+
+        Sanctum::actingAs($this->guard);
+
+        $this->postJson('/api/v1/checkpoint/verify', [
+            'building_id' => $this->building->getKey(),
+            'surname' => 'Nezvanov',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.0.guest_request_id', $refused->getKey())
+            ->assertJsonPath('data.0.disclosed', false)
+            ->assertJsonPath('data.0.guest', null);
+    }
+
+    /**
+     * The completed visit is not an exception to the rule above but the rule
+     * itself: the visit happened, the register of clause 2.1.2 holds it, and
+     * the officer looking it up is reading the journal.
+     */
+    public function test_a_completed_visit_still_names_the_guest_it_recorded(): void
+    {
+        $this->atTwentyPastTwo();
+
+        $this->guestIsInside();
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 19:00:00'));
+
+        Sanctum::actingAs($this->guard);
+
+        $visit = GuestVisit::query()->where('guest_request_id', $this->request->getKey())->sole();
+
+        $this->postJson('/api/v1/checkpoint/check-out', ['guest_visit_id' => $visit->getKey()])
+            ->assertOk();
+
+        $this->postJson('/api/v1/checkpoint/verify', [
+            'building_id' => $this->building->getKey(),
+            'code' => $this->request->access_code,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.0.disclosed', true)
+            ->assertJsonPath('data.0.guest.full_name', 'Ostap Verigin')
+            ->assertJsonPath('data.0.status', GuestRequestStatus::Completed->value);
     }
 
     public function test_a_resident_may_not_work_the_security_post(): void
@@ -348,6 +478,56 @@ final class CheckpointTest extends TestCase
             'document_revision' => $this->guestConsentRevision(),
             'accepted_at' => now(),
         ]);
+    }
+
+    /**
+     * A revision the repository cannot produce is a malformed field, and 422
+     * is the answer to input (§3.3.3).
+     *
+     * `ConsentRegistry::recordForGuest()` refuses to write such a record — art.
+     * 9 part 3 of Federal Law No. 152-FZ puts the burden of proof on the
+     * operator, and a record naming a wording nobody can show proves nothing —
+     * but it refuses by raising a `RuntimeException`, which reached the post as
+     * a 500. The resident half of FR-35 has always answered 422 here; the
+     * guest half now does too.
+     */
+    public function test_a_consent_naming_a_revision_the_repository_has_never_held_is_refused_as_input(): void
+    {
+        $this->atTwentyPastTwo();
+
+        Sanctum::actingAs($this->guard);
+
+        $this->postJson('/api/v1/checkpoint/guest-consent', [
+            'guest_request_id' => $this->request->getKey(),
+            'revision' => '2099.12',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('revision');
+
+        $this->assertSame(
+            0,
+            ConsentRecord::query()->where('guest_request_id', $this->request->getKey())->count(),
+        );
+    }
+
+    /**
+     * The revision becomes a path under `resources/consent`, so its shape is
+     * asserted before the repository is asked anything at all. Without the
+     * rule the traversal reached `ConsentTexts::path()`, which refuses it by
+     * raising — a 500 on a field a client controls.
+     */
+    public function test_a_revision_shaped_like_a_path_is_refused_before_the_repository_is_asked(): void
+    {
+        $this->atTwentyPastTwo();
+
+        Sanctum::actingAs($this->guard);
+
+        $this->postJson('/api/v1/checkpoint/guest-consent', [
+            'guest_request_id' => $this->request->getKey(),
+            'revision' => '../../../etc/passwd',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('revision');
     }
 
     /**

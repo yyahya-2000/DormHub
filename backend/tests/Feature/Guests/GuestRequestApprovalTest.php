@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\Guests;
 
 use App\Enums\AuditAction;
+use App\Enums\ConsentDocument;
 use App\Enums\GuestRequestStatus;
+use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\AuditLog;
 use App\Models\Building;
@@ -437,6 +439,78 @@ final class GuestRequestApprovalTest extends TestCase
         $this->postJson("/api/v1/guest-requests/{$request->id}/cancellation")
             ->assertOk()
             ->assertJsonPath('data.status', GuestRequestStatus::Cancelled->value);
+    }
+
+    /**
+     * FR-17's third criterion in the case it does not hold, and the record
+     * that says so.
+     *
+     * The notice of a decision is an optional category (§2.7.1): a resident who
+     * has withdrawn the consent it rests on receives nothing, and that is
+     * correct. What was wrong is that nothing anywhere said so — the message
+     * was dropped inside `User::notify()`, the audit log recorded the approval
+     * as though it had gone out, and «the applicant is notified» could not be
+     * checked against the record at all.
+     */
+    public function test_a_decision_nobody_could_be_told_about_is_recorded_as_undelivered(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->resident);
+        $this->postJson('/api/v1/consents/'.ConsentDocument::ResidentPersonalData->value.'/withdrawal')
+            ->assertOk();
+
+        $request = $this->pendingRequest();
+
+        Sanctum::actingAs($this->officer);
+        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")->assertOk();
+
+        Notification::assertNothingSentTo($this->resident);
+
+        $entry = AuditLog::query()
+            ->where('action', AuditAction::GuestRequestDecisionNotDelivered->value)
+            ->sole();
+
+        $this->assertSame($request->getKey(), $entry->subject_id);
+        $this->assertSame($this->resident->getKey(), $entry->payload['student_id']);
+        $this->assertStringContainsString('withdrawn', (string) $entry->payload['reason']);
+
+        // And the decision itself is still there, beside it.
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::GuestRequestApproved->value,
+            'subject_id' => $request->getKey(),
+        ]);
+    }
+
+    /**
+     * The switch rather than the consent, so that the entry tells the two
+     * apart — the resident who chose silence and the resident whose ground for
+     * being written to is gone are different situations.
+     */
+    public function test_a_decision_a_resident_switched_off_is_recorded_with_that_reason(): void
+    {
+        Notification::fake();
+
+        Sanctum::actingAs($this->resident);
+        $this->putJson('/api/v1/notification-settings', [
+            'categories' => [NotificationCategory::RequestDecision->value => false],
+        ])->assertOk();
+
+        $request = $this->pendingRequest();
+
+        Sanctum::actingAs($this->officer);
+        $this->postJson("/api/v1/guest-requests/{$request->id}/reject", [
+            'reason' => 'The dormitory is closed to visitors that evening.',
+        ])->assertOk();
+
+        Notification::assertNothingSentTo($this->resident);
+
+        $entry = AuditLog::query()
+            ->where('action', AuditAction::GuestRequestDecisionNotDelivered->value)
+            ->sole();
+
+        $this->assertStringContainsString('switched this category off', (string) $entry->payload['reason']);
+        $this->assertFalse($entry->payload['approved']);
     }
 
     /**
