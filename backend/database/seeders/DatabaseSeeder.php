@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
             NotificationSeeder::class,
             GuestSeeder::class,
             AnnouncementSeeder::class,
+            MaintenanceSeeder::class,
         ]);
     }
 }
