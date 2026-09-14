@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BedController;
 use App\Http\Controllers\Api\V1\BuildingController;
 use App\Http\Controllers\Api\V1\CheckpointController;
-use App\Http\Controllers\Api\V1\ConsentController;
 use App\Http\Controllers\Api\V1\GuestRequestController;
 use App\Http\Controllers\Api\V1\LostFoundClaimController;
 use App\Http\Controllers\Api\V1\LostFoundController;
@@ -38,8 +37,7 @@ use Illuminate\Support\Facades\Route;
 | resident card (FR-06). The third follows revision 2 of the role model: the
 | warden appoints the staff of his own building (FR-41), and he or the manager
 | beneath him issues an account to an incoming resident (FR-42). The fourth is
-| the personal account itself: the notifications of FR-34, and
-| consent to the processing of personal data (FR-35).
+| the personal account itself: the notifications of FR-34.
 |
 | The fifth is the guest module of increment 1: the request (FR-16), the duty
 | officer's decision (FR-17), the security post (FR-18, FR-19), the control of
@@ -199,32 +197,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('notifications.read');
 
     /*
-     * FR-35. Consent, on routes of its own.
-     *
-     * That they are routes of their own is the requirement and not a matter of
-     * arrangement: art. 9 part 1 of Federal Law No. 152-FZ has consent
-     * «executed separately from other documents», so no other request in this
-     * file carries a field that could record one, and this is the only way a
-     * consent record comes into being.
-     *
-     * The guest's consent is taken at the security post and not here; the
-     * mechanism is the same one, and the point it plugs into is
-     * `ConsentRegistry::requireGranted()`, called by the checkpoint service of
-     * increment 1 before an entry is written.
-     */
-    Route::get('consents/pending', [ConsentController::class, 'pending'])
-        ->name('consents.pending');
-
-    Route::get('consents', [ConsentController::class, 'index'])
-        ->name('consents.index');
-
-    Route::post('consents', [ConsentController::class, 'store'])
-        ->name('consents.store');
-
-    Route::post('consents/{document}/withdrawal', [ConsentController::class, 'withdraw'])
-        ->name('consents.withdraw');
-
-    /*
      |--------------------------------------------------------------------------
      | Announcements (increment 2): FR-09, FR-11
      |--------------------------------------------------------------------------
@@ -280,8 +252,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
      |
      | The scenario of §3.5.1 read as a list of routes. A resident submits; the
      | duty officer of that dormitory decides; the security post finds the
-     | guest, takes their consent, records the entry and later the exit; the
-     | warden exports the register.
+     | guest, records the entry and later the exit; the warden exports the
+     | register.
      |
      | Three arrangements below are decisions rather than defaults.
      |
@@ -333,15 +305,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('guest-requests.cancel');
 
     /*
-     * FR-18, FR-19 and the guest's consent between them (FR-35, §2.7.1). The
-     * order the desk uses them in is the order they are listed in, and the
-     * application refuses any other: the entry asks for the consent first.
+     * FR-18 and FR-19, in the order the desk uses them: find the guest,
+     * record the entry, record the exit.
      */
     Route::post('checkpoint/verify', [CheckpointController::class, 'verify'])
         ->name('checkpoint.verify');
-
-    Route::post('checkpoint/guest-consent', [CheckpointController::class, 'consent'])
-        ->name('checkpoint.consent');
 
     Route::post('checkpoint/check-in', [CheckpointController::class, 'checkIn'])
         ->name('checkpoint.check-in');
