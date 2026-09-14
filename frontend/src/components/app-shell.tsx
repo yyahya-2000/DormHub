@@ -226,10 +226,7 @@ export function AppShell() {
       </main>
 
       <footer className="border-t border-rule px-4 py-4">
-        <div className="mx-auto w-full max-w-5xl text-steel">
-          <p>{t('app.fullName')}</p>
-          <p className="mt-1">{t('app.disclaimer')}</p>
-        </div>
+        <p className="mx-auto w-full max-w-5xl text-steel">{t('app.fullName')}</p>
       </footer>
     </div>
   )
