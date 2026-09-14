@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 
 import {
@@ -7,32 +6,21 @@ import {
   type listBuildingUsersResponse,
   type showResidentCardResponse,
 } from '@/api/generated/dormitory'
-import { RoleCode, type User } from '@/api/generated/model'
+import { RoleCode } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
 
 /**
  * Who holds which place in a building.
  *
- * FR-43 asks that selecting a room show who lives in it, and the contract
- * deliberately refuses to put that on the room: a place «carries no name», so
- * that a list of forty rooms cannot turn into a roster of forty residents
- * because a relation happened to be loaded. The name lives on the resident card
- * of FR-06, behind its own object-level policy, and the card is where this hook
- * goes to get it: the roll of the building says who is attached to it, each
- * card says which place that person holds, and the two are joined here on
- * `bed_id`.
- *
- * Two consequences, both intended.
- *
- * Every card read is written to the audit log as `resident.card_viewed`,
- * because it is a read of personal data and §3.9.6 records those. Resolving
- * occupancy is therefore an act, not a decoration, and the caller triggers it
- * by opening a room rather than by opening the page.
+ * The contract deliberately refuses to put a name on a place, so that a list of
+ * forty rooms cannot turn into a roster of forty residents. The name lives on
+ * the resident card of FR-06, behind its own object-level policy: the roll of
+ * the building says who is attached to it, each card says which place that
+ * person holds, and the two are joined here on `bed_id`.
  *
  * The policy that decides the card decides this too. A warden of another
- * building is refused each card individually, so the plan of a building that is
- * not his shows him no names — which is the criterion, enforced where the
- * criterion says it should be, at the API.
+ * building is refused each card individually, so the rooms of a building that
+ * is not his show him no names — the criterion enforced at the API.
  */
 
 export type Occupant = {
@@ -40,51 +28,37 @@ export type Occupant = {
   fullName: string
   /** The open residency holding the place — what FR-05's termination needs. */
   residencyId: number | null
-  contractNumber: string | null
   movedInAt: string | null
 }
 
 export type BuildingOccupancy = {
-  /** Everyone holding a role in the building, as the roll route returned them. */
-  roll: User[]
-  /** The residents among them — the candidates for a placement (FR-03). */
-  residents: User[]
   byBed: Map<number, Occupant>
   /** Whether the cards were asked for at all — false when the role may not read them. */
   canResolve: boolean
-  isRollPending: boolean
   rollError: unknown
   /** True while the cards are being read. */
   isResolving: boolean
-  /** True once every card that could be read has been. */
-  isResolved: boolean
-  /** How many cards the server refused; their places stay unnamed. */
-  refusedCards: number
 }
 
-function isResidentOf(person: User, buildingId: number): boolean {
-  return (person.roles ?? []).some(
-    (grant) => grant.role === RoleCode.student && grant.building_id === buildingId,
-  )
-}
+/** One page of the roll is enough for a dormitory; the ceiling is the API's. */
+const ROLL_PER_PAGE = 100
 
 export function useBuildingOccupancy(
   buildingId: number,
   options: { rollEnabled: boolean; resolveEnabled: boolean },
 ): BuildingOccupancy {
-  const roll = useListBuildingUsers<listBuildingUsersResponse, ApiError>(buildingId, {
-    query: {
-      enabled: Number.isInteger(buildingId) && options.rollEnabled,
-      retry: false,
+  const roll = useListBuildingUsers<listBuildingUsersResponse, ApiError>(
+    buildingId,
+    { role: RoleCode.student, per_page: ROLL_PER_PAGE },
+    {
+      query: {
+        enabled: Number.isInteger(buildingId) && options.rollEnabled,
+        retry: false,
+      },
     },
-  })
-
-  const people = roll.data?.status === 200 ? roll.data.data.data : null
-
-  const residents = useMemo(
-    () => (people ?? []).filter((person) => isResidentOf(person, buildingId)),
-    [people, buildingId],
   )
+
+  const residents = roll.data?.status === 200 ? roll.data.data.data : []
 
   const cards = useQueries({
     queries: residents.map((person) =>
@@ -122,21 +96,14 @@ export function useBuildingOccupancy(
       userId: person.id,
       fullName: person.full_name,
       residencyId: open?.id ?? null,
-      contractNumber: open?.contract_number ?? null,
       movedInAt: open?.moved_in_at ?? person.current_bed?.moved_in_at ?? null,
     })
   }
 
   return {
-    roll: people ?? [],
-    residents,
     byBed,
     canResolve: options.resolveEnabled,
-    isRollPending: roll.isPending,
     rollError: roll.isError ? roll.error : null,
     isResolving: options.resolveEnabled && cards.some((card) => card.isPending),
-    isResolved:
-      options.resolveEnabled && cards.length > 0 && cards.every((card) => !card.isPending),
-    refusedCards: cards.filter((card) => card.isError).length,
   }
 }

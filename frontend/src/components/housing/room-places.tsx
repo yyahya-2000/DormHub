@@ -1,38 +1,47 @@
 import { useState, type FormEvent } from 'react'
+import { BedSingle, Lock, Plus, Search, User as UserIcon, UserMinus, UserPlus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import { useCreateBed, useCreateResidency } from '@/api/generated/dormitory'
-import { BedStatus, RoomStatus, type Bed, type Room } from '@/api/generated/model'
+import {
+  useCreateBed,
+  useCreateResidency,
+  useListBuildingUsers,
+  type listBuildingUsersResponse,
+} from '@/api/generated/dormitory'
+import { BedStatus, RoleCode, type Bed, type Room, type User } from '@/api/generated/model'
 import type { ApiError } from '@/api/http-client'
-import { FormField, selectClassName } from '@/components/form-field'
+import { FormField } from '@/components/form-field'
 import { TerminateResidencyForm } from '@/components/housing/terminate-residency-form'
 import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { BuildingOccupancy, Occupant } from '@/hooks/use-building-occupancy'
+import type { BuildingOccupancy } from '@/hooks/use-building-occupancy'
+import { useDebounced } from '@/hooks/use-debounced'
 import { todayIso, useFormatters } from '@/lib/format'
 import { useHousingRefresh } from '@/lib/housing-cache'
 import { cn } from '@/lib/utils'
 
 /**
- * The places of one room, and the two writes that change who holds them.
+ * The places of one room, and the two writes that change who holds them:
+ * moving a person in (FR-03) and moving them out (FR-05). A residency names a
+ * place, so both live where the place is.
  *
- * The same component stands under the register of rooms (FR-02) and under the
- * floor plan (FR-43), because they ask the same question of a room and differ
- * only in how they got to it. Moving a person in (FR-03) and moving them out
- * (FR-05) are here rather than on a screen of their own: a residency names a
- * place, and the place is what the person at the keyboard is looking at.
- *
- * Every control below is drawn from a capability and decided by the server.
- * A duty officer reads the register and sees no buttons; if he reaches one
- * anyway the API refuses, and the refusal is rendered where the button was.
+ * Every control is drawn from a capability and decided by the server. A duty
+ * officer sees no buttons; if he reaches one anyway the API refuses, and the
+ * refusal is rendered where the button was.
  */
 
 const PLACE_TONE: Record<string, string> = {
   free: 'border-prussian/30 bg-paper-raised',
   occupied: 'border-brass/40 bg-brass-wash',
   blocked: 'border-rule bg-paper text-steel',
+}
+
+const PLACE_ICON = {
+  free: BedSingle,
+  occupied: UserIcon,
+  blocked: Lock,
 }
 
 export function RoomPlaces({
@@ -52,21 +61,16 @@ export function RoomPlaces({
   >(null)
 
   const places = room.beds ?? []
-  const acceptsResidents = room.status === undefined || room.status === RoomStatus.in_service
 
   return (
     <div className="grid gap-4">
       <ul className="m-0 grid list-none gap-2 p-0">
-        {places.length === 0 ? (
-          <li className="text-steel">{t('places.none')}</li>
-        ) : null}
+        {places.length === 0 ? <li className="text-steel">{t('places.none')}</li> : null}
         {places.map((bed) => (
           <li key={bed.id}>
             <PlaceRow
               bed={bed}
-              occupant={occupancy.byBed.get(bed.id) ?? null}
               occupancy={occupancy}
-              acceptsResidents={acceptsResidents}
               mayManageResidencies={mayManageResidencies}
               onAssign={() => setOpenForm({ kind: 'assign', bed })}
               onRelease={() => setOpenForm({ kind: 'release', bed })}
@@ -87,14 +91,9 @@ export function RoomPlaces({
               )
             }
           >
+            <Plus aria-hidden="true" />
             {t('places.add')}
           </Button>
-          <p className="mt-2 mb-0 text-steel">
-            {t('places.remainder', {
-              count: room.free_places,
-              capacity: room.capacity,
-            })}
-          </p>
         </div>
       ) : null}
 
@@ -103,12 +102,7 @@ export function RoomPlaces({
       ) : null}
 
       {openForm?.kind === 'assign' ? (
-        <AssignForm
-          room={room}
-          bed={openForm.bed}
-          occupancy={occupancy}
-          onDone={() => setOpenForm(null)}
-        />
+        <AssignForm room={room} bed={openForm.bed} onDone={() => setOpenForm(null)} />
       ) : null}
 
       {openForm?.kind === 'release' ? (
@@ -128,17 +122,13 @@ export function RoomPlaces({
 /** One place: its label, its state, who holds it, and what may be done to it. */
 function PlaceRow({
   bed,
-  occupant,
   occupancy,
-  acceptsResidents,
   mayManageResidencies,
   onAssign,
   onRelease,
 }: {
   bed: Bed
-  occupant: Occupant | null
   occupancy: BuildingOccupancy
-  acceptsResidents: boolean
   mayManageResidencies: boolean
   onAssign: () => void
   onRelease: () => void
@@ -146,7 +136,9 @@ function PlaceRow({
   const { t } = useTranslation()
   const formatters = useFormatters()
 
+  const occupant = occupancy.byBed.get(bed.id) ?? null
   const taken = bed.status === BedStatus.occupied
+  const StateIcon = PLACE_ICON[bed.status] ?? Lock
 
   return (
     <div
@@ -155,10 +147,11 @@ function PlaceRow({
         PLACE_TONE[bed.status] ?? PLACE_TONE.blocked,
       )}
     >
-      <span className="font-mono text-lg font-semibold">
-        {t('places.label', { label: bed.label })}
+      <span className="inline-flex items-baseline gap-2" title={t(`bedStatus.${bed.status}`)}>
+        <StateIcon aria-hidden="true" className="size-5 shrink-0 translate-y-1 text-steel" />
+        <span className="font-mono text-lg font-semibold">{bed.label}</span>
+        <span className="sr-only">{t(`bedStatus.${bed.status}`)}</span>
       </span>
-      <span className="text-steel">{t(`bedStatus.${bed.status}`)}</span>
 
       <span className="min-w-0 grow basis-full sm:basis-auto">
         {taken ? (
@@ -172,17 +165,9 @@ function PlaceRow({
                 {t('places.since', { date: formatters.date(occupant.movedInAt) })}
               </span>
             </>
-          ) : occupancy.isResolving ? (
-            <span className="text-steel">{t('places.resolving')}…</span>
           ) : occupancy.canResolve ? (
-            // The card was asked for and refused, which is worth saying: the
-            // place is held by somebody this reader was not allowed to see.
             <span className="text-steel">{t('places.unnamed')}</span>
-          ) : (
-            // The cards were never asked for. The panel above has already said
-            // why, and repeating it on every place would only be noise.
-            null
-          )
+          ) : null
         ) : null}
       </span>
 
@@ -196,17 +181,15 @@ function PlaceRow({
               onClick={onRelease}
               disabled={occupant?.residencyId === undefined || occupant?.residencyId === null}
             >
+              <UserMinus aria-hidden="true" />
               {t('residency.release')}
             </Button>
-          ) : bed.status === BedStatus.free && acceptsResidents ? (
+          ) : bed.status === BedStatus.free ? (
             <Button type="button" variant="outline" size="sm" onClick={onAssign}>
+              <UserPlus aria-hidden="true" />
               {t('residency.assign')}
             </Button>
-          ) : (
-            <span className="text-steel">
-              {acceptsResidents ? t('places.blockedNote') : t('places.roomClosedNote')}
-            </span>
-          )}
+          ) : null}
         </span>
       ) : null}
     </div>
@@ -238,7 +221,7 @@ function AddPlaceForm({ room, onDone }: { room: Room; onDone: () => void }) {
     <form className="grid gap-3 border border-rule bg-paper px-3 py-3" onSubmit={submit}>
       <h4 className="label-caps m-0">{t('places.addTitle', { room: room.number })}</h4>
       {createBed.isError ? <RequestRefusal error={createBed.error} /> : null}
-      <FormField id={`bed-label-${room.id}`} label={t('fields.label')} note={t('places.labelNote')}>
+      <FormField id={`bed-label-${room.id}`} label={t('fields.label')} required>
         <Input
           id={`bed-label-${room.id}`}
           value={label}
@@ -260,45 +243,39 @@ function AddPlaceForm({ room, onDone }: { room: Room; onDone: () => void }) {
 }
 
 /**
- * FR-03. The candidates are the residents the roll of this building returned.
- * A person who is not on the roll has no account yet, and since FR-42 the
- * register has a route that makes one: the form says so and links to it rather
- * than leaving the reader at an empty list with nothing to do about it.
+ * FR-03. The resident is found by name rather than picked out of a roll: the
+ * search runs on the server (`q` against the roll of this building), so a
+ * dormitory of six hundred people costs the same as one of six.
  */
-function AssignForm({
-  room,
-  bed,
-  occupancy,
-  onDone,
-}: {
-  room: Room
-  bed: Bed
-  occupancy: BuildingOccupancy
-  onDone: () => void
-}) {
+function AssignForm({ room, bed, onDone }: { room: Room; bed: Bed; onDone: () => void }) {
   const { t } = useTranslation()
-  const formatters = useFormatters()
   const refresh = useHousingRefresh()
-  const [userId, setUserId] = useState('')
+  const [query, setQuery] = useState('')
+  const [chosen, setChosen] = useState<User | null>(null)
   const [contract, setContract] = useState('')
   const [movedInAt, setMovedInAt] = useState(todayIso)
-  const [ground, setGround] = useState('')
   const assign = useCreateResidency<ApiError>()
+
+  const search = useDebounced(query.trim())
+  const found = useListBuildingUsers<listBuildingUsersResponse, ApiError>(
+    room.building_id,
+    { q: search, role: RoleCode.student, per_page: 8 },
+    { query: { enabled: search.length >= 2 && chosen === null, retry: false } },
+  )
+  const people = found.data?.status === 200 ? found.data.data.data : null
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const resident = Number(userId)
-    if (!Number.isInteger(resident) || resident <= 0) {
+    if (chosen === null) {
       return
     }
     assign.mutate(
       {
         data: {
-          user_id: resident,
+          user_id: chosen.id,
           bed_id: bed.id,
           contract_number: contract.trim(),
           moved_in_at: movedInAt,
-          ...(ground.trim() === '' ? {} : { ground: ground.trim() }),
         },
       },
       {
@@ -320,41 +297,58 @@ function AssignForm({
 
       {assign.isError ? <RequestRefusal error={assign.error} /> : null}
 
-      {occupancy.residents.length === 0 ? (
-        <p className="m-0 text-steel">{t('residency.noCandidates')}</p>
-      ) : null}
+      <div className="grid gap-2">
+        <FormField id={`${id}-person`} label={t('fields.full_name')} required>
+          <Input
+            id={`${id}-person`}
+            value={chosen === null ? query : chosen.full_name}
+            maxLength={120}
+            required
+            readOnly={chosen !== null}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </FormField>
 
-      <p className="m-0 text-steel">
-        <Link className="text-prussian underline" to={`/buildings/${room.building_id}/accounts`}>
-          {t('residency.issueAccount')}
-        </Link>
-      </p>
+        {chosen !== null ? (
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('housing.searchResident')}
+              title={t('housing.searchResident')}
+              onClick={() => {
+                setChosen(null)
+                setQuery('')
+              }}
+            >
+              <Search aria-hidden="true" />
+            </Button>
+          </div>
+        ) : people !== null ? (
+          <ul className="m-0 grid list-none gap-1 p-0">
+            {people.length === 0 ? (
+              <li className="text-steel">{t('residency.nobodyFound')}</li>
+            ) : null}
+            {people.map((person) => (
+              <li key={person.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setChosen(person)}
+                >
+                  <UserIcon aria-hidden="true" />
+                  {person.full_name}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
 
-      <FormField id={`${id}-user`} label={t('fields.user_id')} note={t('residency.candidateNote')}>
-        <select
-          id={`${id}-user`}
-          className={selectClassName}
-          value={userId}
-          required
-          onChange={(event) => setUserId(event.target.value)}
-        >
-          <option value="">{t('residency.choosePerson')}</option>
-          {occupancy.residents.map((person) => {
-            const held = [...occupancy.byBed.values()].find(
-              (entry) => entry.userId === person.id,
-            )
-            return (
-              <option key={person.id} value={String(person.id)}>
-                {held === undefined
-                  ? person.full_name
-                  : t('residency.alreadyPlaced', { name: person.full_name })}
-              </option>
-            )
-          })}
-        </select>
-      </FormField>
-
-      <FormField id={`${id}-contract`} label={t('fields.contract_number')}>
+      <FormField id={`${id}-contract`} label={t('fields.contract_number')} required>
         <Input
           id={`${id}-contract`}
           value={contract}
@@ -364,7 +358,7 @@ function AssignForm({
         />
       </FormField>
 
-      <FormField id={`${id}-date`} label={t('fields.moved_in_at')}>
+      <FormField id={`${id}-date`} label={t('fields.moved_in_at')} required>
         <Input
           id={`${id}-date`}
           type="date"
@@ -374,25 +368,8 @@ function AssignForm({
         />
       </FormField>
 
-      <FormField id={`${id}-ground`} label={t('fields.ground')} note={t('residency.groundNote')}>
-        <Input
-          id={`${id}-ground`}
-          value={ground}
-          maxLength={255}
-          onChange={(event) => setGround(event.target.value)}
-        />
-      </FormField>
-
-      <p className="m-0 text-steel">
-        {t('residency.assignSummary', {
-          room: room.number,
-          bed: bed.label,
-          date: formatters.date(movedInAt),
-        })}
-      </p>
-
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={assign.isPending}>
+        <Button type="submit" disabled={assign.isPending || chosen === null}>
           {assign.isPending ? `${t('common.saving')}…` : t('residency.assign')}
         </Button>
         <Button type="button" variant="outline" onClick={onDone}>

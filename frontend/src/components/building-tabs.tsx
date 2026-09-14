@@ -14,13 +14,13 @@ import { useSession } from '@/auth/session-context'
 import { cn } from '@/lib/utils'
 
 /**
- * The views of one building: the card, the register of rooms, the plan, the
- * staff and the accounts of incoming residents.
+ * The views of one building: the card, the housing stock, the staff and the
+ * accounts of incoming residents.
  *
  * They sit below the section tabs rather than beside them because they are one
  * object seen several ways, and because that many top-level tabs at 360 px are
  * a wall of links. Each is drawn from a capability and from nothing else: the
- * register and the plan for accounts that may read rooms, the staff for the two
+ * housing stock for accounts that may read rooms, the staff for the two
  * links of the chain of appointment (FR-41), the accounts for those who may
  * issue one (FR-42). A building manager therefore gets four tabs and not five —
  * he appoints nobody. The routes stay reachable and the server is what refuses
@@ -43,7 +43,6 @@ export function BuildingTabs({ buildingId }: { buildingId: number }) {
     ...(readsRooms
       ? [
           { to: `/buildings/${buildingId}/rooms`, label: t('building.views.rooms'), end: false },
-          { to: `/buildings/${buildingId}/plan`, label: t('building.views.plan'), end: false },
         ]
       : []),
     // Four roles read the queue of a dormitory and two export its register, and

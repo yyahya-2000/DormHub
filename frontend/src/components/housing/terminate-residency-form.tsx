@@ -15,15 +15,7 @@ import { useHousingRefresh } from '@/lib/housing-cache'
  *
  * The row is not deleted. A ground and a date are written, the place is free
  * from the moment the termination is recorded, and the residency stays on the
- * card of FR-06 as history. The date may be set forward, and then the two
- * halves of the record part company: the place is free today, the person keeps
- * the building-bound routes until the stated day. The note under the field says
- * so, because a warden setting a date a fortnight ahead has to know which of the
- * two he is deciding.
- *
- * The ground is required by the contract and required here — a termination with
- * an empty reason is refused with 422, and asking for it in the form is cheaper
- * than showing that refusal.
+ * card of FR-06 as history.
  */
 export function TerminateResidencyForm({
   residencyId,
@@ -71,11 +63,7 @@ export function TerminateResidencyForm({
         <p className="m-0 text-steel">{t('residency.unknownRecord')}</p>
       ) : null}
 
-      <FormField
-        id={`${id}-ground`}
-        label={t('fields.ground')}
-        note={t('residency.releaseGroundNote')}
-      >
+      <FormField id={`${id}-ground`} label={t('fields.ground')} required>
         <Input
           id={`${id}-ground`}
           value={ground}
@@ -86,11 +74,7 @@ export function TerminateResidencyForm({
         />
       </FormField>
 
-      <FormField
-        id={`${id}-date`}
-        label={t('fields.moved_out_at')}
-        note={t('residency.releaseDateNote')}
-      >
+      <FormField id={`${id}-date`} label={t('fields.moved_out_at')} required>
         <Input
           id={`${id}-date`}
           type="date"
