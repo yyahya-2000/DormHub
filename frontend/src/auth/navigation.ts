@@ -134,7 +134,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
   ],
   // The duty officer approves guest requests, and for that he needs the room a
   // guest is bound for and the roll of the building. Not the resident card: it
-  // carries citizenship, telephone and study status, and FR-06's criterion
+  // carries citizenship and telephone, and FR-06's criterion
   // names the warden of that building and the administrator. The server struck
   // this capability from the duty officer's set, and the mirror follows —
   // otherwise the floor plan would ask him for a dozen cards it knows will be
@@ -347,17 +347,6 @@ export function operatesCheckpoint(user: User, buildingId: number): boolean {
 /** FR-21 and §3.9.6: the administrator and the warden of the building concerned. */
 export function readsVisitRegister(user: User, buildingId: number): boolean {
   return may(user, Permission.viewVisitRegister, buildingId)
-}
-
-/**
- * NFR-06. Whether the unmasked document number may be asked for here.
- *
- * The circle is narrower than the queue's own readers and excludes the post:
- * at the desk the document is in the officer's hand, and the last four
- * characters are what a comparison needs.
- */
-export function readsGuestDocument(user: User, buildingId: number): boolean {
-  return may(user, Permission.viewGuestDocument, buildingId)
 }
 
 /**

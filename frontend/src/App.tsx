@@ -4,17 +4,18 @@ import { RequireSession } from '@/auth/require-session'
 import { SessionProvider } from '@/auth/session-provider'
 import { AppShell } from '@/components/app-shell'
 import { AnnouncementPublishPage } from '@/pages/announcement-publish-page'
-import { AnnouncementReadersPage } from '@/pages/announcement-readers-page'
 import { AnnouncementsPage } from '@/pages/announcements-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
+import { ChangePasswordPage } from '@/pages/change-password-page'
 import { CheckpointPage } from '@/pages/checkpoint-page'
 import { ConsentHistoryPage } from '@/pages/consent-history-page'
 import { ConsentPage } from '@/pages/consent-page'
-import { FloorPlanPage } from '@/pages/floor-plan-page'
+import { FloorPage } from '@/pages/floor-page'
 import { GuestQueuePage } from '@/pages/guest-queue-page'
 import { GuestRequestsPage } from '@/pages/guest-requests-page'
+import { HousingPage } from '@/pages/housing-page'
 import { LoginPage } from '@/pages/login-page'
 import { LostFoundItemPage } from '@/pages/lost-found-item-page'
 import { LostFoundPage } from '@/pages/lost-found-page'
@@ -23,12 +24,10 @@ import { MaintenanceQueuePage } from '@/pages/maintenance-queue-page'
 import { MaintenanceRequestPage } from '@/pages/maintenance-request-page'
 import { MaintenanceRequestsPage } from '@/pages/maintenance-requests-page'
 import { NotFoundPage } from '@/pages/not-found-page'
-import { NotificationSettingsPage } from '@/pages/notification-settings-page'
 import { NotificationsPage } from '@/pages/notifications-page'
 import { ResidentAccountPage } from '@/pages/resident-account-page'
 import { ResidentCardPage } from '@/pages/resident-card-page'
-import { RoomsPage } from '@/pages/rooms-page'
-import { SetPasswordPage } from '@/pages/set-password-page'
+import { RoomPage } from '@/pages/room-page'
 import { VisitRegisterPage } from '@/pages/visit-register-page'
 
 /**
@@ -50,8 +49,15 @@ export default function App() {
       <SessionProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/set-password" element={<SetPasswordPage />} />
           <Route element={<RequireSession />}>
+            {/*
+              FR-42's second half, and it is behind the token because the route
+              is: the password being replaced is checked against the signed-in
+              account's own hash. Outside the frame for the same reason as the
+              consent below — an account that still owes a password change is
+              sent here and has nothing else to do.
+            */}
+            <Route path="password" element={<ChangePasswordPage />} />
             {/*
               The consent of FR-35 is behind the token and outside the frame of
               the application, and both halves of that are deliberate. Behind
@@ -66,8 +72,15 @@ export default function App() {
               <Route index element={<BuildingRegisterPage />} />
               <Route path="buildings" element={<BuildingRegisterPage />} />
               <Route path="buildings/:buildingId" element={<BuildingPage />} />
-              <Route path="buildings/:buildingId/rooms" element={<RoomsPage />} />
-              <Route path="buildings/:buildingId/plan" element={<FloorPlanPage />} />
+              {/*
+                The housing stock, three screens deep: the floors of the
+                building, the rooms of one floor, and one room with its places.
+                A room is addressed inside its building because every capability
+                over it is held in a building and not in a room.
+              */}
+              <Route path="buildings/:buildingId/rooms" element={<HousingPage />} />
+              <Route path="buildings/:buildingId/rooms/floor/:floor" element={<FloorPage />} />
+              <Route path="buildings/:buildingId/rooms/:roomId" element={<RoomPage />} />
               <Route path="buildings/:buildingId/staff" element={<BuildingStaffPage />} />
               <Route
                 path="buildings/:buildingId/accounts"
@@ -114,16 +127,12 @@ export default function App() {
                 The announcement feed takes no building either, and there the
                 absence is the horizontal boundary itself (FR-07): the audience
                 is computed from the grants of the token, so no address can ask
-                for another dormitory's feed. The readers report is addressed by
-                announcement and narrowed by the server to the caller's own
-                dormitory.
+                for another dormitory's feed. Publication addresses a dormitory
+                and reads the same grants, so the form takes no parameter
+                either.
               */}
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="announcements/new" element={<AnnouncementPublishPage />} />
-              <Route
-                path="announcements/:announcementId/readers"
-                element={<AnnouncementReadersPage />}
-              />
               {/*
                 The lost-and-found bureau, and none of its three routes takes a
                 building. The feed computes the dormitories from the grants of
@@ -150,10 +159,6 @@ export default function App() {
                 everyone who can sign in has one.
               */}
               <Route path="notifications" element={<NotificationsPage />} />
-              <Route
-                path="notifications/settings"
-                element={<NotificationSettingsPage />}
-              />
               <Route path="consents" element={<ConsentHistoryPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
