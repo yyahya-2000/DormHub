@@ -24,6 +24,12 @@ export const NotificationType = {
   guestVisitOverdue: 'GuestVisitOverdue',
   maintenanceStatusChanged: 'MaintenanceRequestStatusChanged',
   /*
+   * FR-11's own message. The row it draws has to name the notice, because the
+   * feed it points at holds every notice of the dormitory and the reader is
+   * being told that one of them is new.
+   */
+  announcementPublished: 'AnnouncementPublished',
+  /*
    * The two of the lost-and-found module, and between them they carry the whole
    * of the module the screens cannot show. A claimant never reads the claims on
    * an entry — the marks are what makes a claim checkable, and a list of them

@@ -116,6 +116,22 @@ export function useNotificationMessage(notification: Notification): Notification
     if (comment !== null) {
       details.push(t('notifications.comment', { comment }))
     }
+  } else if (notification.type === NotificationType.announcementPublished) {
+    /*
+     * The one message here that is about something everybody can already read.
+     * It still has to name the notice: the row points at a feed of a dozen of
+     * them, and «announcements of the dormitory» — which is the category, and
+     * was all this row said before — tells the reader nothing they did not know
+     * from the tab it is under.
+     */
+    const title = textOf(payload, 'title')
+    if (title !== null) {
+      headline = t('notifications.announcementPublished', { title })
+    }
+    const building = textOf(payload, 'building_name')
+    if (building !== null) {
+      details.push(t('notifications.announcementBuilding', { building }))
+    }
   } else if (notification.type === NotificationType.lostFoundClaimFiled) {
     /*
      * Two messages in one class, told apart by `referred`. Somebody claims an
