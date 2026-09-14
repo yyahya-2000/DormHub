@@ -35,6 +35,15 @@ abstract class TestCase extends BaseTestCase
              * against an empty disk while the files piled up elsewhere.
              */
             'dormitory.maintenance.photo_disk' => 'local',
+            /*
+             * FR-24's photograph, on the disk of its own the lost-and-found
+             * module keeps (§4.6.2). Pinned here for the reason the line above
+             * is: the deployment points it at the S3-compatible store, and a
+             * publication test would otherwise write its invented photographs
+             * into the real bucket while `Storage::fake('local')` asserted
+             * against an empty disk.
+             */
+            'dormitory.lost_found.photo_disk' => 'local',
         ]);
 
         $this->app->forgetInstance('cache');

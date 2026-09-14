@@ -37,6 +37,7 @@ class DatabaseSeeder extends Seeder
             GuestSeeder::class,
             AnnouncementSeeder::class,
             MaintenanceSeeder::class,
+            LostFoundSeeder::class,
         ]);
     }
 }
