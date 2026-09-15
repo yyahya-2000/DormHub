@@ -123,7 +123,7 @@ class AnnouncementSeeder extends Seeder
         $this->write($building, $author, [
             'title' => 'Cold water off on Wednesday, 09:00 to 17:00',
             'body' => 'The riser on floors three to five is being replaced. Water returns the same evening.',
-            'category' => 'water_supply',
+            'category' => 'Водоснабжение',
             'published_at' => $today->subHours(4),
             'expires_at' => $today->addDays(6),
         ]);
