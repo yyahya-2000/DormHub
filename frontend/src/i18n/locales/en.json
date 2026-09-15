@@ -163,8 +163,7 @@
       "password": "Enter the password.",
       "other": "The field “{{field}}” is filled in incorrectly."
     },
-    "sessionExpired": "The session ended. Sign in again.",
-    "note": "The token is kept until the tab is closed, so a session does not outlive a shift on the shared computer at the security post."
+    "sessionExpired": "The session ended. Sign in again."
   },
   "register": {
     "heading": "Register of dormitories",

@@ -290,7 +290,6 @@ export function LoginPage() {
               the change of password happens inside the session. There is
               nothing on this screen for an account that has never signed in.
             */}
-            <p className="text-steel">{t('login.note')}</p>
           </form>
         </div>
       </main>
