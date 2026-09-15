@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * MAINTENANCE_WORK_LOG of the ER model (§3.4.3), append-only by §3.4.1's sixth
+ * MAINTENANCE_WORK_LOG of the ER model (§3.4.3), append-only by §3.4.1's fifth
  * decision and by §4.4.4.
  *
  * The class is `AuditLog` with a different set of columns, and that is the

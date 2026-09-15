@@ -120,7 +120,7 @@ enum AuditAction: string
      * FR-37 … FR-40. The maintenance module, and a deliberately short list.
      *
      * **Not every transition is here, and that is the point of there being two
-     * logs.** §3.4.1's sixth decision puts every status change into
+     * logs.** §3.4.1's fifth decision puts every status change into
      * `maintenance_work_logs` with its actor, its moment and its comment, and
      * that table is append-only by the same migration device as this one. A
      * second copy of the same nine rows in `audit_logs` would bury the log in

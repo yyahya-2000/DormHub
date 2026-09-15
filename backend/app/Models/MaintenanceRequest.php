@@ -142,7 +142,7 @@ class MaintenanceRequest extends Model
     }
 
     /**
-     * The history, oldest first: §3.4.1's sixth decision made readable.
+     * The history, oldest first: §3.4.1's fifth decision made readable.
      *
      * @return HasMany<MaintenanceWorkLog, $this>
      */
