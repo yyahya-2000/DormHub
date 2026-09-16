@@ -236,31 +236,90 @@ final class GuestRequestApprovalTest extends TestCase
     }
 
     /**
-     * «Заявку согласует дежурный, не комендант» — the agreement of 13.09.2026,
-     * stated once in `RoleCode::permissions()` and asserted here on all three
-     * of the roles that read the queue and do not decide it.
+     * Revision 3 of the guest module (16.09.2026): the decision belongs to the
+     * duty officer, the warden **and** the manager of the building, and the
+     * decision row names whoever took it.
+     *
+     * The agreement of 13.09.2026 had withheld it from the register roles.
+     * That reading did not survive contact with a dormitory — the person who
+     * keeps the register is the person at the desk — and the test that asserted
+     * it is this one, turned round rather than deleted, so that the change of
+     * rule stays visible in the suite.
      */
-    public function test_the_warden_the_manager_and_the_administrator_do_not_decide_a_guest_request(): void
+    public function test_the_warden_and_the_manager_of_the_building_decide_a_guest_request(): void
     {
         foreach ([
-            [RoleCode::Warden, $this->building, 'warden@example.test'],
-            [RoleCode::Manager, $this->building, 'manager@example.test'],
-            [RoleCode::Administrator, null, 'admin@example.test'],
-        ] as [$code, $scope, $email]) {
+            [RoleCode::Warden, 'warden@example.test'],
+            [RoleCode::Manager, 'manager@example.test'],
+        ] as [$code, $email]) {
+            $request = $this->pendingRequest();
+            $decider = $this->staff($code, $this->building, $email);
+
+            Sanctum::actingAs($decider);
+
+            $this->postJson("/api/v1/guest-requests/{$request->id}/approve")
+                ->assertOk()
+                ->assertJsonPath('data.status', GuestRequestStatus::Approved->value)
+                ->assertJsonPath('data.decided_by', $decider->getKey());
+
+            $stored = $request->fresh();
+
+            $this->assertSame(GuestRequestStatus::Approved, $stored->status);
+            $this->assertSame($decider->getKey(), $stored->decided_by);
+            $this->assertNotNull($stored->access_code);
+        }
+    }
+
+    /**
+     * The horizontal boundary of FR-07, asked of the roles revision 3 has just
+     * widened. Widening the set of roles that decide must not widen the set of
+     * buildings any of them decides in — the escalation this project has caught
+     * before.
+     */
+    public function test_the_warden_and_the_manager_of_another_building_may_not_decide(): void
+    {
+        foreach ([
+            [RoleCode::Warden, 'warden-b@example.test'],
+            [RoleCode::Manager, 'manager-b@example.test'],
+        ] as [$code, $email]) {
             $request = $this->pendingRequest();
 
-            Sanctum::actingAs($this->staff($code, $scope, $email));
+            Sanctum::actingAs($this->staff($code, $this->otherBuilding, $email));
 
             $this->postJson("/api/v1/guest-requests/{$request->id}/approve")
                 ->assertStatus(403);
 
-            // They read the queue all the same: the request names a room, and
-            // the rooms are the warden's and the manager's work.
-            if ($code !== RoleCode::Administrator) {
-                $this->getJson('/api/v1/guest-requests?building_id='.$this->building->getKey())
-                    ->assertOk();
-            }
+            $this->postJson("/api/v1/guest-requests/{$request->id}/reject", ['reason' => 'No.'])
+                ->assertStatus(403);
+
+            $this->assertSame(GuestRequestStatus::PendingReview, $request->fresh()->status);
+
+            // And the queue of the building they have no grant in stays shut.
+            $this->getJson('/api/v1/guest-requests?building_id='.$this->building->getKey())
+                ->assertStatus(403);
         }
+
+        $this->assertDatabaseHas('audit_logs', ['action' => AuditAction::AccessDenied->value]);
+    }
+
+    /**
+     * The administrator is the one role left that reads the queue of a
+     * dormitory and decides in none: §3.9.6 puts him over the register, not at
+     * the desk of a building.
+     */
+    public function test_the_administrator_reads_the_queue_and_does_not_decide(): void
+    {
+        $request = $this->pendingRequest();
+
+        Sanctum::actingAs($this->staff(RoleCode::Administrator, null, 'admin@example.test'));
+
+        $this->postJson("/api/v1/guest-requests/{$request->id}/approve")
+            ->assertStatus(403);
+
+        $this->assertSame(GuestRequestStatus::PendingReview, $request->fresh()->status);
+
+        $this->getJson('/api/v1/guest-requests?building_id='.$this->building->getKey())
+            ->assertOk();
     }
 
     /**
