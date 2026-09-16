@@ -92,6 +92,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
     Permission.viewGuestRequests,
+    Permission.decideGuestRequests,
     Permission.viewVisitRegister,
     Permission.viewGuestDocument,
     Permission.publishAnnouncements,
@@ -109,9 +110,11 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
   // too. Appointing staff is the one capability the warden keeps to himself,
   // and it is not a capability at all — see `GRANTABLE` below.
   // The guest module is where the three register roles stop being the same
-  // set. The manager reads the queue, because a request names a room and the
-  // rooms are his work; he does not decide on one, does not export the
-  // register and does not unmask a document number.
+  // set. The manager reads the queue and decides on it — revision 3 of the
+  // guest module (16.09.2026) gave the decision to whoever keeps the register
+  // of the building, because that is the person a resident finds at the desk.
+  // He still does not export the register or unmask a document number: §3.9.6
+  // names the administrator and the warden there.
   manager: [
     Permission.viewBuilding,
     Permission.viewRooms,
@@ -121,6 +124,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.viewResidentCard,
     Permission.issueResidentAccount,
     Permission.viewGuestRequests,
+    Permission.decideGuestRequests,
     Permission.publishAnnouncements,
     // The one module where the manager is the intended reader rather than the
     // relieving one: the defects are in the rooms, and the rooms are his work.
@@ -213,6 +217,37 @@ export function issuesResidentAccounts(user: User, buildingId: number): boolean 
 
 export function rolesOf(user: User): RoleCode[] {
   return (user.roles ?? []).map((grant) => grant.role)
+}
+
+/**
+ * The chain of appointment of §1.1.4, read top to bottom. It is the order the
+ * roles are named in when an account holds several, and nothing decides
+ * anything by it — the capability map above does that, and this list would be
+ * a second, disagreeing answer if it were ever asked a question of access.
+ */
+const ROLE_PRECEDENCE: readonly KnownRole[] = [
+  RoleCode.admin,
+  RoleCode.warden,
+  RoleCode.manager,
+  RoleCode.duty_officer,
+  RoleCode.security,
+  RoleCode.student,
+]
+
+/**
+ * The roles of the account, each named once and in the order above.
+ *
+ * A grant names a building, so one person may hold the same role twice — a
+ * duty officer of two dormitories is two grants and one role — and may hold
+ * two different roles in two different buildings. The first is a repetition
+ * and is dropped; the second is not, and both roles are kept. Naming only the
+ * weightiest would be the shorter answer and the wrong one: it would tell a
+ * warden of one dormitory who is a duty officer of another that he is only the
+ * first of the two.
+ */
+export function distinctRolesOf(user: User): KnownRole[] {
+  const held = new Set<string>(rolesOf(user))
+  return ROLE_PRECEDENCE.filter((role) => held.has(role))
 }
 
 /** Distinct buildings the account holds a role in; the administrator holds none. */
@@ -309,7 +344,12 @@ export function guestRequestBuildingsOf(user: User): number[] {
   return [...new Set(ids)]
 }
 
-/** FR-17. The duty officer of this dormitory, and nobody else. */
+/**
+ * FR-17. The duty officer, the warden or the manager of **this** dormitory.
+ *
+ * The building is the argument because it is the whole of the boundary: the
+ * same three roles one block over answer false here.
+ */
 export function decidesGuestRequests(user: User, buildingId: number): boolean {
   return may(user, Permission.decideGuestRequests, buildingId)
 }

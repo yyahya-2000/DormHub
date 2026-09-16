@@ -29,22 +29,22 @@ import { awaitsDecision } from '@/lib/guest'
 import { useGuestRefresh } from '@/lib/guest-cache'
 
 /**
- * FR-17, the duty officer's list.
+ * FR-17, the queue of a dormitory.
  *
- * The decision belongs to the duty officer of this dormitory and to nobody
- * else — that is the agreement of 13.09.2026, it sits on one capability on the
- * server, and here it decides only whether the two buttons are drawn. The other
- * roles read the same list and see it without them.
+ * The decision belongs to the duty officer, the warden and the manager of this
+ * dormitory — revision 3 of the guest module, 16.09.2026. It sits on one
+ * capability on the server, and here it decides only whether the two buttons
+ * are drawn. The administrator reads the same list and sees it without them.
  *
  * A refusal cannot be silent: the route requires the reason, the service
  * requires the argument, and the form below will not submit an empty one.
  */
 
 /**
- * The reasons a duty officer gives most often, as a directory over the free
- * text field. They are interface strings and not a server enumeration: the API
- * stores whatever sentence the officer sends. Picking one fills the field; it
- * can then be edited.
+ * The reasons given most often, as a directory over the free text field. They
+ * are interface strings and not a server enumeration: the API stores whatever
+ * sentence the decider sends. Picking one fills the field; it can then be
+ * edited.
  */
 const REJECTION_REASONS = [
   'quotaSpent',
