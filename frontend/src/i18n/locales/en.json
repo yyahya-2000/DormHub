@@ -258,8 +258,8 @@
   "roles": {
     "admin": "Administrator",
     "duty_officer": "Duty officer",
-    "warden": "Warden",
-    "manager": "Building manager",
+    "warden": "Dormitory head",
+    "manager": "Manager",
     "security": "Security",
     "student": "Resident",
     "scopeSystem": "whole system",

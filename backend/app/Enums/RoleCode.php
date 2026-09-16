@@ -49,10 +49,10 @@ enum RoleCode: string
         return match ($this) {
             self::Administrator => 'Administrator',
             self::DutyOfficer => 'Duty officer',
-            self::Warden => 'Warden',
-            self::Manager => 'Building manager',
-            self::SecurityOfficer => 'Security officer',
-            self::Resident => 'Student resident',
+            self::Warden => 'Dormitory head',
+            self::Manager => 'Manager',
+            self::SecurityOfficer => 'Security',
+            self::Resident => 'Resident',
         };
     }
 
