@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   buildingsOf,
   buildingsWith,
+  distinctRolesOf,
   guestRequestBuildingsOf,
   maintenanceBuildingsOf,
   Permission,
@@ -41,6 +42,17 @@ export function AppShell() {
   const user = session.user
   const buildings = buildingsOf(user)
   const primaryBuilding = buildings[0]
+  /*
+   * Who is signed in, said in the one place every screen carries. The token
+   * lives in `sessionStorage`, so two windows of the same browser are two
+   * different accounts, and the name alone does not tell them apart at the
+   * distance a projector puts between the screen and the room. The building
+   * the grant names is deliberately left out: it is on the tabs below, and the
+   * question this line answers is which of the six roles is looking.
+   */
+  const standing = distinctRolesOf(user)
+    .map((role) => t(`roles.${role}`))
+    .join(', ')
 
   /*
    * The sections, built from the grants of the account. A tab is drawn when the
@@ -155,7 +167,14 @@ export function AppShell() {
             />
             <div className="min-w-0">
               <p className="truncate font-semibold tracking-wide">{t('app.fullName')}</p>
-              <p className="truncate text-white/70">{user.full_name}</p>
+              <p className="flex min-w-0 items-baseline gap-2 text-white/70">
+                <span className="min-w-0 truncate">{user.full_name}</span>
+                {standing !== '' ? (
+                  <span className="shrink-0 border border-white/30 px-1.5 font-medium text-white/85">
+                    {standing}
+                  </span>
+                ) : null}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
