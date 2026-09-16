@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -34,6 +34,7 @@ export function AppShell() {
 
   const authenticated = session.status === 'authenticated'
   const unread = useUnreadNotifications(authenticated)
+  const { pathname } = useLocation()
 
   if (!authenticated) {
     return null
@@ -131,6 +132,26 @@ export function AppShell() {
     ...(unread !== null && unread > 0 ? { badge: unread } : {}),
   })
 
+  /*
+   * Which tab is lit. `NavLink` answers that on its own and would light two at
+   * once here: the queue of a dormitory lives under the card of that dormitory,
+   * so `/buildings/1` is a prefix of `/buildings/1/guest-requests` and both
+   * match. Whoever may decide a request sees both tabs. So the closest match
+   * wins, which is the longest of the links that match at all — and the
+   * building tab still lights on the rooms, the staff and the accounts, which
+   * have no tab of their own up here.
+   */
+  const active = tabs.reduce<string | null>((best, tab) => {
+    const hit =
+      tab.end === true
+        ? pathname === tab.to
+        : pathname === tab.to || pathname.startsWith(`${tab.to}/`)
+    if (!hit) {
+      return best
+    }
+    return best === null || tab.to.length > best.length ? tab.to : best
+  }, null)
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="bg-prussian text-white">
@@ -199,17 +220,15 @@ export function AppShell() {
           <ul className="mx-auto flex w-full max-w-5xl flex-wrap gap-x-2 px-4">
             {tabs.map((tab) => (
               <li key={tab.to}>
-                <NavLink
+                <Link
                   to={tab.to}
-                  end={tab.end ?? false}
-                  className={({ isActive }) =>
-                    cn(
-                      'inline-block border-b-4 px-3 py-3 font-medium transition-colors',
-                      isActive
-                        ? 'border-prussian text-prussian'
-                        : 'border-transparent text-steel hover:text-ink',
-                    )
-                  }
+                  aria-current={tab.to === active ? 'page' : undefined}
+                  className={cn(
+                    'inline-block border-b-4 px-3 py-3 font-medium transition-colors',
+                    tab.to === active
+                      ? 'border-prussian text-prussian'
+                      : 'border-transparent text-steel hover:text-ink',
+                  )}
                 >
                   {tab.label}
                   {tab.badge !== undefined ? (
@@ -223,7 +242,7 @@ export function AppShell() {
                       </span>
                     </>
                   ) : null}
-                </NavLink>
+                </Link>
               </li>
             ))}
           </ul>
