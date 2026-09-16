@@ -177,8 +177,9 @@ final class BuildingPolicy
      * FR-16, FR-17: the queue of guest requests of this dormitory.
      *
      * Reading the queue and deciding on it are two capabilities and two
-     * methods. The manager reads it because a request names a room and the
-     * rooms are his; only the duty officer decides.
+     * methods. The administrator reads the queue of every dormitory and
+     * decides in none of them, which is the one place the two questions still
+     * come apart.
      */
     public function viewGuestRequests(User $user, Building $building): bool
     {
@@ -192,6 +193,12 @@ final class BuildingPolicy
      * holds no such capability at all, and a duty officer of another building
      * holds it in that building and not in this one. Both are 403, and both
      * are recorded as `access.denied` by the handler.
+     *
+     * The same line carries revision 3 of the guest module, which gave the
+     * capability to the warden and the manager as well. It is the building of
+     * the grant that keeps FR-07 shut, and widening the set of roles does not
+     * loosen it: a manager of block A asking about a request of block B holds
+     * the capability in block A and is refused here.
      */
     public function decideGuestRequests(User $user, Building $building): bool
     {

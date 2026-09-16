@@ -1629,14 +1629,19 @@ paths:
       tags: [Guest requests]
       summary: Approve a guest request
       description: |
-        FR-17. **The duty officer of this dormitory**, and nobody else: not the
-        warden, not the manager, not the administrator. The capability sits on
-        one role (`Permission::DecideGuestRequests`), which is the agreement of
-        13.09.2026 stated once rather than repeated in four policies.
+        FR-17. **The duty officer, the warden or the manager of this
+        dormitory** — the holders of `Permission::DecideGuestRequests`, which
+        revision 3 of the guest module (16.09.2026) widened from the duty
+        officer alone. The capability is stated once in `RoleCode::permissions()`
+        rather than repeated in four policies, which is why the widening
+        touched no policy.
 
-        The consequence is deliberate: a dormitory with no duty officer
-        appointed cannot approve a guest request, and the remedy is an
-        appointment under FR-41.
+        The administrator is not among them: he reads the queue of every
+        dormitory and decides at the desk of none.
+
+        The boundary that remains is the building of the grant. A manager of
+        one block calling this route with the identifier of a request in
+        another is 403, and the refusal is recorded as `access.denied`.
 
         On success the access code is drawn and stored, `decided_by` and
         `decided_at` are written, the audit record is written in the same

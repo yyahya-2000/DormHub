@@ -92,10 +92,23 @@ enum RoleCode: string
          * differ from one another, and the difference is not decorative:
          * §3.9.6 gives the visitor register to «the administrator and the
          * warden of the building concerned» and not to the manager, and the
-         * agreement of 13.09.2026 gives the decision on a request to the duty
-         * officer and to nobody else. Sharing one arm and adding a condition
+         * administrator reads the guest queue of every dormitory without
+         * deciding in any of them. Sharing one arm and adding a condition
          * afterwards would have hidden both rules inside a method that is
          * supposed to state them.
+         *
+         * **Revision 3 of the guest module (16.09.2026).** The decision on a
+         * request was the duty officer's alone; it is now the duty officer's,
+         * the warden's and the manager's, inside the building their grant
+         * names. The agreement of 13.09.2026 divided the queue from the
+         * register work on paper, and the dormitories do not: the person who
+         * keeps the register is the person a resident finds at the desk, and a
+         * request that waits for a duty officer who is on the door is a
+         * request the fourth criterion of FR-17 closes as rejected. The
+         * separation is dropped in favour of the building boundary, which is
+         * the one that was ever enforced — a manager of block A still cannot
+         * touch a request of block B, and the grant's `building_id` is what
+         * refuses him.
          *
          * The register work — rooms, places, move-in, move-out, cards,
          * accounts — is still identical for all three, and the manager still
@@ -135,6 +148,7 @@ enum RoleCode: string
                 Permission::IssueResidentAccount,
                 Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
+                Permission::DecideGuestRequests,
                 Permission::ViewVisitRegister,
                 Permission::ViewMaintenanceRequests,
                 Permission::TriageMaintenanceRequests,
@@ -150,9 +164,11 @@ enum RoleCode: string
                 Permission::DecideLostFoundDisputes,
             ],
             /*
-             * The manager reads the guest queue, because a request names a
-             * room and the rooms are his work. He does not decide on one, does
-             * not export the register and does not unmask a document number.
+             * The manager reads the guest queue and decides on it, because a
+             * request names a room, the rooms are his work, and he is the
+             * person at the desk when a resident brings the request. He still
+             * does not export the register: §3.9.6 names the administrator and
+             * the warden there, and that line is untouched by revision 3.
              */
             self::Manager => [
                 Permission::ViewBuilding,
@@ -164,6 +180,7 @@ enum RoleCode: string
                 Permission::IssueResidentAccount,
                 Permission::PublishAnnouncements,
                 Permission::ViewGuestRequests,
+                Permission::DecideGuestRequests,
                 /*
                  * The maintenance queue in full. §1.1.4's revision 2 lists it
                  * among the register work that moves to the manager, and this

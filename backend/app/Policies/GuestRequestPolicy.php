@@ -19,10 +19,12 @@ use App\Models\User;
  * to the audit log as `access.denied` by the handler in bootstrap/app.php.
  *
  * The policy names no role anywhere (§3.3.3). It asks `BuildingPolicy`, which
- * asks for a capability, which `RoleCode::permissions()` answers — so the
- * agreement that the duty officer decides and the warden does not is stated
- * once, in the capability map, and not repeated in four methods that could
- * drift apart.
+ * asks for a capability, which `RoleCode::permissions()` answers — so who
+ * decides on a request is stated once, in the capability map, and not repeated
+ * in four methods that could drift apart. Revision 3 of the guest module
+ * (16.09.2026) widened that set from the duty officer to the duty officer, the
+ * warden and the manager, and this class was not edited for it, which is the
+ * argument for writing it this way.
  */
 final class GuestRequestPolicy
 {
@@ -57,7 +59,11 @@ final class GuestRequestPolicy
     }
 
     /**
-     * FR-17: approve or reject. The duty officer of **this** building.
+     * FR-17: approve or reject, inside **this** building and no other.
+     *
+     * Three roles carry the capability since revision 3 of the guest module —
+     * the duty officer, the warden and the manager — and the building of the
+     * grant is what separates them from the same three roles next door.
      */
     public function decide(User $user, GuestRequest $request): bool
     {
