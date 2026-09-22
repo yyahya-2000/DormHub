@@ -4,6 +4,7 @@ use App\Enums\MaintenanceCategory;
 use App\Enums\MaintenanceLocation;
 use App\Enums\MaintenanceRequestStatus;
 use App\Enums\MaintenanceUrgency;
+use App\Models\MaintenanceRequest;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -141,10 +142,13 @@ return new class extends Migration
             .' )'
         );
 
-        // FR-36, third criterion: «up to three photographs».
+        // FR-36, third criterion: «up to three photographs». The figure is
+        // `MaintenanceRequest::MAX_PHOTOS`, the same one the form rule reads,
+        // so the ceiling is stated once and enforced twice.
         DB::statement(
             'ALTER TABLE maintenance_requests ADD CONSTRAINT maintenance_requests_at_most_three_photographs'
-            .' CHECK (jsonb_typeof(photo_paths) = \'array\' AND jsonb_array_length(photo_paths) <= 3)'
+            .' CHECK (jsonb_typeof(photo_paths) = \'array\''
+            .' AND jsonb_array_length(photo_paths) <= '.MaintenanceRequest::MAX_PHOTOS.')'
         );
 
         // FR-37, second criterion: «acceptance without a planned completion

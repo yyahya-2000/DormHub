@@ -200,13 +200,6 @@ return [
         */
         'overdue_after_days' => (int) env('MAINTENANCE_OVERDUE_AFTER_DAYS', 7),
 
-        /*
-        | FR-36: «up to three photographs». Read by the form request and by the
-        | CHECK constraint through the migration, so the ceiling is stated once
-        | and enforced twice.
-        */
-        'max_photos' => (int) env('MAINTENANCE_MAX_PHOTOS', 3),
-
         // The largest photograph the form accepts, in kilobytes. A phone
         // photograph of a leaking pipe is a few hundred; the ceiling is there
         // so that a client uploading an original from a camera is refused with

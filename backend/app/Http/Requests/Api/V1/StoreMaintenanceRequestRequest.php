@@ -56,8 +56,6 @@ final class StoreMaintenanceRequestRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maximum = $this->maximumPhotos();
-
         return [
             'building_id' => ['required', 'integer', 'exists:buildings,id'],
             'category' => ['required', 'string', 'in:'.implode(',', MaintenanceCategory::values())],
@@ -75,7 +73,7 @@ final class StoreMaintenanceRequestRequest extends FormRequest
             // on at all.
             'description' => ['required', 'string', 'min:10', 'max:2000'],
             'urgency' => ['sometimes', 'string', 'in:'.implode(',', MaintenanceUrgency::values())],
-            'photos' => ['sometimes', 'array', 'max:'.$maximum],
+            'photos' => ['sometimes', 'array', 'max:'.MaintenanceRequest::MAX_PHOTOS],
             'photos.*' => [
                 'file',
                 'image',
@@ -93,7 +91,7 @@ final class StoreMaintenanceRequestRequest extends FormRequest
         return [
             'photos.max' => sprintf(
                 'A request carries at most %d photograph(s).',
-                $this->maximumPhotos(),
+                MaintenanceRequest::MAX_PHOTOS,
             ),
             'location_note.required_if' => 'A common area has to be named: the register holds rooms, not kitchens.',
         ];
@@ -167,11 +165,6 @@ final class StoreMaintenanceRequestRequest extends FormRequest
         return is_array($files)
             ? array_values(array_filter($files, static fn ($file): bool => $file instanceof UploadedFile))
             : [];
-    }
-
-    private function maximumPhotos(): int
-    {
-        return max(1, (int) config('dormitory.maintenance.max_photos'));
     }
 
     private function maximumPhotoKilobytes(): int

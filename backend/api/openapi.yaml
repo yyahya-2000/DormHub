@@ -2084,9 +2084,10 @@ paths:
         check is a policy question put to the register, and the same 403 answers
         a resident of block A filing against block B.
 
-        Up to three photographs. The ceiling is configuration, is stated by this
-        route's validation as a 422 naming `photos`, and is stated again as a
-        CHECK constraint in the database.
+        Up to three photographs. The ceiling is one constant
+        (`MaintenanceRequest::MAX_PHOTOS`), read both by this route's validation,
+        which answers 422 naming `photos`, and by the CHECK constraint that
+        states the same figure in the database.
 
         On success the request is created in `submitted`, the first row of its
         work log is written in the same transaction with a null `from_status` —

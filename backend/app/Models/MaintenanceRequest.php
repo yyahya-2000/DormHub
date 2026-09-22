@@ -65,6 +65,15 @@ class MaintenanceRequest extends Model
     use HasFactory;
 
     /**
+     * FR-36, third criterion: «up to three photographs». The figure is here
+     * and nowhere else — the form rule, the photo store and the CHECK
+     * constraint of the migration all read this line. It was a setting until
+     * the acceptance of 22.09.2026, which only meant that raising it produced
+     * a 500 from a constraint that had the three baked in.
+     */
+    public const MAX_PHOTOS = 3;
+
+    /**
      * The migration's defaults, repeated so that a request is complete in
      * memory and not only after a round trip — the same reason `Building`,
      * `Room` and `GuestRequest` repeat theirs.

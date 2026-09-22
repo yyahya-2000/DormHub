@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Notifications\MaintenanceRequestFiled;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -187,21 +188,23 @@ final class MaintenanceSubmissionTest extends TestCase
     }
 
     /**
-     * The ceiling is configuration and the database enforces the same figure,
-     * so a deployment that lowered it would be refused by the CHECK as well as
-     * by the rule. Here the rule is what answers, and it reads the setting.
+     * One figure, stated once and enforced twice. The acceptance of
+     * 22.09.2026: the ceiling used to be a setting that the CHECK constraint
+     * did not read, so raising it turned a 422 into a 500 — the setting said
+     * four and the table still said three. The rule now reads
+     * `MaintenanceRequest::MAX_PHOTOS`, and so does the constraint; this test
+     * asks the constraint directly, with the rule out of the way.
      */
-    public function test_the_ceiling_on_photographs_is_read_from_configuration(): void
+    public function test_the_database_refuses_a_fourth_photograph_with_the_rule_out_of_the_way(): void
     {
-        config(['dormitory.maintenance.max_photos' => 1]);
+        $this->expectException(QueryException::class);
 
-        Sanctum::actingAs($this->resident);
-
-        $this->post('/api/v1/maintenance-requests', $this->submission($this->building, [
-            'photos' => [$this->photograph('a.png'), $this->photograph('b.png')],
-        ]))
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('photos');
+        MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->create([
+                'photo_paths' => array_fill(0, MaintenanceRequest::MAX_PHOTOS + 1, 'maintenance/1/a.png'),
+            ]);
     }
 
     /**
