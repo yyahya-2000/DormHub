@@ -45,7 +45,15 @@ use Illuminate\Support\Facades\Hash;
  */
 class HousingSeeder extends Seeder
 {
-    private const DEMO_PASSWORD = 'password';
+    /**
+     * The password every seeded account shares. `password` locally, because
+     * the stand is a local stand; DEMO_PASSWORD overrides it where the stand
+     * is reachable from outside.
+     */
+    private function demoPassword(): string
+    {
+        return (string) env('DEMO_PASSWORD', 'password');
+    }
 
     /**
      * The shared password, hashed once.
@@ -273,7 +281,7 @@ class HousingSeeder extends Seeder
                 'full_name' => $given.' '.$family,
                 'phone' => sprintf('+7900%07d', 1000000 + $index),
                 'citizenship' => self::CITIZENSHIPS[$index % count(self::CITIZENSHIPS)],
-                'password_hash' => $this->passwordHash ??= Hash::make(self::DEMO_PASSWORD),
+                'password_hash' => $this->passwordHash ??= Hash::make($this->demoPassword()),
                 'status' => UserStatus::Active,
             ],
         );

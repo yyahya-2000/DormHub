@@ -33,6 +33,11 @@ x-app-env: &app-env
   # Rebuilt by the entrypoint on every container start.
   APP_OPTIMIZE_ON_BOOT: "1"
 
+  # The password the seeded demonstration accounts share. Passed through the
+  # environment and not read from .env: the entrypoint caches the config, and
+  # a cached config stops Laravel reading that file at all.
+  DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+
   # `web` publishes on the loopback, so the only thing that can reach it is
   # the host's nginx, and trusting the hop is trusting that nginx.
   TRUSTED_PROXIES: "*"

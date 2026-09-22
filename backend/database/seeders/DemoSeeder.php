@@ -45,7 +45,15 @@ use Illuminate\Support\Facades\Hash;
  */
 class DemoSeeder extends Seeder
 {
-    private const DEMO_PASSWORD = 'password';
+    /**
+     * The password every seeded account shares. `password` locally, because
+     * the stand is a local stand; DEMO_PASSWORD overrides it where the stand
+     * is reachable from outside.
+     */
+    private function demoPassword(): string
+    {
+        return (string) env('DEMO_PASSWORD', 'password');
+    }
 
     public function run(): void
     {
@@ -76,7 +84,7 @@ class DemoSeeder extends Seeder
                 [
                     'full_name' => $fullName,
                     'phone' => null,
-                    'password_hash' => Hash::make(self::DEMO_PASSWORD),
+                    'password_hash' => Hash::make($this->demoPassword()),
                     'status' => UserStatus::Active,
                 ],
             );
