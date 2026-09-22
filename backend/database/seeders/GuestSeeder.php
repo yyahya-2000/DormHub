@@ -18,8 +18,8 @@ use Illuminate\Database\Seeder;
 
 /**
  * The guest module on the development stand: one request in each state the
- * duty officer's queue, the security post and the visitor register have to be
- * able to draw.
+ * queue of the dormitory, the security post and the visitor register have to
+ * be able to draw.
  *
  * **Every guest here is invented (C-05).** The names are taken from a fixed
  * list by index, never sampled, so a second run produces the same people.
@@ -32,6 +32,11 @@ use Illuminate\Database\Seeder;
  * the closing hour is not a demonstration. Completed, so the register of FR-21
  * has rows with both times filled in. And rejected with a reason, because
  * FR-17's second criterion is about the reason and not about the refusal.
+ *
+ * The decided requests below are decided by the manager of the block, who has
+ * held that capability since revision 3 of the guest module and is the only
+ * holder of it on the stand since revision 4 of the role model removed the
+ * duty officer.
  *
  * The seeder runs after the housing register and the staff accounts, because
  * every request names a resident who invites and a dormitory they live in. It
@@ -55,7 +60,7 @@ class GuestSeeder extends Seeder
         }
 
         $residents = $this->residentsOf($building);
-        $officer = $this->staffOf($building, RoleCode::DutyOfficer);
+        $officer = $this->staffOf($building, RoleCode::Manager);
         $guard = $this->staffOf($building, RoleCode::SecurityOfficer);
 
         if ($residents === [] || $officer === null || $guard === null) {
@@ -96,7 +101,7 @@ class GuestSeeder extends Seeder
             'planned_to' => '23:00:00',
             'status' => GuestRequestStatus::Approved,
             'access_code' => app(AccessCodeGenerator::class)->generate(),
-            'decided_by' => $this->staffOf($building, RoleCode::DutyOfficer)?->getKey(),
+            'decided_by' => $this->staffOf($building, RoleCode::Manager)?->getKey(),
             'decided_at' => $day->subHours(3),
         ]);
     }

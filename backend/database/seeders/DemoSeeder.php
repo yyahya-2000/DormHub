@@ -25,6 +25,14 @@ use Illuminate\Support\Facades\Hash;
  * one manager to each block, which is what the arrangement is for. The others
  * stay on the first block: two wardens would say nothing the one already says.
  *
+ * `duty@example.test` was here until revision 4 of the role model (21.09.2026)
+ * merged the duty officer into the manager, and it is not replaced by a second
+ * manager of the first block. Every screen that account was signed in to show
+ * — the guest queue, the decision on a request, the roll of the building — is
+ * reachable as `manager01@example.test`, which the loop below already creates
+ * for that same block. What the stand gains is one account per role and no
+ * account whose name says a role the system no longer has.
+ *
  * Every person below is invented. Constraint C-05 keeps real personal data out
  * of the repository, and a seeder is exactly the place where a real name would
  * otherwise creep in. The addresses are equally fictitious, and the shared
@@ -53,7 +61,6 @@ class DemoSeeder extends Seeder
 
         $accounts = [
             ['admin@example.test', 'Anna Kovaleva', RoleCode::Administrator, null],
-            ['duty@example.test', 'Pavel Orlov', RoleCode::DutyOfficer, $primary],
             ['warden@example.test', 'Marina Sizova', RoleCode::Warden, $primary],
             ['security@example.test', 'Igor Belov', RoleCode::SecurityOfficer, $primary],
             ['student@example.test', 'Dmitry Larin', RoleCode::Resident, $primary],
