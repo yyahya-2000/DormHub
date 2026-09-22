@@ -37,6 +37,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         /*
+         * There is no sign-in page to send a guest to. Left at its default the
+         * auth middleware builds one with route('login') for any request that
+         * does not ask for JSON, and a request without an Accept header — curl,
+         * a scanner, anything but the client — got 500 where it should have got
+         * 401. Returning null makes it raise the authentication exception, which
+         * the handler below renders as JSON.
+         */
+        $middleware->redirectGuestsTo(fn () => null);
+
+        /*
          * Behind the production reverse proxy every request otherwise appears
          * to come from the proxy, which collapses the per-address sign-in limit
          * of FR-08 into one shared ceiling and writes the proxy's address into
