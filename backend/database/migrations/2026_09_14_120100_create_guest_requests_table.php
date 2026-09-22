@@ -22,8 +22,8 @@ use Illuminate\Support\Facades\Schema;
  * operation — which is acceptable at the volumes §3.9.1 counts and would not
  * be at a hundred times them.
  *
- * **`access_code` is unique and nullable.** Null until the duty officer
- * approves: §3.5.1 issues the code only at approval, so that there is nothing
+ * **`access_code` is unique and nullable.** Null until the request is
+ * approved: §3.5.1 issues the code only at approval, so that there is nothing
  * to present at the post before a decision exists. A partial unique index
  * would do as well; a plain one is used because PostgreSQL already treats
  * NULLs as distinct in a unique index, and the simpler object is the one a
@@ -90,7 +90,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // The duty officer's queue: one building, one status, oldest
+            // The queue of a dormitory: one building, one status, oldest
             // first. The only list this table is read as in the hot path.
             $table->index(['building_id', 'status', 'visit_date']);
 

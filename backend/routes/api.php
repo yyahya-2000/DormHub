@@ -39,8 +39,8 @@ use Illuminate\Support\Facades\Route;
 | beneath him issues an account to an incoming resident (FR-42). The fourth is
 | the personal account itself: the notifications of FR-34.
 |
-| The fifth is the guest module of increment 1: the request (FR-16), the duty
-| officer's decision (FR-17), the security post (FR-18, FR-19), the control of
+| The fifth is the guest module of increment 1: the request (FR-16), the
+| decision on it (FR-17), the security post (FR-18, FR-19), the control of
 | the departure deadline (FR-20, which has no route — it is a scheduled sweep)
 | and the visitor register (FR-21).
 |
@@ -115,9 +115,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     /*
      * FR-41. The staff of a building, as a sub-resource of that building:
      * there is no route by which a role is granted without naming the
-     * dormitory it holds in. The warden appoints the manager, the duty officer
-     * and the security officer here; the manager appoints nobody, and the
-     * administrator and warden roles are not on offer to anyone.
+     * dormitory it holds in. The warden appoints the manager and the security
+     * officer here; the manager appoints nobody, and the administrator and
+     * warden roles are not on offer to anyone.
      */
     Route::post('buildings/{building}/staff', [StaffController::class, 'store'])
         ->name('buildings.staff.store');
@@ -251,8 +251,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
      |--------------------------------------------------------------------------
      |
      | The scenario of §3.5.1 read as a list of routes. A resident submits; the
-     | duty officer of that dormitory decides; the security post finds the
-     | guest, records the entry and later the exit; the warden exports the
+     | warden or the manager of that dormitory decides; the security post finds
+     | the guest, records the entry and later the exit; the warden exports the
      | register.
      |
      | Three arrangements below are decisions rather than defaults.
@@ -288,8 +288,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->name('guest-requests.show');
 
     /*
-     * FR-17. The duty officer of this building, and nobody else — not the
-     * warden, not the manager, not the administrator (see `Permission`).
+     * FR-17. The warden or the manager of this building, and nobody else — not
+     * the administrator, who reads every queue and decides in none of them
+     * (see `Permission`).
      */
     Route::post('guest-requests/{guestRequest}/approve', [GuestRequestController::class, 'approve'])
         ->name('guest-requests.approve');
@@ -378,7 +379,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     /*
      * FR-37, FR-38. The warden or the manager of this dormitory, and nobody
-     * else — not the duty officer, not the administrator (see `Permission`).
+     * else — not the administrator, and never the resident who filed it (see
+     * `Permission`).
      */
     Route::post('maintenance-requests/{maintenanceRequest}/accept', [MaintenanceRequestController::class, 'accept'])
         ->name('maintenance-requests.accept');

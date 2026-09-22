@@ -197,9 +197,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         /*
          * §3.3.4 maps the quota breach to 422, and the body carries which of
-         * the two ceilings was hit and the count that hit it: a duty officer
-         * told only «quota exceeded» cannot tell a resident's third guest from
-         * the dormitory's sixtieth.
+         * the two ceilings was hit and the count that hit it: a manager told
+         * only «quota exceeded» cannot tell a resident's third guest from the
+         * dormitory's sixtieth.
          */
         $exceptions->render(fn (GuestQuotaExceededException $exception) => response()->json([
             'message' => $exception->getMessage(),

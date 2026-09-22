@@ -17,7 +17,7 @@ info:
     fourth is the personal account: FR-34 (notifications).
 
     The fifth is the guest module of increment 1, which is what the work is
-    built around: FR-16 (the request), FR-17 (the duty officer's decision),
+    built around: FR-16 (the request), FR-17 (the decision on it),
     FR-18 (verification at the security post), FR-19 (entry and exit) and
     FR-21 (the visitor register). FR-20, the control of the departure deadline,
     is in this increment too and has no route at all: it is a quarter-hourly
@@ -157,9 +157,9 @@ tags:
       category.
   - name: Guest requests
     description: >-
-      FR-16, FR-17 and FR-23. The resident invites; the duty officer of that
-      dormitory decides. Nobody else does — not the warden, not the manager,
-      not the administrator.
+      FR-16, FR-17 and FR-23. The resident invites; the warden or the manager
+      of that dormitory decides. Nobody else does — not the administrator, who
+      reads every queue and decides at the desk of none.
   - name: Checkpoint
     description: >-
       FR-18 and FR-19. The security post: find the guest, record the entry,
@@ -410,8 +410,8 @@ paths:
         (`vacant_beds`), so that a client never has to subtract and arrive at a
         figure the server did not refuse on.
 
-        The administrator, and the warden, manager or duty officer **of this
-        building**. A resident does not read the occupancy of the whole dormitory.
+        The administrator, and the warden or the manager **of this building**.
+        A resident does not read the occupancy of the whole dormitory.
         The list is paged, and all three filters are applied by the database
         rather than by the client: `free=1` narrows it to the rooms holding a
         place somebody could move into today, `q` matches part of a room
@@ -798,9 +798,9 @@ paths:
       summary: The resident card
       description: |
         FR-06. Visible to the warden and the manager **of that dormitory** and to
-        the administrator; a resident sees only their own. Nobody else: the duty
-        officer's work is the guest request and the security officer's is the
-        entrance, and neither needs a citizenship or a telephone number. The
+        the administrator; a resident sees only their own. Nobody else: the
+        security officer's work is the entrance, and the entrance needs neither
+        a citizenship nor a telephone number. The
         warden of building 1 requesting a card of building 2 gets 403, at the API
         and not merely in the interface.
 
@@ -942,8 +942,8 @@ paths:
       summary: The people holding a role in this building
       description: |
         Personal data, so the circle is narrower than for the card: the
-        administrator, and the warden, manager or duty officer **of this
-        building**. A resident of the building gets 403, and so does the warden of
+        administrator, and the warden or the manager **of this building**. A
+        resident of the building gets 403, and so does the warden of
         any other building. The answer never carries a person attached to a different
         dormitory.
         The list is paged, and `q` searches it by part of a name — which is how
@@ -999,8 +999,8 @@ paths:
       tags: [Staff]
       summary: Appoint a member of staff in this dormitory
       description: |
-        FR-41. The warden of **this** building grants the manager, duty officer
-        or security role inside it.
+        FR-41. The warden of **this** building grants the manager or the
+        security role inside it.
 
         **The chain is one level deep at each step.** The administrator grants
         the warden and stops there; the staff beneath the warden are the
@@ -1491,13 +1491,13 @@ paths:
   /guest-requests:
     get:
       tags: [Guest requests]
-      summary: The duty officer's queue, or the caller's own requests
+      summary: The queue of a dormitory, or the caller's own requests
       description: |
         Two lists behind one route, and the scope decides which.
 
         With `building_id`, this is the queue of that dormitory and the caller
-        needs the capability that reads it — the duty officer, the warden, the
-        manager or the administrator. Without it, this is «my own requests» and
+        needs the capability that reads it — the warden, the manager or the
+        administrator. Without it, this is «my own requests» and
         needs nothing beyond a session: the filter is the identifier of the
         token, and there is no parameter through which one resident could ask
         about another's guests.
@@ -1629,12 +1629,13 @@ paths:
       tags: [Guest requests]
       summary: Approve a guest request
       description: |
-        FR-17. **The duty officer, the warden or the manager of this
-        dormitory** — the holders of `Permission::DecideGuestRequests`, which
-        revision 3 of the guest module (16.09.2026) widened from the duty
-        officer alone. The capability is stated once in `RoleCode::permissions()`
-        rather than repeated in four policies, which is why the widening
-        touched no policy.
+        FR-17. **The warden or the manager of this dormitory** — the holders
+        of `Permission::DecideGuestRequests`. Revision 3 of the guest module
+        (16.09.2026) widened that set to three roles and revision 4 of the role
+        model (21.09.2026) narrowed it to these two by removing the duty
+        officer. The capability is stated once in `RoleCode::permissions()`
+        rather than repeated in four policies, which is why neither change
+        touched a policy.
 
         The administrator is not among them: he reads the queue of every
         dormitory and decides at the desk of none.
@@ -2306,10 +2307,9 @@ paths:
       tags: [Maintenance]
       summary: Accept a request into work, with a planned completion date
       description: |
-        FR-37. **The warden or the manager of this dormitory**, and nobody else:
-        not the duty officer, who decides on guest requests and has nothing to
-        do with these; not the administrator, who reads every queue and promises
-        no dates; and never the resident who filed it.
+        FR-37. **The warden or the manager of this dormitory**, and nobody
+        else: not the administrator, who reads every queue and promises no
+        dates, and never the resident who filed it.
 
         «Acceptance without a planned completion date is impossible» — so
         `target_date` is required by this route, is a required argument of the
@@ -3536,19 +3536,24 @@ components:
     RoleCode:
       type: string
       description: |
-        The six roles of §1.1.4 as revision 2 of the role model leaves them.
+        The five roles of §1.1.4 as revision 4 of the role model leaves them.
 
         `admin` holds the register of dormitories and is the one role granted
         over the system as a whole. `warden` heads one dormitory: he appoints
         his own staff and does everything `manager` does. `manager` is the
         register work of that dormitory — rooms, places, moving in and out,
-        resident cards and accounts — and no appointments at all.
-        `duty_officer` approves guest requests, `security` checks the guest at
-        the entrance, `student` lives there.
+        resident cards and accounts — and the decision on a guest request, and
+        no appointments at all. `security` checks the guest at the entrance,
+        `student` lives there.
+
+        `duty_officer` was a sixth code until 21.09.2026. Everything it carried
+        was already the manager's, so it was merged into `manager` and the
+        grants that named it were rewritten. A client that still sends it is
+        refused by the enumeration below.
 
         The colloquial Russian word for a porter-caretaker is used nowhere: the
         entrance function belongs to the security service.
-      enum: [admin, duty_officer, warden, manager, security, student]
+      enum: [admin, warden, manager, security, student]
 
     UserStatus:
       type: string
@@ -4029,9 +4034,8 @@ components:
           description: >-
             One of the roles the caller may grant, and the chain is one level
             deep at each step: the administrator grants `warden` and nothing
-            below it, the warden grants `manager`, `duty_officer` and
-            `security` inside his own dormitory, and the manager grants
-            nothing. Anything else is 403 — an administrator asking for
+            below it, the warden grants `manager` and `security` inside his own
+            dormitory, and the manager grants nothing. Anything else is 403 — an administrator asking for
             `security` directly included.
           allOf:
             - $ref: '#/components/schemas/RoleCode'
@@ -4391,7 +4395,7 @@ components:
       type: string
       description: |
         The states of §3.5.4. `pending_review` is the only one that appears in
-        the duty officer's queue; `in_progress` and `overdue` mean a guest is
+        the queue of a dormitory; `in_progress` and `overdue` mean a guest is
         recorded inside the building; the last four are final.
 
         `draft` is absent: no route writes one, because the form lives in the
@@ -4479,7 +4483,7 @@ components:
           type: string
           nullable: true
           description: >-
-            Null until approval. Issued only on the duty officer's decision, so
+            Null until approval. Issued only on the decision to approve, so
             that before it there is nothing to present at the post (§3.5.1).
             Eight characters from an alphabet with the confusable ones removed,
             because it is read aloud and typed in at a desk.
@@ -4974,8 +4978,8 @@ components:
           description: >-
             The responsible party FR-37 names beside the date. Optional, and
             **restricted to the staff of the dormitory the request belongs
-            to** — the warden himself, the manager, the duty officer, the
-            security officer. A resident, or a member of staff of another
+            to** — the warden himself, the manager and the security officer.
+            A resident, or a member of staff of another
             dormitory, is 422 naming this field. Until the acceptance of
             15.09.2026 any identifier in the users table was admitted, and the
             answer carries the assignee's full name, so counting upwards read

@@ -27,8 +27,8 @@ use Illuminate\Support\Facades\DB;
  *
  * **Where the line falls: at the decision.** A request is a draft while nobody
  * has looked at it. `pending_review` is the state in which the resident may
- * still correct a mistyped surname and in which the duty officer's decision is
- * written onto the row, and nothing is refused there. From the decision onwards
+ * still correct a mistyped surname and in which the decision is written onto
+ * the row, and nothing is refused there. From the decision onwards
  * the row is evidence: the approval names a particular guest, the access code
  * rests on that name, and the entry at the post is recorded against it. So
  * every field the journal reads — and the decision itself — is frozen once the
