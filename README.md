@@ -89,6 +89,34 @@ docker compose exec app php artisan migrate:fresh --seed --database=pgsql_owner
 docker compose logs -f queue
 ```
 
+### The API reference
+
+`backend/api/openapi.yaml` describes all sixty-two operations of the REST contract (NFR-12), and
+http://localhost:8080/api/docs renders it as a browsable page. The same description is served raw at
+http://localhost:8080/api/docs/openapi.yaml, and it is the file Orval reads to generate the front
+end's client — one description, three readers, no copy.
+
+`Authorize` takes the plain-text token that `POST /api/v1/auth/login` returns and puts it on every
+subsequent `Try it out`. The demo accounts are seeded by `DemoSeeder` and share the password
+`password`:
+
+```sh
+curl -sS -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.test","password":"password"}'
+```
+
+The page is served by the same nginx container as the API, so `Try it out` is a same-origin request
+and there is no CORS configuration behind it.
+
+**Nothing on the page is fetched from outside.** NFR-08 holds for the reference as much as for the
+application: Swagger UI is vendored under `backend/public/swagger-ui/` rather than linked to a CDN,
+and Swagger UI's one built-in outbound call — the validity badge it fetches from
+validator.swagger.io — is switched off in `backend/resources/views/api-docs.blade.php`. See
+`backend/public/swagger-ui/PROVENANCE.txt` for the version, its origin and its checksum. Loading
+the page and executing a request against it produces requests to `localhost:8080` and to nothing
+else, so the reference needs no route to the internet to work.
+
 ### Tests
 
 The suite runs against its own database, `dormitory_test`, created by the same init script, so a test
