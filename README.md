@@ -1,11 +1,12 @@
 # Dormitory Student Activity Support System
 
 A web system that supports the everyday activities of students living in university dormitories:
-guest passes approved by the duty officer and checked at the security post, announcements,
-lost-and-found and maintenance requests. The backend is a Laravel 13 REST API on PHP 8.3 backed by
-PostgreSQL 17, Redis and S3-compatible object storage; the client is a React and TypeScript
-single-page application built by Vite. The repository holds the two applications side by side —
-`backend/` and `frontend/` — plus the Docker Compose environment that runs the whole stack locally.
+guest passes approved by the staff of the dormitory and checked at the security post,
+announcements, lost-and-found and maintenance requests. The backend is a Laravel 13 REST API on
+PHP 8.3 backed by PostgreSQL 17, Redis and S3-compatible object storage; the client is a React
+and TypeScript single-page application built by Vite. The repository holds the two applications
+side by side — `backend/` and `frontend/` — plus the Docker Compose environment that runs the
+whole stack locally.
 
 ## Requirements
 
