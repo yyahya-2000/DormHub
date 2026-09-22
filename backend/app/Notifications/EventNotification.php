@@ -25,8 +25,8 @@ use Illuminate\Notifications\Notification;
  * **Queued, always.** NFR-02 gives five seconds between the event and the
  * delivery being *queued* — not delivered — and the distinction is the design.
  * A status change that waited on a mail server would fail when the mail server
- * did, and the duty officer's decision is not the mail server's business. The
- * queue worker of the compose file does the sending; what the application
+ * did, and the decision on a guest request is not the mail server's business.
+ * The queue worker of the compose file does the sending; what the application
  * promises, and what the tests measure, is that the message reached the queue.
  *
  * **The subclass says its category and nothing about delivery.** The category

@@ -13,9 +13,9 @@ use App\Exceptions\IllegalTransitionException;
  *
  * The table below is that table, and the value of keeping it in one place is
  * the negative space: a move that is not written here cannot happen anywhere,
- * so «can a refused request be approved by a second duty officer who had the
- * screen open» has one answer, in one file, instead of one answer per method
- * that writes a status.
+ * so «can a refused request be approved by somebody who still had the screen
+ * open» has one answer, in one file, instead of one answer per method that
+ * writes a status.
  *
  * **Two rows of §3.5.4 are deliberately absent.**
  *
@@ -23,8 +23,9 @@ use App\Exceptions\IllegalTransitionException;
  * lives in the browser until it is sent, so `PendingReview` is the first state
  * a row has ever had. See `GuestRequestStatus`.
  *
- * `Overdue → InProgress`, which §3.5.4 labels «duty officer extended the visit
- * window», is absent because no route offers the extension in this increment.
+ * `Overdue → InProgress`, an extension of the visit window granted by whoever
+ * decided the request, is absent because no route offers the extension in this
+ * increment.
  * Carrying the transition without the route would make the table describe a
  * system that does not exist, and the table is the one artefact that must not.
  *

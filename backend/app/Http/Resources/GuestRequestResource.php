@@ -11,8 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * One guest request as the resident and the duty officer read it (FR-16,
- * FR-17).
+ * One guest request as the resident and the staff of the dormitory read it
+ * (FR-16, FR-17).
  *
  * **The decision names a person and not an identifier.** `decided_by` alone
  * made the screen either show a number or fetch an account per row; the name
@@ -55,7 +55,7 @@ final class GuestRequestResource extends JsonResource
 
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
-            // Null until the decision. §3.5.1: before the duty officer decides
+            // Null until the decision. §3.5.1: before the request is decided
             // there is nothing to present at the post.
             'access_code' => $this->access_code,
 

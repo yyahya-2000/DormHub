@@ -14,10 +14,10 @@ use Illuminate\Support\Collection;
  *
  * It is thin because there is nothing to decide: it walks the recipients and
  * calls `notify()` on each. It exists for the shape most callers of the later
- * increments have — «tell the duty officers on shift», «tell the warden and
- * the security post» — and for `sendOnce()` below, which is the part a caller
- * would otherwise get wrong: one event must not become two messages because
- * the warden of a dormitory is also its duty officer.
+ * increments have — «tell whoever decides on requests here», «tell the warden
+ * and the security post» — and for `sendOnce()` below, which is the part a
+ * caller would otherwise get wrong: one event must not become two messages
+ * because the warden of a dormitory also holds the manager's grant in it.
  */
 final readonly class Notifier
 {
@@ -35,7 +35,7 @@ final readonly class Notifier
 
     /**
      * The same, for a query result that may hold the same person twice — the
-     * warden of a building who is also its duty officer, say. One event, one
+     * warden of a building who is also its manager, say. One event, one
      * message.
      *
      * @param  Collection<int, User>  $recipients

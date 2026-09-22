@@ -8,7 +8,7 @@ use App\Models\GuestRequest;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * FR-17: the duty officer's decision, both ways round.
+ * FR-17: the decision on a guest request, both ways round.
  *
  * One request class for two routes, because the authorisation question is the
  * same one and asking it twice is how the two answers come to differ. What is

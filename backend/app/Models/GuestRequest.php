@@ -151,7 +151,7 @@ class GuestRequest extends Model
      * approved interval and the hour the dormitory stops admitting guests.
      *
      * Both halves are needed and neither is redundant. The interval is what
-     * the duty officer approved, and a guest approved until 20:00 is overdue
+     * was approved, and a guest approved until 20:00 is overdue
      * at 20:00 however late the dormitory closes. The end of the visiting
      * window is clause 2.2's boundary and the setting NFR-09 makes
      * per-building, and it caps an interval that would otherwise run past it.

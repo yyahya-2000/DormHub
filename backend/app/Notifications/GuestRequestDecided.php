@@ -8,8 +8,8 @@ use App\Enums\NotificationCategory;
 use Illuminate\Notifications\Messages\MailMessage;
 
 /**
- * FR-34, first of the four occasions: the duty officer has decided a guest
- * request (FR-17).
+ * FR-34, first of the four occasions: a guest request has been decided
+ * (FR-17).
  *
  * **Why the class is here before the guest requests are.** FR-34 belongs to
  * increment 0 and its occasions belong to increments 1 and 3. The requirement
@@ -49,7 +49,7 @@ final class GuestRequestDecided extends EventNotification
             ));
 
         if ($this->comment !== null && $this->comment !== '') {
-            $message->line('The duty officer wrote: '.$this->comment);
+            $message->line('The decision reads: '.$this->comment);
         }
 
         return $this->approved

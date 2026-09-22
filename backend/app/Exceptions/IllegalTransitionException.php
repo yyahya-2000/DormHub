@@ -16,9 +16,9 @@ use RuntimeException;
  * covers the object — what stands in the way is the state the request is
  * already in, usually because somebody else moved it first.
  *
- * The message names both ends of the move. A duty officer who presses Approve
- * on a request a second duty officer refused a moment earlier is told that it
- * is already refused, which is the only useful thing to tell them.
+ * The message names both ends of the move. A manager who presses Approve on a
+ * request the warden refused a moment earlier is told that it is already
+ * refused, which is the only useful thing to tell him.
  *
  * **The type is the interface and not one enum, which is §4.6.3's doing.** The
  * class was written for `GuestRequestStatus` when the guest module held the

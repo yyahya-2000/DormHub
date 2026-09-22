@@ -24,8 +24,8 @@ use Illuminate\Support\Facades\DB;
  * The design entity §3.3.4 specifies in full over IEEE 1016-1998 clause 5.3,
  * built to that specification.
  *
- * *Purpose*: owns the guest-request lifecycle — submission, the duty officer's
- * decision, cancellation, expiry (FR-16, FR-17, FR-20).
+ * *Purpose*: owns the guest-request lifecycle — submission, the decision,
+ * cancellation, expiry (FR-16, FR-17, FR-20).
  * *Subordinates*: `GuestRequestStateMachine`, `AccessCodeGenerator`,
  * `GuestQuota`, `AuditRecorder`. *Dependencies*: the domain layer only; no
  * controller, no HTTP object, no status code (§3.3.1).
@@ -101,7 +101,7 @@ final readonly class GuestRequestService
     }
 
     /**
-     * FR-17: the duty officer approves.
+     * FR-17: the warden or the manager of the building approves.
      *
      * @throws IllegalTransitionException the request is no longer pending (409)
      * @throws GuestQuotaExceededException the day is full (422)

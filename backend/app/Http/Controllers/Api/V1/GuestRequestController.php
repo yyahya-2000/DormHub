@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\Gate;
 final class GuestRequestController extends Controller
 {
     /**
-     * The duty officer's queue when `building_id` is given, and the caller's
+     * The queue of a dormitory when `building_id` is given, and the caller's
      * own requests when it is not.
      *
      * The own-requests branch filters by the identifier of the token, never by

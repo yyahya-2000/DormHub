@@ -27,7 +27,7 @@ use App\Contracts\TransitionableStatus;
  */
 enum GuestRequestStatus: string implements TransitionableStatus
 {
-    /** Submitted, waiting for the duty officer. The only state in the queue. */
+    /** Submitted, waiting for a decision. The only state in the queue. */
     case PendingReview = 'pending_review';
 
     /** Approved; the access code exists and the guest is expected at the post. */
@@ -39,7 +39,7 @@ enum GuestRequestStatus: string implements TransitionableStatus
     /** The control time of the building passed with no exit recorded (FR-20). */
     case Overdue = 'overdue';
 
-    /** Refused by the duty officer, with a reason, or never decided in time. */
+    /** Refused, with a reason, or never decided in time. */
     case Rejected = 'rejected';
 
     /** Withdrawn by the resident who submitted it. */

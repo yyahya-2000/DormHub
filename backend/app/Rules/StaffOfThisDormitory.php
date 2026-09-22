@@ -26,10 +26,9 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * **What the rule admits.** A grant naming *this* dormitory, held by anybody
  * whose role is not the resident's. That is the warden himself — FR-37's «a
- * dormitory whose warden does the work himself» — the manager beneath him, the
- * duty officer and the security officer. A resident is outside it because
- * being given a repair to do is staff work and a resident's grant says only
- * that they live here.
+ * dormitory whose warden does the work himself» — the manager beneath him and
+ * the security officer. A resident is outside it because being given a repair
+ * to do is staff work and a resident's grant says only that they live here.
  *
  * **What it deliberately does not admit.** The administrator, whose grant
  * names no building at all. It is the same line `Permission::

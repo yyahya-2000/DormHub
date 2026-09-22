@@ -25,9 +25,9 @@ use Illuminate\Contracts\Validation\ValidationRule;
  * hiring a security officer from outside is the ordinary case: the person is
  * an account with no dormitory behind it, and forbidding that would leave the
  * route unable to do the one thing it exists for. A resident of *his own*
- * building taking the duty officer's shift is as ordinary — the person is
- * already inside the scope, and the appointment adds nothing the warden did
- * not already have. What is refused is the third case, the one acceptance
+ * building taking a staff role in it is as ordinary — the person is already
+ * inside the scope, and the appointment adds nothing the warden did not
+ * already have. What is refused is the third case, the one acceptance
  * found and the one that has no operational reading at all: giving a staff
  * role to somebody the register of a **different** dormitory is responsible
  * for.

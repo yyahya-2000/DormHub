@@ -16,7 +16,7 @@ use Carbon\CarbonInterface;
  * **Counted at approval and not at submission**, which is the whole of the
  * design. A resident may ask for as many visits as they like; what the
  * dormitory limits is how many guests are actually admitted on a given day,
- * and that number is settled by the duty officer's decision. Counting at
+ * and that number is settled by the decision on a request. Counting at
  * submission would refuse a resident who has two pending requests and no
  * approvals — telling them they are over a ceiling nobody has yet let them
  * reach — and would let two officers approve past the ceiling in the same

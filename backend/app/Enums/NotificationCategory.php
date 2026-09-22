@@ -22,7 +22,7 @@ namespace App\Enums;
  */
 enum NotificationCategory: string
 {
-    /** FR-17. The duty officer has approved or refused a guest request. */
+    /** FR-17. A guest request has been approved or refused. */
     case RequestDecision = 'request_decision';
 
     /** FR-20. A visit is past the hour by which the guest was to have left. */

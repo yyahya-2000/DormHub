@@ -11,9 +11,9 @@ use RuntimeException;
  *
  * The quota is a house rule rather than a norm — the HSE rules of internal
  * order set no number — so both ceilings are settings and the exception
- * carries the one that was hit along with the count that hit it. A duty
- * officer told «quota exceeded» and nothing else cannot tell whether the
- * resident has had three guests today or the building has had fifty.
+ * carries the one that was hit along with the count that hit it. A manager
+ * told «quota exceeded» and nothing else cannot tell whether the resident has
+ * had three guests today or the building has had fifty.
  *
  * 422 and not 409: the decision the officer asked for is one the rules do not
  * allow at all today, and there is no state they can wait for that would make

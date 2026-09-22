@@ -10,8 +10,8 @@ use RuntimeException;
 
 /**
  * `GUEST_REQUEST.access_code` (§3.4.3), issued on approval and never before
- * (§3.5.1: «so that before the duty officer decides nothing can be presented
- * at the post»).
+ * (§3.5.1: so that nothing can be presented at the post before the request is
+ * decided).
  *
  * **The alphabet is the whole design.** The code is read aloud over a
  * telephone, copied off a screen onto paper and typed in by a person standing

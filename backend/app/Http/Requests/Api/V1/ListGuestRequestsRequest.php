@@ -9,7 +9,7 @@ use App\Models\Building;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * FR-17: the duty officer's queue, and the resident's own list.
+ * FR-17: the queue of a dormitory, and the resident's own list.
  *
  * **Two different lists behind one route, and the scope decides which.** With
  * `building` named, this is the queue of a dormitory and the caller needs the
