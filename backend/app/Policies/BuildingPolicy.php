@@ -111,6 +111,20 @@ final class BuildingPolicy
     }
 
     /**
+     * FR-43, the floor plan. Its acceptance criterion puts the plan behind the
+     * access rules of the resident card and not behind the register's own
+     * `ViewRooms`: the squares are the people in the rooms, and the plan is
+     * read as a way into their cards.
+     *
+     * The two lists of holders are the same today. They are not the same
+     * capability, and `Permission::ViewResidentCard` says why.
+     */
+    public function viewFloorPlan(User $user, Building $building): bool
+    {
+        return $user->hasPermissionInBuilding(Permission::ViewResidentCard, $building);
+    }
+
+    /**
      * Keeping the register — rooms and places — is the operative work of the
      * building (FR-02), inside that building. Revision 2 of the role model
      * puts it with the manager and leaves it with the warden as well.

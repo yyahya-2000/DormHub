@@ -20,7 +20,8 @@ use Tests\TestCase;
 
 /**
  * FR-02, «Register of rooms and beds», one test per acceptance criterion plus
- * the database-level check the verification clause names.
+ * the database-level check the verification clause names. The two floor-plan
+ * tests below are FR-43's and are marked as such.
  */
 final class RoomRegisterTest extends TestCase
 {
@@ -407,6 +408,9 @@ final class RoomRegisterTest extends TestCase
             ->assertJsonValidationErrors('floor');
     }
 
+    /**
+     * FR-43, the floor plan: the figures each storey's square is drawn from.
+     */
     public function test_the_floor_summary_counts_the_rooms_and_the_places_of_each_floor(): void
     {
         $occupied = Room::factory()->for($this->first)->withBeds(2)->create([
@@ -455,6 +459,10 @@ final class RoomRegisterTest extends TestCase
         ], $floors);
     }
 
+    /**
+     * FR-43's access rules, which are the resident card's: the plan stops at
+     * the edge of the building the grant names.
+     */
     public function test_the_warden_of_building_1_reads_no_floor_summary_of_building_2(): void
     {
         Room::factory()->for($this->second)->withBeds(1)->create(['number' => '101', 'capacity' => 1]);

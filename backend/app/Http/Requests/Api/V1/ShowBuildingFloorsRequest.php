@@ -8,9 +8,9 @@ use App\Models\Building;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * FR-02: the floors of one dormitory with the occupancy of each. The same
- * circle as the room register itself — the summary is that register added up,
- * so it cannot be readable by anybody the register is not.
+ * FR-43: the floors of one dormitory with the occupancy of each. The circle is
+ * the one FR-43's criterion names — the access rules of the resident card —
+ * because the plan is read as a way to the people in the rooms.
  */
 final class ShowBuildingFloorsRequest extends FormRequest
 {
@@ -19,7 +19,7 @@ final class ShowBuildingFloorsRequest extends FormRequest
         $building = $this->route('building');
 
         return $building instanceof Building
-            && $this->user()?->can('viewRooms', $building) === true;
+            && $this->user()?->can('viewFloorPlan', $building) === true;
     }
 
     /**
