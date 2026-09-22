@@ -1,0 +1,36 @@
+Swagger UI, vendored rather than linked.
+
+    package   swagger-ui-dist
+    version   5.33.0
+    licence   Apache-2.0 (see LICENSE and NOTICE beside this file)
+    origin    https://registry.npmjs.org/swagger-ui-dist/-/swagger-ui-dist-5.33.0.tgz
+    checksum  sha512-wpdK+m6BU5yj6pmUdMskZVTSWYG4DLglAx3sIhylloY37i8O37IrH+YEpqdXNfpaTGxILRBFzUqLF2jKqbfI7A==
+              (matches the integrity the registry publishes for this version;
+               verified on download, 22.09.2026)
+
+Why the files are in the repository instead of a <script> tag pointing at a
+CDN: NFR-08 requires every component on the mandatory path to be free software
+running on the university's servers and dependent on no external service. A CDN
+link would break that on the first page load, and would leave the reference
+blank on a machine with no route to the internet.
+
+Four files of the distribution are kept, and the rest is not:
+
+    swagger-ui.css            the stylesheet, with its `sourceMappingURL`
+                              comment removed — the .map is not vendored and a
+                              stale pointer is a 404 in the console
+    swagger-ui-bundle.js      the renderer, YAML parser included, which is why
+                              the description does not have to be converted to
+                              JSON to be served
+    favicon-16x16.png
+    favicon-32x32.png
+
+Left out on purpose: `swagger-ui-standalone-preset.js` (the top bar with a
+field for an arbitrary description URL — see the comment in
+../../resources/views/api-docs.blade.php),
+every `.map` file, the ES-module bundles, and the package's own index.html and
+swagger-initializer.js, which are replaced by the Blade view named above.
+
+Nothing here is edited by hand. To move to another version, download the
+tarball, verify its checksum against what the registry publishes, and copy the
+same four files across.
