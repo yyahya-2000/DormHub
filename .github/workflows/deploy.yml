@@ -14,6 +14,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Redeploy the commit that is already on main — after a change on the server
+  # itself, or to repeat a run that failed for a reason outside the code.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
