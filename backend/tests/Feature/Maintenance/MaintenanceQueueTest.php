@@ -70,8 +70,12 @@ final class MaintenanceQueueTest extends TestCase
      */
     public function test_the_warden_sees_every_open_request_of_their_building_with_its_age_category_and_urgency(): void
     {
-        $this->request(daysAgo: 6, category: MaintenanceCategory::Heating, urgency: MaintenanceUrgency::Emergency);
-        $this->request(daysAgo: 2, category: MaintenanceCategory::Plumbing);
+        // Age and urgency point opposite ways on purpose: sorted by age alone
+        // the three come back in exactly the reverse order, so the assertion
+        // below fails the moment the urgency key is dropped.
+        $this->request(daysAgo: 1, category: MaintenanceCategory::Heating, urgency: MaintenanceUrgency::Emergency);
+        $this->request(daysAgo: 3, category: MaintenanceCategory::Electrical, urgency: MaintenanceUrgency::Urgent);
+        $this->request(daysAgo: 6, category: MaintenanceCategory::Plumbing);
         // Closed, so outside «all open requests».
         MaintenanceRequest::factory()
             ->forBuilding($this->building)
@@ -83,16 +87,39 @@ final class MaintenanceQueueTest extends TestCase
 
         $response = $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
             ->assertOk()
-            ->assertJsonCount(2, 'data');
+            ->assertJsonCount(3, 'data');
 
-        // Ordered by urgency first, oldest inside one urgency — the order a
-        // queue is worked in.
+        // Ordered by urgency first — the order a queue is worked in, and an
+        // emergency reported this morning is worked before a wobbly chair
+        // reported last week.
         $response
             ->assertJsonPath('data.0.urgency', MaintenanceUrgency::Emergency->label())
-            ->assertJsonPath('data.0.age_days', 6)
+            ->assertJsonPath('data.0.age_days', 1)
             ->assertJsonPath('data.0.category', MaintenanceCategory::Heating->label())
-            ->assertJsonPath('data.1.age_days', 2)
-            ->assertJsonPath('data.1.category', MaintenanceCategory::Plumbing->label());
+            ->assertJsonPath('data.1.urgency', MaintenanceUrgency::Urgent->label())
+            ->assertJsonPath('data.1.age_days', 3)
+            ->assertJsonPath('data.1.category', MaintenanceCategory::Electrical->label())
+            ->assertJsonPath('data.2.urgency', MaintenanceUrgency::Routine->label())
+            ->assertJsonPath('data.2.age_days', 6)
+            ->assertJsonPath('data.2.category', MaintenanceCategory::Plumbing->label());
+    }
+
+    /**
+     * The tie-break beneath the urgency: inside one urgency the oldest is
+     * worked first. Asserted apart from the test above, whose data is chosen
+     * so that the urgency key alone decides it.
+     */
+    public function test_inside_one_urgency_the_oldest_request_comes_first(): void
+    {
+        $older = $this->request(daysAgo: 5, urgency: MaintenanceUrgency::Urgent);
+        $newer = $this->request(daysAgo: 2, urgency: MaintenanceUrgency::Urgent);
+
+        Sanctum::actingAs($this->warden);
+
+        $this->getJson("/api/v1/buildings/{$this->building->id}/maintenance-queue")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $older->id)
+            ->assertJsonPath('data.1.id', $newer->id);
     }
 
     /**
