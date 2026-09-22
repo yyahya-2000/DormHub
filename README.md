@@ -33,7 +33,8 @@ screen.
 
 ## The rest
 
-- [Running it locally, testing, deploying](docs/running.md)
+- [Running it locally, testing, deploying](RUNNING.md)
+- [The coursework itself](docs/yanal_yahya_cw.docx) — the written work behind this repository
 - [The API contract](backend/api/openapi.yaml) — 62 operations, the client is generated from it
 
 Yanal Yahya, 2026.

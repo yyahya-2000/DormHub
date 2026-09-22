@@ -1,6 +1,6 @@
 # Running and deploying
 
-The short version is in [../README.md](../README.md); this is everything else.
+The short version is in [README.md](README.md); this is everything else.
 
 A web system that supports the everyday activities of students living in university dormitories:
 guest passes approved by the staff of the dormitory and checked at the security post,
