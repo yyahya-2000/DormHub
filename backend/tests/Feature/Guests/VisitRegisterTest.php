@@ -206,7 +206,6 @@ final class VisitRegisterTest extends TestCase
 
         foreach ([
             [RoleCode::Manager, $this->building, 'manager@example.test'],
-            [RoleCode::DutyOfficer, $this->building, 'duty@example.test'],
             [RoleCode::SecurityOfficer, $this->building, 'guard2@example.test'],
         ] as [$code, $scope, $email]) {
             Sanctum::actingAs($this->staff($code, $scope, $email));
@@ -420,7 +419,7 @@ final class VisitRegisterTest extends TestCase
      * The other side of the line, and the reason it is drawn at the decision
      * rather than at the entry: a request nobody has looked at is a form. The
      * resident may still correct a mistyped surname and withdraw it, and the
-     * duty officer's decision is itself written onto the row from this state.
+     * decision is itself written onto the row from this state.
      */
     public function test_a_request_nobody_has_decided_on_is_still_a_draft(): void
     {
@@ -451,7 +450,7 @@ final class VisitRegisterTest extends TestCase
      */
     public function test_the_database_refuses_to_rewrite_the_ground_a_guest_was_admitted_on(): void
     {
-        $visit = $this->admittedOnDecision('The duty officer authorised the entry by telephone.');
+        $visit = $this->admittedOnDecision('The manager authorised the entry by telephone.');
 
         $this->expectException(QueryException::class);
         $this->expectExceptionMessageMatches('/admitted/');

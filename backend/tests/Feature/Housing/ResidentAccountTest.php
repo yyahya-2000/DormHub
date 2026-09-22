@@ -229,9 +229,9 @@ final class ResidentAccountTest extends TestCase
         ])->assertStatus(401);
     }
 
-    public function test_a_resident_issues_no_account_and_neither_does_a_duty_officer(): void
+    public function test_a_resident_issues_no_account_and_neither_does_a_security_officer(): void
     {
-        foreach ([RoleCode::Resident, RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $index => $role) {
+        foreach ([RoleCode::Resident, RoleCode::SecurityOfficer] as $index => $role) {
             $user = User::factory()
                 ->withRole($role, $this->first)
                 ->create(['email' => sprintf('outsider-%d@example.test', $index)]);

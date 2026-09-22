@@ -278,7 +278,7 @@ final class GuestRequestSubmissionTest extends TestCase
 
     public function test_a_member_of_staff_with_no_residency_may_not_invite_a_guest(): void
     {
-        Sanctum::actingAs($this->staff(RoleCode::DutyOfficer, $this->building, 'duty@example.test'));
+        Sanctum::actingAs($this->staff(RoleCode::Manager, $this->building, 'manager@example.test'));
 
         $this->postJson('/api/v1/guest-requests', $this->payload())->assertStatus(403);
     }

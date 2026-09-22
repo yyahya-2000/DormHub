@@ -477,7 +477,6 @@ final class LostFoundDisputeTest extends TestCase
         $outsiders = [
             'a warden of another dormitory' => $this->staff(RoleCode::Warden, $elsewhere, 'warden-b@example.test'),
             'the security officer' => $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test'),
-            'the duty officer' => $this->staff(RoleCode::DutyOfficer, $this->building, 'duty@example.test'),
             'the administrator' => $this->staff(RoleCode::Administrator, null, 'admin@example.test'),
             'the person holding the object' => $this->finder,
             'the claimant' => $this->owner,

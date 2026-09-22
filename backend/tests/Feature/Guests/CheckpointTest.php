@@ -76,7 +76,7 @@ final class CheckpointTest extends TestCase
         $this->request = GuestRequest::factory()
             ->forBuilding($this->building)
             ->from($this->resident)
-            ->approved($this->staff(RoleCode::DutyOfficer, $this->building, 'duty@example.test'))
+            ->approved($this->staff(RoleCode::Manager, $this->building, 'manager@example.test'))
             ->create([
                 'guest_full_name' => 'Ostap Verigin',
                 'visit_date' => '2026-09-14',
@@ -122,7 +122,7 @@ final class CheckpointTest extends TestCase
         $request = GuestRequest::factory()
             ->forBuilding($roundTheClock)
             ->from($resident)
-            ->approved($this->staff(RoleCode::DutyOfficer, $roundTheClock, 'night-duty@example.test'))
+            ->approved($this->staff(RoleCode::Manager, $roundTheClock, 'night-manager@example.test'))
             ->create([
                 'guest_full_name' => 'Ostap Verigin',
                 // The sixteenth: today, as anybody in the building would say.
@@ -389,8 +389,8 @@ final class CheckpointTest extends TestCase
     }
 
     /**
-     * The same for a refusal by the duty officer. A guest turned away at the
-     * decision has no more claim on the register than a withdrawn one.
+     * The same for a refusal. A guest turned away at the decision has no more
+     * claim on the register than a withdrawn one.
      */
     public function test_a_refused_request_names_nobody_at_the_post_either(): void
     {
@@ -399,7 +399,7 @@ final class CheckpointTest extends TestCase
         $refused = GuestRequest::factory()
             ->forBuilding($this->building)
             ->from($this->resident)
-            ->rejected($this->staff(RoleCode::DutyOfficer, $this->building, 'duty2@example.test'))
+            ->rejected($this->staff(RoleCode::Manager, $this->building, 'manager2@example.test'))
             ->create([
                 'guest_full_name' => 'Pyotr Nezvanov',
                 'visit_date' => '2026-09-14',

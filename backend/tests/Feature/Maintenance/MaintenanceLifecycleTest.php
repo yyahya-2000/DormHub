@@ -128,17 +128,17 @@ final class MaintenanceLifecycleTest extends TestCase
     /**
      * FR-38, third criterion: «transitions are restricted by role».
      *
-     * The duty officer decides on guest requests and not on these, which is
-     * the agreement of 13.09.2026 stated once in the capability map and
-     * checked here. The administrator is outside it too: accepting a request
-     * means promising a date and committing the dormitory's own labour.
+     * The security officer works the entrance and triages nothing; the
+     * administrator reads every queue and promises no dates; the resident who
+     * filed it moves it only at the two ends that are a matter of identity.
+     * All three are the capability map of 13.09.2026 stated once and checked
+     * here.
      */
     public function test_a_role_outside_the_graphs_actor_for_a_transition_is_refused(): void
     {
         $request = $this->requestInStatus();
 
         foreach ([
-            'the duty officer' => $this->staff(RoleCode::DutyOfficer, $this->building, 'duty@example.test'),
             'the security officer' => $this->staff(RoleCode::SecurityOfficer, $this->building, 'post@example.test'),
             'the administrator' => $this->staff(RoleCode::Administrator, null, 'admin@example.test'),
             'the resident who filed it' => $this->resident,

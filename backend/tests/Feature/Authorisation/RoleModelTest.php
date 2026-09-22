@@ -38,12 +38,12 @@ final class RoleModelTest extends TestCase
         $this->second = Building::factory()->create(['name' => 'Block 2']);
     }
 
-    public function test_six_roles_exist_administrator_warden_manager_duty_officer_security_officer_and_resident(): void
+    public function test_five_roles_exist_administrator_warden_manager_security_officer_and_resident(): void
     {
-        $this->assertSame(6, Role::query()->count());
+        $this->assertSame(5, Role::query()->count());
 
         $this->assertEqualsCanonicalizing(
-            ['admin', 'warden', 'manager', 'duty_officer', 'security', 'student'],
+            ['admin', 'warden', 'manager', 'security', 'student'],
             Role::query()->pluck('code')->map(fn (RoleCode $code): string => $code->value)->all(),
         );
     }
@@ -170,8 +170,6 @@ final class RoleModelTest extends TestCase
             [RoleCode::Warden, 'first', 'second', 403, 403],
             [RoleCode::Manager, 'first', 'first', 200, 200],
             [RoleCode::Manager, 'first', 'second', 403, 403],
-            [RoleCode::DutyOfficer, 'first', 'first', 200, 200],
-            [RoleCode::DutyOfficer, 'first', 'second', 403, 403],
             [RoleCode::SecurityOfficer, 'first', 'first', 200, 403],
             [RoleCode::SecurityOfficer, 'first', 'second', 403, 403],
             [RoleCode::Resident, 'first', 'first', 200, 403],

@@ -160,7 +160,7 @@ final class OverdueVisitTest extends TestCase
      * Block A closes at 21:00 and the guest was approved to 23:00, so the
      * closing hour caps the deadline at 21:00. Block B closes at 23:00 and the
      * guest was approved only to 20:00, so the **interval** is the deadline:
-     * the duty officer approved until eight and the resident answers for that
+     * the request was approved until eight and the resident answers for that
      * hour however late the building closes. At 21:15 both are past their own
      * deadline and both are reported.
      */

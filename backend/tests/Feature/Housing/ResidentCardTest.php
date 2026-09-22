@@ -201,23 +201,26 @@ final class ResidentCardTest extends TestCase
         $this->getJson("/api/v1/residents/{$residentOfSecond->id}")->assertStatus(403);
     }
 
-    public function test_neither_the_duty_officer_nor_the_security_officer_reads_the_card(): void
+    public function test_the_security_officer_reads_neither_the_card_nor_the_roll(): void
     {
         // FR-06 names the warden of that building and the administrator, and
-        // the contract for this route says the same. The duty officer decides
-        // guest requests; that work needs the room register and the roll of
-        // the building, neither of which carries citizenship or a telephone
-        // number. The security officer's work is the entrance.
-        foreach ([RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $index => $role) {
-            Sanctum::actingAs($this->userWith($role, $this->first, sprintf('staff-%d@example.test', $index)));
+        // the contract for this route says the same. A grant inside the
+        // building is not enough on its own: the security officer's work is
+        // the entrance, and the entrance needs neither a citizenship nor a
+        // telephone number.
+        //
+        // The duty officer stood beside him here until revision 4 of the role
+        // model merged that role into the manager. The merge widened the
+        // circle — the manager does read the card — and the assertion that
+        // said otherwise is gone rather than rewritten, because there is no
+        // longer a role it could be made about. What the manager may not do
+        // is read the card of a resident of the next block, and
+        // `test_the_card_is_visible_to_the_manager_of_that_building` above is
+        // where that boundary is checked.
+        Sanctum::actingAs($this->userWith(RoleCode::SecurityOfficer, $this->first, 'staff-0@example.test'));
 
-            $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertStatus(403);
-        }
-
-        // The roll of the building stays open to the duty officer: the
-        // narrowing is of the card, not of their work.
-        Sanctum::actingAs($this->userWith(RoleCode::DutyOfficer, $this->first, 'duty-roll@example.test'));
-        $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertOk();
+        $this->getJson("/api/v1/residents/{$this->residentOfFirst->id}")->assertStatus(403);
+        $this->getJson("/api/v1/buildings/{$this->first->id}/users")->assertStatus(403);
     }
 
     /**

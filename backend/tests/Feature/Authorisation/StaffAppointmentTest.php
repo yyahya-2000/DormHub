@@ -90,23 +90,24 @@ final class StaffAppointmentTest extends TestCase
     }
 
     /**
-     * First criterion in full: the duty officer and the security officer are on
-     * the same list as the manager, and nothing else is.
+     * First criterion in full: the security officer is on the same list as the
+     * manager, and nothing else is. The list carried the duty officer as well
+     * until revision 4 of the role model merged that role into the manager;
+     * what the criterion asks is unchanged by the merge — the warden reaches
+     * every post beneath him inside his own building.
      */
-    public function test_the_warden_grants_the_duty_officer_and_security_roles_as_well(): void
+    public function test_the_warden_grants_the_security_role_as_well(): void
     {
         Sanctum::actingAs($this->wardenOfFirst);
 
-        foreach ([RoleCode::DutyOfficer, RoleCode::SecurityOfficer] as $index => $role) {
-            $subject = User::factory()->create(['email' => sprintf('staff-%d@example.test', $index)]);
+        $subject = User::factory()->create(['email' => 'staff-0@example.test']);
 
-            $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
-                'user_id' => $subject->id,
-                'role' => $role->value,
-            ])->assertStatus(201);
+        $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
+            'user_id' => $subject->id,
+            'role' => RoleCode::SecurityOfficer->value,
+        ])->assertStatus(201);
 
-            $this->assertTrue($subject->fresh()->hasRoleInBuilding($role, $this->first));
-        }
+        $this->assertTrue($subject->fresh()->hasRoleInBuilding(RoleCode::SecurityOfficer, $this->first));
     }
 
     /**
@@ -131,7 +132,7 @@ final class StaffAppointmentTest extends TestCase
 
     /**
      * Third criterion, second half: «a manager cannot grant any staff role at
-     * all». Every one of the four, including the manager's own.
+     * all». Every one of them, including the manager's own.
      */
     public function test_a_manager_grants_no_staff_role_at_all(): void
     {
@@ -147,7 +148,6 @@ final class StaffAppointmentTest extends TestCase
             RoleCode::Administrator,
             RoleCode::Warden,
             RoleCode::Manager,
-            RoleCode::DutyOfficer,
             RoleCode::SecurityOfficer,
         ];
 
@@ -455,8 +455,8 @@ final class StaffAppointmentTest extends TestCase
 
     /**
      * The other case the rule leaves alone: a resident of **this** dormitory
-     * taking the duty officer's shift. The person is already inside the scope,
-     * so the appointment hands the warden nothing he did not have.
+     * taking a staff role in it. The person is already inside the scope, so
+     * the appointment hands the warden nothing he did not have.
      */
     public function test_a_resident_of_this_dormitory_may_be_given_a_staff_role_here(): void
     {
@@ -468,15 +468,15 @@ final class StaffAppointmentTest extends TestCase
 
         $this->postJson("/api/v1/buildings/{$this->first->id}/staff", [
             'user_id' => $residentOfFirst->id,
-            'role' => RoleCode::DutyOfficer->value,
+            'role' => RoleCode::Manager->value,
         ])->assertStatus(201);
 
-        $this->assertTrue($residentOfFirst->fresh()->hasRoleInBuilding(RoleCode::DutyOfficer, $this->first));
+        $this->assertTrue($residentOfFirst->fresh()->hasRoleInBuilding(RoleCode::Manager, $this->first));
     }
 
     /**
      * The MVP chain of 14.09.2026: the administrator hands out the warden's
-     * role and stops there. Manager, duty officer and security officer are the
+     * role and stops there. The manager and the security officer are the
      * warden's appointments, made inside the building he answers for, and the
      * administrator asking for one of them directly is refused — which is the
      * short way past the warden that must not exist.
@@ -489,7 +489,7 @@ final class StaffAppointmentTest extends TestCase
 
         Sanctum::actingAs($administrator);
 
-        $roles = [RoleCode::Manager, RoleCode::DutyOfficer, RoleCode::SecurityOfficer];
+        $roles = [RoleCode::Manager, RoleCode::SecurityOfficer];
 
         foreach ($roles as $index => $role) {
             $subject = User::factory()->create(['email' => sprintf('staff-of-second-%d@example.test', $index)]);

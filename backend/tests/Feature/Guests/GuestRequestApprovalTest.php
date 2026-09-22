@@ -26,8 +26,10 @@ use Tests\TestCase;
  *
  * The verification of FR-17 singles out one check by name — «call
  * `POST /api/v1/guest-requests/{id}/approve` with a student's token and expect
- * 403, and with a duty officer of another building's token and expect 403» —
- * and it is the check §4.7.2 makes of every module: the horizontal boundary
+ * 403, and with a duty officer of another building's token and expect 403».
+ * The duty officer is gone since revision 4 of the role model, so the second
+ * token is a manager's: the nearest holder of the same capability one block
+ * over. It is the check §4.7.2 makes of every module: the horizontal boundary
  * tested through the API rather than through a screen that declines to draw a
  * button.
  */
@@ -55,7 +57,7 @@ final class GuestRequestApprovalTest extends TestCase
         $this->otherBuilding = $this->dormitory('Block B');
 
         $this->resident = $this->residentOf($this->building, 'resident@example.test');
-        $this->officer = $this->staff(RoleCode::DutyOfficer, $this->building, 'duty@example.test');
+        $this->officer = $this->staff(RoleCode::Manager, $this->building, 'decider@example.test');
     }
 
     protected function tearDown(): void
@@ -222,13 +224,14 @@ final class GuestRequestApprovalTest extends TestCase
     }
 
     /**
-     * The check §4.7.2 singles out, half two.
+     * The check §4.7.2 singles out, half two: the token of somebody who holds
+     * the decision one block over.
      */
-    public function test_the_duty_officer_of_another_building_may_not_approve(): void
+    public function test_a_decider_of_another_building_may_not_approve(): void
     {
         $request = $this->pendingRequest();
 
-        Sanctum::actingAs($this->staff(RoleCode::DutyOfficer, $this->otherBuilding, 'duty-b@example.test'));
+        Sanctum::actingAs($this->staff(RoleCode::Manager, $this->otherBuilding, 'decider-b@example.test'));
 
         $this->postJson("/api/v1/guest-requests/{$request->id}/approve")->assertStatus(403);
 
@@ -237,8 +240,9 @@ final class GuestRequestApprovalTest extends TestCase
 
     /**
      * Revision 3 of the guest module (16.09.2026): the decision belongs to the
-     * duty officer, the warden **and** the manager of the building, and the
-     * decision row names whoever took it.
+     * warden **and** the manager of the building beside the duty officer of
+     * the day, and the decision row names whoever took it. Revision 4 of the
+     * role model has since removed the third of them, leaving these two.
      *
      * The agreement of 13.09.2026 had withheld it from the register roles.
      * That reading did not survive contact with a dormitory — the person who

@@ -78,9 +78,9 @@ final class BuildingRegisterTest extends TestCase
         $this->assertDatabaseCount('buildings', 1);
     }
 
-    public function test_the_other_three_roles_get_403_on_every_write_to_the_register(): void
+    public function test_the_other_two_roles_get_403_on_every_write_to_the_register(): void
     {
-        foreach ([RoleCode::DutyOfficer, RoleCode::SecurityOfficer, RoleCode::Resident] as $index => $role) {
+        foreach ([RoleCode::SecurityOfficer, RoleCode::Resident] as $index => $role) {
             Sanctum::actingAs($this->userWith($role, $this->building, sprintf('write-%d@example.test', $index)));
 
             $this->postJson('/api/v1/buildings', [
