@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -122,7 +122,7 @@
 
 /**
  * The states of §3.5.4. `pending_review` is the only one that appears in
- * the duty officer's queue; `in_progress` and `overdue` mean a guest is
+ * the queue of a dormitory; `in_progress` and `overdue` mean a guest is
  * recorded inside the building; the last four are final.
  *
  * `draft` is absent: no route writes one, because the form lives in the

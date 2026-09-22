@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -121,15 +121,20 @@
  */
 
 /**
- * The six roles of §1.1.4 as revision 2 of the role model leaves them.
+ * The five roles of §1.1.4 as revision 4 of the role model leaves them.
  *
  * `admin` holds the register of dormitories and is the one role granted
  * over the system as a whole. `warden` heads one dormitory: he appoints
  * his own staff and does everything `manager` does. `manager` is the
  * register work of that dormitory — rooms, places, moving in and out,
- * resident cards and accounts — and no appointments at all.
- * `duty_officer` approves guest requests, `security` checks the guest at
- * the entrance, `student` lives there.
+ * resident cards and accounts — and the decision on a guest request, and
+ * no appointments at all. `security` checks the guest at the entrance,
+ * `student` lives there.
+ *
+ * `duty_officer` was a sixth code until 21.09.2026. Everything it carried
+ * was already the manager's, so it was merged into `manager` and the
+ * grants that named it were rewritten. A client that still sends it is
+ * refused by the enumeration below.
  *
  * The colloquial Russian word for a porter-caretaker is used nowhere: the
  * entrance function belongs to the security service.
@@ -139,7 +144,6 @@ export type RoleCode = typeof RoleCode[keyof typeof RoleCode];
 
 export const RoleCode = {
   admin: 'admin',
-  duty_officer: 'duty_officer',
   warden: 'warden',
   manager: 'manager',
   security: 'security',

@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -139,7 +139,7 @@ export interface GuestRequest {
   due_at?: string;
   status: GuestRequestStatus;
   status_label?: string;
-  /** Null until approval. Issued only on the duty officer's decision, so that before it there is nothing to present at the post (§3.5.1). Eight characters from an alphabet with the confusable ones removed, because it is read aloud and typed in at a desk. */
+  /** Null until approval. Issued only on the decision to approve, so that before it there is nothing to present at the post (§3.5.1). Eight characters from an alphabet with the confusable ones removed, because it is read aloud and typed in at a desk. */
   access_code?: string | null;
   /** Null on a request the scheduler closed. FR-17's fourth criterion treats an undecided request as rejected, and nobody decided it — so the row does not claim an officer did. */
   decided_by?: number | null;

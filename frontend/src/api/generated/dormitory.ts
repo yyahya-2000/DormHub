@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -1041,8 +1041,8 @@ export const getListBuildingRoomsUrl = (building: number,
  * (`vacant_beds`), so that a client never has to subtract and arrive at a
  * figure the server did not refuse on.
  *
- * The administrator, and the warden, manager or duty officer **of this
- * building**. A resident does not read the occupancy of the whole dormitory.
+ * The administrator, and the warden or the manager **of this building**.
+ * A resident does not read the occupancy of the whole dormitory.
  * The list is paged, and all three filters are applied by the database
  * rather than by the client: `free=1` narrows it to the rooms holding a
  * place somebody could move into today, `q` matches part of a room
@@ -2115,9 +2115,9 @@ export const getShowResidentCardUrl = (resident: number,) => {
 
 /**
  * FR-06. Visible to the warden and the manager **of that dormitory** and to
- * the administrator; a resident sees only their own. Nobody else: the duty
- * officer's work is the guest request and the security officer's is the
- * entrance, and neither needs a citizenship or a telephone number. The
+ * the administrator; a resident sees only their own. Nobody else: the
+ * security officer's work is the entrance, and the entrance needs neither
+ * a citizenship nor a telephone number. The
  * warden of building 1 requesting a card of building 2 gets 403, at the API
  * and not merely in the interface.
  *
@@ -2649,8 +2649,8 @@ export const getListBuildingUsersUrl = (building: number,
 
 /**
  * Personal data, so the circle is narrower than for the card: the
- * administrator, and the warden, manager or duty officer **of this
- * building**. A resident of the building gets 403, and so does the warden of
+ * administrator, and the warden or the manager **of this building**. A
+ * resident of the building gets 403, and so does the warden of
  * any other building. The answer never carries a person attached to a different
  * dormitory.
  * The list is paged, and `q` searches it by part of a name — which is how
@@ -2806,8 +2806,8 @@ export const getAppointStaffUrl = (building: number,) => {
 }
 
 /**
- * FR-41. The warden of **this** building grants the manager, duty officer
- * or security role inside it.
+ * FR-41. The warden of **this** building grants the manager or the
+ * security role inside it.
  *
  * **The chain is one level deep at each step.** The administrator grants
  * the warden and stops there; the staff beneath the warden are the
@@ -2959,7 +2959,7 @@ export type revokeStaffResponse = (revokeStaffResponseSuccess | revokeStaffRespo
 
 export const getRevokeStaffUrl = (building: number,
     user: number,
-    role: 'admin' | 'duty_officer' | 'warden' | 'manager' | 'security' | 'student',) => {
+    role: 'admin' | 'warden' | 'manager' | 'security' | 'student',) => {
 
 
 
@@ -2978,7 +2978,7 @@ export const getRevokeStaffUrl = (building: number,
  */
 export const revokeStaff = async (building: number,
     user: number,
-    role: 'admin' | 'duty_officer' | 'warden' | 'manager' | 'security' | 'student', options?: Parameters<typeof apiFetch>[1]): Promise<revokeStaffResponse> => {
+    role: 'admin' | 'warden' | 'manager' | 'security' | 'student', options?: Parameters<typeof apiFetch>[1]): Promise<revokeStaffResponse> => {
 
   return apiFetch<revokeStaffResponse>(getRevokeStaffUrl(building,user,role),
   {
@@ -3025,7 +3025,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RevokeStaffMutationResult = NonNullable<Awaited<ReturnType<typeof revokeStaff>>>
 
     export type RevokeStaffMutationError = UnauthenticatedResponse | ForbiddenResponse | Error | ValidationFailedResponse
-    export type RevokeStaffMutationVariables = {building: number;user: number;role: 'admin' | 'duty_officer' | 'warden' | 'manager' | 'security' | 'student'}
+    export type RevokeStaffMutationVariables = {building: number;user: number;role: 'admin' | 'warden' | 'manager' | 'security' | 'student'}
 
     /**
  * @summary Dismiss a member of staff of this dormitory
@@ -4175,12 +4175,12 @@ export const getListGuestRequestsUrl = (params?: ListGuestRequestsParams,) => {
  * Two lists behind one route, and the scope decides which.
  *
  * With `building_id`, this is the queue of that dormitory and the caller
- * needs the capability that reads it — the duty officer, the warden, the
- * manager or the administrator. Without it, this is «my own requests» and
+ * needs the capability that reads it — the warden, the manager or the
+ * administrator. Without it, this is «my own requests» and
  * needs nothing beyond a session: the filter is the identifier of the
  * token, and there is no parameter through which one resident could ask
  * about another's guests.
- * @summary The duty officer's queue, or the caller's own requests
+ * @summary The queue of a dormitory, or the caller's own requests
  */
 export const listGuestRequests = async (params?: ListGuestRequestsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listGuestRequestsResponse> => {
 
@@ -4251,7 +4251,7 @@ export function useListGuestRequests<TData = Awaited<ReturnType<typeof listGuest
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary The duty officer's queue, or the caller's own requests
+ * @summary The queue of a dormitory, or the caller's own requests
  */
 
 export function useListGuestRequests<TData = Awaited<ReturnType<typeof listGuestRequests>>, TError = UnauthenticatedResponse | ForbiddenResponse | ValidationFailedResponse>(
@@ -4583,12 +4583,13 @@ export const getApproveGuestRequestUrl = (guestRequest: number,) => {
 }
 
 /**
- * FR-17. **The duty officer, the warden or the manager of this
- * dormitory** — the holders of `Permission::DecideGuestRequests`, which
- * revision 3 of the guest module (16.09.2026) widened from the duty
- * officer alone. The capability is stated once in `RoleCode::permissions()`
- * rather than repeated in four policies, which is why the widening
- * touched no policy.
+ * FR-17. **The warden or the manager of this dormitory** — the holders
+ * of `Permission::DecideGuestRequests`. Revision 3 of the guest module
+ * (16.09.2026) widened that set to three roles and revision 4 of the role
+ * model (21.09.2026) narrowed it to these two by removing the duty
+ * officer. The capability is stated once in `RoleCode::permissions()`
+ * rather than repeated in four policies, which is why neither change
+ * touched a policy.
  *
  * The administrator is not among them: he reads the queue of every
  * dormitory and decides at the desk of none.
@@ -6287,10 +6288,9 @@ export const getAcceptMaintenanceRequestUrl = (maintenanceRequest: number,) => {
 }
 
 /**
- * FR-37. **The warden or the manager of this dormitory**, and nobody else:
- * not the duty officer, who decides on guest requests and has nothing to
- * do with these; not the administrator, who reads every queue and promises
- * no dates; and never the resident who filed it.
+ * FR-37. **The warden or the manager of this dormitory**, and nobody
+ * else: not the administrator, who reads every queue and promises no
+ * dates, and never the resident who filed it.
  *
  * «Acceptance without a planned completion date is impossible» — so
  * `target_date` is required by this route, is a required argument of the

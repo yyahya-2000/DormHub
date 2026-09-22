@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -124,7 +124,7 @@ import type { MaintenanceUrgency } from './maintenanceUrgency';
 export interface MaintenanceAcceptanceInput {
   /** The planned completion date, and mandatory: FR-37 makes acceptance without one impossible. A date in the past is refused — the resident is told this date the moment the acceptance succeeds. */
   target_date: string;
-  /** The responsible party FR-37 names beside the date. Optional, and **restricted to the staff of the dormitory the request belongs to** — the warden himself, the manager, the duty officer, the security officer. A resident, or a member of staff of another dormitory, is 422 naming this field. Until the acceptance of 15.09.2026 any identifier in the users table was admitted, and the answer carries the assignee's full name, so counting upwards read the staff of every other building. The administrator is outside it too: he reads every queue and promises no dates. */
+  /** The responsible party FR-37 names beside the date. Optional, and **restricted to the staff of the dormitory the request belongs to** — the warden himself, the manager and the security officer. A resident, or a member of staff of another dormitory, is 422 naming this field. Until the acceptance of 15.09.2026 any identifier in the users table was admitted, and the answer carries the assignee's full name, so counting upwards read the staff of every other building. The administrator is outside it too: he reads every queue and promises no dates. */
   assigned_to?: number;
   urgency?: MaintenanceUrgency;
   /** @maxLength 1000 */

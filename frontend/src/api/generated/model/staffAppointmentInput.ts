@@ -11,7 +11,7 @@
  * fourth is the personal account: FR-34 (notifications).
  *
  * The fifth is the guest module of increment 1, which is what the work is
- * built around: FR-16 (the request), FR-17 (the duty officer's decision),
+ * built around: FR-16 (the request), FR-17 (the decision on it),
  * FR-18 (verification at the security post), FR-19 (entry and exit) and
  * FR-21 (the visitor register). FR-20, the control of the departure deadline,
  * is in this increment too and has no route at all: it is a quarter-hourly
@@ -129,6 +129,6 @@ import type { RoleCode } from './roleCode';
 export interface StaffAppointmentInput {
   /** The account receiving the role. It need not exist in this dormitory yet. */
   user_id: number;
-  /** One of the roles the caller may grant, and the chain is one level deep at each step: the administrator grants `warden` and nothing below it, the warden grants `manager`, `duty_officer` and `security` inside his own dormitory, and the manager grants nothing. Anything else is 403 — an administrator asking for `security` directly included. */
+  /** One of the roles the caller may grant, and the chain is one level deep at each step: the administrator grants `warden` and nothing below it, the warden grants `manager` and `security` inside his own dormitory, and the manager grants nothing. Anything else is 403 — an administrator asking for `security` directly included. */
   role: RoleCode;
 }
