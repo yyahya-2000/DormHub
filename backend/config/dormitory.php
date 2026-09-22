@@ -48,6 +48,12 @@ return [
         // an attack on one cannot close the other.
         'password_requests_per_minute' => (int) env('AUTH_PASSWORD_REQUESTS_PER_MINUTE', 10),
 
+        // Requests per minute the rest of the API admits from one signed-in
+        // account. Counted by account and not by address on purpose: a
+        // dormitory behind one router is one address, and a ceiling shared by
+        // its residents is a ceiling one of them can spend for everybody.
+        'requests_per_minute' => (int) env('AUTH_REQUESTS_PER_MINUTE', 120),
+
         // Lifetime of an issued API token, in minutes. NULL means the token
         // does not expire on its own and is revoked by signing out.
         'token_ttl_minutes' => env('AUTH_TOKEN_TTL_MINUTES') !== null

@@ -203,6 +203,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->afterResolving(RateLimiter::class, function (RateLimiter $limiter): void {
             $limiter->for('login', $this->loginLimit(...));
             $limiter->for('password-setup', $this->passwordSetupLimit(...));
+            $limiter->for('api', $this->apiLimit(...));
         });
     }
 
@@ -227,6 +228,25 @@ class AppServiceProvider extends ServiceProvider
             (int) config('dormitory.auth.password_requests_per_minute'),
             'Too many attempts to set a password from this address. Try again shortly.',
         );
+    }
+
+    /**
+     * The ceiling on everything behind a token, counted by account. A request
+     * that reaches this limiter has already been authenticated, so there is
+     * always an account to count against.
+     */
+    private function apiLimit(Request $request): Limit
+    {
+        $perMinute = (int) config('dormitory.auth.requests_per_minute');
+        $user = $request->user();
+
+        return Limit::perMinute($perMinute)
+            ->by($user !== null ? 'user:'.$user->getAuthIdentifier() : ($request->ip() ?? 'unknown'))
+            ->response(fn (Request $request, array $headers) => response()->json([
+                'message' => 'Too many requests. Try again shortly.',
+                'retry_after' => (int) ($headers['Retry-After'] ?? 60),
+                'reason' => ThrottleReason::RateLimited->value,
+            ], 429, $headers));
     }
 
     private function perAddress(Request $request, int $perMinute, string $message): Limit

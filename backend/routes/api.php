@@ -80,7 +80,7 @@ Route::post('auth/login', [AuthController::class, 'login'])
  * individual routes: a route added below is then refused until it is put on
  * that list deliberately.
  */
-Route::middleware(['auth:sanctum', 'password.changed'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'password.changed', 'throttle:api'])->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
