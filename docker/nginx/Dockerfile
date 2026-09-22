@@ -15,6 +15,7 @@ RUN npm run build
 
 FROM nginx:1.29-alpine
 
+COPY docker/nginx/limits.conf /etc/nginx/conf.d/00-limits.conf
 COPY docker/nginx/prod.conf /etc/nginx/conf.d/default.conf
 COPY docker/nginx/laravel.conf /etc/nginx/laravel.conf
 COPY --from=spa /app/dist /usr/share/nginx/html
