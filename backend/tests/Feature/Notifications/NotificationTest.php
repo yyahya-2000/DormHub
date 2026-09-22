@@ -4,21 +4,28 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Notifications;
 
+use App\Enums\GuestRequestStatus;
 use App\Enums\NotificationCategory;
 use App\Enums\RoleCode;
 use App\Models\Building;
+use App\Models\GuestRequest;
+use App\Models\GuestVisit;
+use App\Models\MaintenanceRequest;
 use App\Models\User;
 use App\Notifications\EventNotification;
 use App\Notifications\GuestRequestDecided;
 use App\Notifications\GuestVisitOverdue;
 use App\Notifications\MaintenanceRequestStatusChanged;
 use App\Services\Notifier;
+use Closure;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
+use ReflectionClass;
+use Tests\Support\BuildsAGuestScenario;
 use Tests\TestCase;
 
 /**
@@ -27,7 +34,7 @@ use Tests\TestCase;
  * The first criterion is about **when** a message is queued, not about whether
  * it arrives: NFR-02 gives five seconds between the event and the enqueue, and
  * the enqueue is the last moment the application controls. What happens after
- * it belongs to the worker and to the mail server.
+ * it belongs to the queue worker.
  *
  * The second criterion — a switch per category — is withdrawn, and so is the
  * consent of FR-35 that used to silence part of the list. Nothing stands
@@ -39,7 +46,7 @@ use Tests\TestCase;
  */
 final class NotificationTest extends TestCase
 {
-    use RefreshDatabase;
+    use BuildsAGuestScenario, RefreshDatabase;
 
     private Building $building;
 
@@ -61,85 +68,117 @@ final class NotificationTest extends TestCase
     /**
      * First criterion: «delivery is queued within the interval of NFR-02».
      *
-     * All three occasions FR-34 names that the verification asks for — a
-     * decision, an overdue visit, a maintenance status change — and each of
-     * them measured. The assertion is against the figure in configuration
-     * rather than a literal 5, so that the requirement and the test cannot
-     * drift apart.
+     * **What is measured is the transition, not a call to `Notifier`.** The
+     * clock starts before the act that changes the status and stops at the
+     * moment the job is handed to the queue, so the route, the policy, the
+     * transaction and its commit are all inside the window — which is what the
+     * criterion is about. An earlier version of this test called
+     * `Notifier::send()` and timed that call; it measured a method that cannot
+     * be slow and would have stayed green through any amount of work done
+     * before it.
      *
-     * What is measured is the wall-clock time from the call that stands for the
-     * status change to the moment the job is on the queue. It is deliberately
-     * not «the notification was sent»: the delivery is queued, and a test that
-     * waited for a mail server would be measuring the mail server.
+     * All three occasions FR-34 names are measured at the thing that raises
+     * them: two of them are routes, and FR-20's overdue visit is the
+     * quarter-hourly sweep, there being no request behind it. The assertion is
+     * against the figure in configuration rather than a literal 5, so that the
+     * requirement and the test cannot drift apart.
      */
     public function test_delivery_is_queued_within_the_interval_of_nfr_02(): void
     {
-        Queue::fake();
+        $warden = $this->staff(RoleCode::Warden, $this->building, 'warden@example.test');
+        $guard = $this->staff(RoleCode::SecurityOfficer, $this->building, 'security@example.test');
+        $neighbour = User::factory()
+            ->withRole(RoleCode::Resident, $this->building)
+            ->create(['email' => 'host@example.test']);
 
+        $guestRequest = GuestRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->create();
+
+        $maintenance = MaintenanceRequest::factory()
+            ->forBuilding($this->building)
+            ->from($this->resident)
+            ->create();
+
+        $visit = GuestVisit::factory()
+            ->forRequest(
+                GuestRequest::factory()
+                    ->forBuilding($this->building)
+                    ->from($neighbour)
+                    ->approved($warden)
+                    ->create(['status' => GuestRequestStatus::InProgress]),
+                $guard,
+            )
+            ->dueAt(now()->subMinute()->toDateTimeString())
+            ->create();
+
+        Sanctum::actingAs($warden);
+
+        // FR-17, the decision on a guest request.
+        $this->measureEnqueue(GuestRequestDecided::class, $this->resident, function () use ($guestRequest): void {
+            $this->postJson("/api/v1/guest-requests/{$guestRequest->id}/approve")->assertOk();
+        });
+
+        // FR-38, a maintenance request moving to «accepted».
+        $this->measureEnqueue(MaintenanceRequestStatusChanged::class, $this->resident, function () use ($maintenance): void {
+            $this->postJson("/api/v1/maintenance-requests/{$maintenance->id}/accept", [
+                'target_date' => now()->addDays(3)->toDateString(),
+            ])->assertOk();
+        });
+
+        // FR-20, the departure deadline passing with the guest still inside.
+        $this->measureEnqueue(GuestVisitOverdue::class, $neighbour, function (): void {
+            $this->artisan('guests:sweep-overdue-visits')->assertSuccessful();
+        });
+
+        $this->assertSame(GuestRequestStatus::Overdue, $visit->fresh()?->request?->status);
+    }
+
+    /**
+     * The clock around one transition: it starts before `$change` and stops
+     * inside the push itself, so nothing that happens after the enqueue is
+     * counted and nothing that happens before it is missed.
+     */
+    private function measureEnqueue(string $notification, User $recipient, Closure $change): void
+    {
         $budget = (float) config('dormitory.notifications.enqueue_budget_seconds');
-        $notifier = app(Notifier::class);
 
-        $occasions = [
-            NotificationCategory::RequestDecision->value => new GuestRequestDecided(
-                requestId: 17,
-                guestName: 'Agafya Sviridova',
-                approved: true,
-            ),
-            NotificationCategory::VisitOverdue->value => new GuestVisitOverdue(
-                visitId: 41,
-                guestName: 'Agafya Sviridova',
-                buildingName: $this->building->name,
-                dueAt: now()->setTime(23, 0),
-            ),
-            NotificationCategory::MaintenanceStatus->value => new MaintenanceRequestStatusChanged(
-                requestId: 73,
-                fromStatus: 'assigned',
-                toStatus: 'done',
-            ),
-        ];
+        $queue = Queue::fake();
+        $queuedAt = null;
 
-        foreach ($occasions as $category => $notification) {
-            $startedAt = hrtime(true);
+        $queue->afterPushing(function (mixed $job) use (&$queuedAt, $notification, $recipient): void {
+            if ($queuedAt !== null
+                || ! $job instanceof SendQueuedNotifications
+                || $notification !== $job->notification::class
+                || ! $job->notifiables->contains(fn (User $person): bool => $person->is($recipient))) {
+                return;
+            }
 
-            $notifier->send($this->resident, $notification);
+            $queuedAt = hrtime(true);
+        });
 
-            $elapsed = (hrtime(true) - $startedAt) / 1_000_000_000;
+        $startedAt = hrtime(true);
 
-            $this->assertLessThan(
-                $budget,
+        $change();
+
+        $this->assertNotNull(
+            $queuedAt,
+            sprintf('The transition queued no «%s» for the person it concerns.', $notification),
+        );
+
+        $elapsed = ($queuedAt - $startedAt) / 1_000_000_000;
+
+        $this->assertLessThan(
+            $budget,
+            $elapsed,
+            sprintf(
+                'A «%s» took %.3f s to reach the queue from the status change; NFR-02 allows %.0f s.',
+                $notification,
                 $elapsed,
-                sprintf(
-                    'A «%s» notification took %.3f s to reach the queue; NFR-02 allows %.0f s.',
-                    $category,
-                    $elapsed,
-                    $budget,
-                ),
-            );
-
-            /*
-             * The framework clones the notification once per recipient and
-             * stamps it with an id, so the job does not hold the object that
-             * was handed in. The class and the category are what identify it,
-             * and the recipient is the person this occasion concerns.
-             */
-            Queue::assertPushed(
-                SendQueuedNotifications::class,
-                fn (SendQueuedNotifications $job): bool => $notification::class === $job->notification::class
-                    && $job->notification->category()->value === $category
-                    && $job->notifiables->contains(
-                        fn (User $person): bool => $person->is($this->resident)
-                    ),
-            );
-        }
-
-        /*
-         * Six jobs for three occasions, and the arithmetic is the design: the
-         * framework queues one job per channel, so the in-app copy and the mail
-         * travel separately and a mail server that is slow or down holds up
-         * neither the other channel nor anything else. Nothing was sent inside
-         * the request, which is what the five seconds of NFR-02 buy.
-         */
-        Queue::assertPushed(SendQueuedNotifications::class, 6);
+                $budget,
+            ),
+        );
     }
 
     /**
@@ -191,11 +230,14 @@ final class NotificationTest extends TestCase
     }
 
     /**
-     * FR-34's first sentence: «in-app and external-channel notifications». The
-     * in-app half is the framework's own table (§3.4.1, decision 7); the
-     * external half is mail, and C-03 leaves no other.
+     * A notification is a row in the personal account and nothing leaves the
+     * system, which is what C-03 says and what the work claims of it.
+     *
+     * The channel list is asserted and not only the row: a `mail` entry here
+     * would be an integration nobody decided on, switched on by an environment
+     * variable, and the row alone would not notice it.
      */
-    public function test_a_notification_reaches_both_the_in_app_list_and_the_external_channel(): void
+    public function test_a_notification_is_a_row_in_the_personal_account_and_goes_nowhere_else(): void
     {
         $notification = new GuestRequestDecided(
             requestId: 17,
@@ -204,7 +246,7 @@ final class NotificationTest extends TestCase
             comment: 'The visiting window is already full that evening.',
         );
 
-        $this->assertSame(['database', 'mail'], $notification->via($this->resident));
+        $this->assertSame(['database'], $notification->via($this->resident));
 
         // The queue is `sync` under test, so the delivery happens inline and
         // the row is written by the same channel the worker would use.
@@ -215,16 +257,32 @@ final class NotificationTest extends TestCase
         $this->assertSame(GuestRequestDecided::class, $stored->type);
         $this->assertSame(NotificationCategory::RequestDecision->value, $stored->data['category']);
         $this->assertSame(17, $stored->data['guest_request_id']);
+        $this->assertSame('Agafya Sviridova', $stored->data['guest_name']);
+        $this->assertFalse($stored->data['approved']);
         $this->assertNull($stored->read_at);
+    }
 
-        $mail = $notification->toMail($this->resident);
+    /**
+     * The same, asked of every notification the application declares: one
+     * channel, the personal account's. A class that reintroduced mail — or
+     * anything else — is caught here rather than on a stand where
+     * `MAIL_MAILER` happens to be `log`.
+     */
+    public function test_no_notification_of_the_application_declares_a_second_channel(): void
+    {
+        foreach (glob(app_path('Notifications/*.php')) ?: [] as $file) {
+            $class = 'App\\Notifications\\'.basename($file, '.php');
 
-        $this->assertSame('Your guest request has been refused', $mail->subject);
-        $this->assertTrue(
-            collect($mail->introLines)->contains(
-                fn (string $line): bool => str_contains($line, 'Agafya Sviridova')
-            ),
-        );
+            if (! is_subclass_of($class, EventNotification::class)) {
+                continue;
+            }
+
+            $this->assertSame(
+                ['database'],
+                (new ReflectionClass($class))->newInstanceWithoutConstructor()->via($this->resident),
+                $class.' sends somewhere other than the personal account.',
+            );
+        }
     }
 
     public function test_the_personal_account_reads_its_own_messages_and_marks_them_read(): void
