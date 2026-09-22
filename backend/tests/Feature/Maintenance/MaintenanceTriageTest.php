@@ -14,8 +14,10 @@ use App\Models\MaintenanceRequest;
 use App\Models\MaintenanceWorkLog;
 use App\Models\User;
 use App\Notifications\MaintenanceRequestStatusChanged;
+use App\Services\MaintenanceService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
@@ -151,6 +153,24 @@ final class MaintenanceTriageTest extends TestCase
         $this->postJson("/api/v1/maintenance-requests/{$this->request->id}/reject", [])
             ->assertStatus(422)
             ->assertJsonValidationErrors('reason');
+    }
+
+    /**
+     * The same rule with the form request out of the way.
+     *
+     * Which branch of `TriageMaintenanceRequestRequest` runs is decided by the
+     * name of the route, so renaming the route would drop the refusal into the
+     * permissive branch and an empty reason would reach the service — where
+     * `string $reason` accepts it. The acceptance's planned date has been held
+     * up by a CHECK constraint since the table was written; this is the same
+     * for the refusal, and it is stated of the work-log row because that is
+     * where the reason is kept.
+     */
+    public function test_a_refusal_with_a_blank_reason_is_refused_by_the_database_too(): void
+    {
+        $this->expectException(QueryException::class);
+
+        app(MaintenanceService::class)->reject($this->warden, $this->request, '');
     }
 
     /**

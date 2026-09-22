@@ -83,6 +83,19 @@ return new class extends Migration
             'ALTER TABLE maintenance_work_logs ADD CONSTRAINT maintenance_work_logs_record_a_movement'
             .' CHECK (from_status IS NULL OR from_status <> to_status)'
         );
+
+        // FR-37, first criterion: «rejection without a reason is impossible».
+        // The reason lives in this row and in no column of the request, so
+        // this is the only place the rule can be stated of the stored data —
+        // and until 22.09.2026 it was stated nowhere below the form request,
+        // whose rejection branch is chosen by the name of the route. The
+        // planned date of the acceptance has had its constraint from the
+        // start; this is the same rule for the other half of the triage.
+        DB::statement(
+            'ALTER TABLE maintenance_work_logs ADD CONSTRAINT maintenance_work_logs_a_refusal_states_its_reason'
+            ." CHECK (to_status <> '".MaintenanceRequestStatus::Rejected->value."'"
+            .' OR (comment IS NOT NULL AND btrim(comment) <> \'\'))'
+        );
     }
 
     public function down(): void

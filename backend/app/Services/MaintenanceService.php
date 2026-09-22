@@ -218,11 +218,13 @@ final readonly class MaintenanceService
     /**
      * FR-37, first criterion: «rejection without a reason is impossible».
      *
-     * The reason is a required argument here and a required field in
-     * `RejectMaintenanceRequestRequest`. Two statements of one rule, and
-     * neither is redundant: a rule that lives only at the boundary is a rule
-     * any other caller walks past, and a rule that lives only in the service
-     * produces a 500 where the client deserves a 422 naming the field.
+     * The reason is a required argument here, a required field in the form
+     * request, and a CHECK constraint on the work-log row that stores it.
+     * Three statements of one rule, and none is redundant: a rule that lives
+     * only at the boundary is a rule any other caller walks past — the
+     * boundary chooses its branch by the name of the route — and a rule that
+     * lives only in the database produces a 500 where the client deserves a
+     * 422 naming the field.
      *
      * The reason is stored in the work log and not in a column of its own
      * (§3.4.1, decision 6). A second copy on the request would be the field
