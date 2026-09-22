@@ -298,63 +298,121 @@
       "result": "Result",
       "address": "Address"
     },
-    "filter": "Event",
+    "filter": "Filter",
     "filterAll": "All events",
     "anonymous": "No account",
     "empty": "No entries.",
-    "page": "Page {{current}} of {{total}}",
-    "previous": "Previous",
-    "next": "Next",
-    "actions": {
-      "auth.login_succeeded": "Signed in",
-      "auth.login_failed": "Failed sign-in attempt",
-      "auth.login_locked": "Sign-in blocked",
-      "auth.login_blocked": "Blocked account refused",
-      "auth.logout_succeeded": "Signed out",
-      "access.denied": "Access denied",
-      "building.viewed": "Building card viewed",
-      "building.users_viewed": "Building roll viewed",
-      "audit_log.viewed": "Audit log viewed",
-      "building.created": "Dormitory created",
-      "building.updated": "Dormitory edited",
-      "building.deleted": "Dormitory deleted",
-      "building.deletion_blocked": "Dormitory deletion blocked",
-      "building.rooms_viewed": "Room register viewed",
-      "room.created": "Room added",
-      "room.updated": "Room edited",
-      "room.update_refused": "Room update refused",
-      "bed.created": "Place added",
-      "bed.creation_refused": "Place refused",
-      "residency.assigned": "Resident moved in",
-      "residency.assignment_refused": "Move-in refused",
-      "residency.terminated": "Resident moved out",
-      "resident.card_viewed": "Resident card viewed",
-      "staff.appointed": "Staff member appointed",
-      "staff.revoked": "Staff role revoked",
-      "resident.account_issued": "Resident account issued",
-      "auth.password_set": "Account password set",
-      "resident.credential_issued": "One-time sign-in code issued",
-      "guest_request.submitted": "Guest request filed",
-      "guest_request.approved": "Guest request approved",
-      "guest_request.rejected": "Guest request refused",
-      "guest_request.cancelled": "Guest request withdrawn",
-      "guest_request.expired": "Guest request lapsed",
-      "guest_request.decision_refused": "Decision on a guest request refused",
-      "guest_request.document_viewed": "Guest's document number read",
-      "checkpoint.guest_verified": "Guest verified at the post",
-      "checkpoint.entry_recorded": "Guest entry recorded",
-      "checkpoint.entry_refused": "Entry refused",
-      "checkpoint.admitted_on_decision": "Admitted on the responsible officer's decision",
-      "checkpoint.exit_recorded": "Guest exit recorded",
-      "guest_visit.overdue": "Visit overdue",
-      "guest_visit.corrected": "Correction against a visit",
-      "visit_register.viewed": "Visitor register read",
-      "visit_register.exported": "Visitor register exported"
-    },
     "results": {
       "success": "Success",
       "failure": "Refused",
       "denied": "Not permitted"
+    },
+    "subjectOf": "{{type}} #{{id}}",
+    "total_one": "{{count, number}} entry",
+    "total_other": "{{count, number}} entries",
+    "actions": {
+      "auth": {
+        "login_succeeded": "Signed in",
+        "login_failed": "Failed sign-in attempt",
+        "login_locked": "Sign-in blocked",
+        "login_blocked": "Blocked account refused",
+        "logout_succeeded": "Signed out",
+        "password_set": "Account password set"
+      },
+      "access": {
+        "denied": "Access denied"
+      },
+      "building": {
+        "viewed": "Building card viewed",
+        "users_viewed": "Building roll viewed",
+        "created": "Dormitory created",
+        "updated": "Dormitory edited",
+        "deleted": "Dormitory deleted",
+        "deletion_blocked": "Dormitory deletion blocked",
+        "rooms_viewed": "Room register viewed"
+      },
+      "audit_log": {
+        "viewed": "Audit log viewed"
+      },
+      "room": {
+        "created": "Room added",
+        "updated": "Room edited",
+        "update_refused": "Room update refused"
+      },
+      "bed": {
+        "created": "Place added",
+        "creation_refused": "Place refused"
+      },
+      "residency": {
+        "assigned": "Resident moved in",
+        "assignment_refused": "Move-in refused",
+        "terminated": "Resident moved out"
+      },
+      "resident": {
+        "card_viewed": "Resident card viewed",
+        "account_issued": "Resident account issued"
+      },
+      "staff": {
+        "appointed": "Staff member appointed",
+        "revoked": "Staff role revoked"
+      },
+      "guest_request": {
+        "submitted": "Guest request filed",
+        "approved": "Guest request approved",
+        "rejected": "Guest request refused",
+        "cancelled": "Guest request withdrawn",
+        "expired": "Guest request lapsed",
+        "decision_refused": "Decision on a guest request refused"
+      },
+      "checkpoint": {
+        "guest_verified": "Guest verified at the post",
+        "entry_recorded": "Guest entry recorded",
+        "entry_refused": "Entry refused",
+        "admitted_on_decision": "Admitted on the responsible officer's decision",
+        "exit_recorded": "Guest exit recorded"
+      },
+      "guest_visit": {
+        "overdue": "Visit overdue",
+        "corrected": "Correction against a visit"
+      },
+      "visit_register": {
+        "viewed": "Visitor register read"
+      },
+      "maintenance_request": {
+        "accepted": "Maintenance request accepted",
+        "rejected": "Maintenance request refused",
+        "reopened": "Maintenance request reopened",
+        "auto_closed": "Maintenance request closed on the clock",
+        "overdue": "Maintenance request overdue",
+        "reopening_refused": "Reopening refused"
+      },
+      "announcement": {
+        "published": "Announcement published"
+      },
+      "lost_found_item": {
+        "published": "Find or loss published",
+        "resolved": "Object returned to its owner"
+      },
+      "lost_found_claim": {
+        "filed": "Claim on a find filed",
+        "accepted": "Claim on a find accepted",
+        "declined": "Claim on a find refused",
+        "referred": "Claim referred to the warden",
+        "decided_by_staff": "Claim decided by a member of staff"
+      }
+    },
+    "subjects": {
+      "Building": "Dormitory",
+      "Room": "Room",
+      "Bed": "Place",
+      "User": "Account",
+      "Residency": "Residency",
+      "GuestRequest": "Guest request",
+      "GuestVisit": "Visit",
+      "MaintenanceRequest": "Maintenance request",
+      "Announcement": "Announcement",
+      "LostFoundItem": "Find",
+      "LostFoundClaim": "Claim on a find"
     }
   },
   "staff": {

@@ -308,63 +308,123 @@
       "result": "Итог",
       "address": "Адрес"
     },
-    "filter": "Событие",
+    "filter": "Отбор",
     "filterAll": "Все события",
     "anonymous": "Без учётной записи",
     "empty": "Записей нет.",
-    "page": "Страница {{current}} из {{total}}",
-    "previous": "Назад",
-    "next": "Вперёд",
-    "actions": {
-      "auth.login_succeeded": "Вход выполнен",
-      "auth.login_failed": "Неудачная попытка входа",
-      "auth.login_locked": "Вход заблокирован",
-      "auth.login_blocked": "Отказ заблокированной учётной записи",
-      "auth.logout_succeeded": "Выход из системы",
-      "access.denied": "Отказ в доступе",
-      "building.viewed": "Просмотр карточки корпуса",
-      "building.users_viewed": "Просмотр списка людей корпуса",
-      "audit_log.viewed": "Просмотр журнала",
-      "building.created": "Корпус создан",
-      "building.updated": "Корпус изменён",
-      "building.deleted": "Корпус удалён",
-      "building.deletion_blocked": "Удаление корпуса отклонено",
-      "building.rooms_viewed": "Просмотр реестра комнат",
-      "room.created": "Комната добавлена",
-      "room.updated": "Комната изменена",
-      "room.update_refused": "Изменение комнаты отклонено",
-      "bed.created": "Место добавлено",
-      "bed.creation_refused": "Добавление места отклонено",
-      "residency.assigned": "Житель заселён",
-      "residency.assignment_refused": "Заселение отклонено",
-      "residency.terminated": "Житель выселен",
-      "resident.card_viewed": "Просмотр карточки жителя",
-      "staff.appointed": "Назначен сотрудник корпуса",
-      "staff.revoked": "Отозвана роль сотрудника",
-      "resident.account_issued": "Выдана учётная запись жителю",
-      "auth.password_set": "Задан пароль учётной записи",
-      "resident.credential_issued": "Выдан одноразовый код входа",
-      "guest_request.submitted": "Заявка на гостя подана",
-      "guest_request.approved": "Заявка на гостя согласована",
-      "guest_request.rejected": "Заявка на гостя отклонена",
-      "guest_request.cancelled": "Заявка на гостя отозвана",
-      "guest_request.expired": "Заявка на гостя просрочена",
-      "guest_request.decision_refused": "Решение по заявке отклонено",
-      "guest_request.document_viewed": "Просмотр номера документа гостя",
-      "checkpoint.guest_verified": "Проверка гостя на посту",
-      "checkpoint.entry_recorded": "Записан вход гостя",
-      "checkpoint.entry_refused": "Во входе отказано",
-      "checkpoint.admitted_on_decision": "Пропуск по решению ответственного",
-      "checkpoint.exit_recorded": "Записан выход гостя",
-      "guest_visit.overdue": "Визит просрочен",
-      "guest_visit.corrected": "Поправка к записи визита",
-      "visit_register.viewed": "Просмотр журнала посещений",
-      "visit_register.exported": "Выгрузка журнала посещений"
-    },
     "results": {
       "success": "Успех",
       "failure": "Отказ",
       "denied": "Нет прав"
+    },
+    "subjectOf": "{{type}} № {{id}}",
+    "total_one": "{{count, number}} запись",
+    "total_few": "{{count, number}} записи",
+    "total_many": "{{count, number}} записей",
+    "total_other": "{{count, number}} записей",
+    "actions": {
+      "auth": {
+        "login_succeeded": "Вход выполнен",
+        "login_failed": "Неудачная попытка входа",
+        "login_locked": "Вход заблокирован",
+        "login_blocked": "Отказ заблокированной учётной записи",
+        "logout_succeeded": "Выход из системы",
+        "password_set": "Задан пароль учётной записи"
+      },
+      "access": {
+        "denied": "Отказ в доступе"
+      },
+      "building": {
+        "viewed": "Просмотр карточки корпуса",
+        "users_viewed": "Просмотр списка людей корпуса",
+        "created": "Корпус создан",
+        "updated": "Корпус изменён",
+        "deleted": "Корпус удалён",
+        "deletion_blocked": "Удаление корпуса отклонено",
+        "rooms_viewed": "Просмотр реестра комнат"
+      },
+      "audit_log": {
+        "viewed": "Просмотр журнала"
+      },
+      "room": {
+        "created": "Комната добавлена",
+        "updated": "Комната изменена",
+        "update_refused": "Изменение комнаты отклонено"
+      },
+      "bed": {
+        "created": "Место добавлено",
+        "creation_refused": "Добавление места отклонено"
+      },
+      "residency": {
+        "assigned": "Житель заселён",
+        "assignment_refused": "Заселение отклонено",
+        "terminated": "Житель выселен"
+      },
+      "resident": {
+        "card_viewed": "Просмотр карточки жителя",
+        "account_issued": "Выдана учётная запись жителю"
+      },
+      "staff": {
+        "appointed": "Назначен сотрудник корпуса",
+        "revoked": "Отозвана роль сотрудника"
+      },
+      "guest_request": {
+        "submitted": "Заявка на гостя подана",
+        "approved": "Заявка на гостя согласована",
+        "rejected": "Заявка на гостя отклонена",
+        "cancelled": "Заявка на гостя отозвана",
+        "expired": "Заявка на гостя просрочена",
+        "decision_refused": "Решение по заявке отклонено"
+      },
+      "checkpoint": {
+        "guest_verified": "Проверка гостя на посту",
+        "entry_recorded": "Записан вход гостя",
+        "entry_refused": "Во входе отказано",
+        "admitted_on_decision": "Пропуск по решению ответственного",
+        "exit_recorded": "Записан выход гостя"
+      },
+      "guest_visit": {
+        "overdue": "Визит просрочен",
+        "corrected": "Поправка к записи визита"
+      },
+      "visit_register": {
+        "viewed": "Просмотр журнала посещений"
+      },
+      "maintenance_request": {
+        "accepted": "Заявка на ремонт принята в работу",
+        "rejected": "Заявка на ремонт отклонена",
+        "reopened": "Заявка на ремонт открыта заново",
+        "auto_closed": "Заявка на ремонт закрыта по сроку",
+        "overdue": "Срок по заявке на ремонт прошёл",
+        "reopening_refused": "Повторное открытие заявки отклонено"
+      },
+      "announcement": {
+        "published": "Объявление опубликовано"
+      },
+      "lost_found_item": {
+        "published": "Находка или пропажа опубликована",
+        "resolved": "Находка возвращена владельцу"
+      },
+      "lost_found_claim": {
+        "filed": "Заявлены права на находку",
+        "accepted": "Права на находку подтверждены",
+        "declined": "Права на находку отклонены",
+        "referred": "Спор о находке передан коменданту",
+        "decided_by_staff": "Спор о находке решён сотрудником"
+      }
+    },
+    "subjects": {
+      "Building": "Корпус",
+      "Room": "Комната",
+      "Bed": "Место",
+      "User": "Учётная запись",
+      "Residency": "Проживание",
+      "GuestRequest": "Заявка на гостя",
+      "GuestVisit": "Визит",
+      "MaintenanceRequest": "Заявка на ремонт",
+      "Announcement": "Объявление",
+      "LostFoundItem": "Находка",
+      "LostFoundClaim": "Притязание на находку"
     }
   },
   "staff": {
