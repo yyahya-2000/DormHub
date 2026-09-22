@@ -160,8 +160,9 @@ npm run lint
 `docker-compose.prod.yml` is the server stack. It is used on its own — never layered over
 `docker-compose.yml` — so no bind mount or published port of the development environment can reach
 a server by being forgotten. The source tree is baked into the images, the SPA is built by
-`docker/nginx/Dockerfile` and served from the same origin as the API, and Caddy terminates TLS and
-is the only container with published ports.
+`docker/nginx/Dockerfile` and served from the same origin as the API. The stack publishes one port,
+on the loopback: TLS and the public address belong to the host's nginx, which on this server already
+serves another site.
 
 `.github/workflows/deploy.yml` runs the tests on every push and pull request and deploys from a
 green `main`: SSH to the server, `git reset --hard` to the pushed commit, then `scripts/deploy.sh`.
@@ -186,8 +187,17 @@ docker compose -f docker-compose.prod.yml run --rm app \
 On a server reachable from the internet, seed the roles and create the administrator — the command
 generates a one-time password and marks the account for a change on first sign-in.
 
-Point the domain's A record at the server and open ports 80 and 443. Caddy obtains the certificate
-on first start; port 80 has to stay open for renewals.
+Point the domain's A record at the server. Then put the stack behind the host's nginx —
+`docker/nginx/host-vhost.conf.example` is the server block — and issue the certificate with the
+certbot that already serves the other site:
+
+```sh
+cp docker/nginx/host-vhost.conf.example /etc/nginx/sites-available/<domain>
+sed -i 's/DOMAIN/<domain>/' /etc/nginx/sites-available/<domain>
+ln -s /etc/nginx/sites-available/<domain> /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+certbot --nginx -d <domain>
+```
 
 ### Repository secrets
 

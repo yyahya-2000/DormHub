@@ -6,7 +6,8 @@
 # Differences from development, all of them deliberate:
 #   * the source tree is baked into the images, not bind-mounted
 #   * the SPA is built and served by `web`, from the same origin as the API
-#   * `caddy` terminates TLS and is the only container with published ports
+#   * `web` publishes one port on the loopback; TLS and the public address
+#     are the host's nginx, which already serves another site on this machine
 #   * APP_DEBUG is off and APP_ENV is production
 #   * the three PHP containers hold no state — photographs go to the object
 #     store, logs to stderr — so a deploy replaces them without losing anything
@@ -32,8 +33,8 @@ x-app-env: &app-env
   # Rebuilt by the entrypoint on every container start.
   APP_OPTIMIZE_ON_BOOT: "1"
 
-  # Only Caddy can reach `web`, and Caddy overwrites X-Forwarded-For with the
-  # address it saw, so trusting the hop is trusting Caddy.
+  # `web` publishes on the loopback, so the only thing that can reach it is
+  # the host's nginx, and trusting the hop is trusting that nginx.
   TRUSTED_PROXIES: "*"
 
   SESSION_SECURE_COOKIE: "true"
@@ -75,26 +76,9 @@ x-app-depends: &app-depends
     condition: service_healthy
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: dormitory-caddy
-    restart: unless-stopped
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      # The issued certificates and the ACME account key. Losing this volume
-      # means re-issuing, and Let's Encrypt rate-limits that.
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - web
-
+  # TLS and the public address are the host's nginx, which already serves
+  # another site on this machine. The stack publishes one port, on the
+  # loopback, and nginx proxies the domain to it.
   web:
     build:
       context: .
@@ -102,6 +86,9 @@ services:
     image: dormitory-system/web:prod
     container_name: dormitory-web
     restart: unless-stopped
+    # Loopback only: the host's nginx is the one thing that may reach it.
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
     depends_on:
       - app
 
@@ -199,5 +186,3 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
-  caddy-data:
-  caddy-config:
