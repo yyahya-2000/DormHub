@@ -1,7 +1,11 @@
 # PHP 8.3 — the version recorded in the thesis (§4.2, §3.2.2).
 # The image is pinned to 8.3 on purpose: the host machine may run a newer PHP,
 # the deployable unit must not.
-FROM php:8.3-fpm-alpine
+#
+# `development` is the last stage, so a build without --target still produces
+# the image docker-compose.yml expects. `production` is built by
+# docker-compose.prod.yml, which names the target explicitly.
+FROM php:8.3-fpm-alpine AS base
 
 # Build tools are removed again at the end of the layer; the -dev packages are
 # kept because they carry the runtime shared libraries (libpq, icu, libzip).
@@ -36,3 +40,28 @@ EXPOSE 9000
 
 ENTRYPOINT ["app-entrypoint"]
 CMD ["php-fpm"]
+
+# ---------------------------------------------------------------------------
+# Production: the source tree is baked in, not bind-mounted, and vendor/ is
+# installed at build time without the development dependencies.
+# ---------------------------------------------------------------------------
+FROM base AS production
+
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
+# composer.json and composer.lock first, so a commit that touches no dependency
+# reuses the installed layer.
+COPY backend/composer.json backend/composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
+
+COPY backend/ ./
+
+RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
+    && mkdir -p storage/logs storage/framework/cache/data \
+        storage/framework/sessions storage/framework/views bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+COPY docker/php/php.prod.ini /usr/local/etc/php/conf.d/99-app.ini
+
+# ---------------------------------------------------------------------------
+FROM base AS development

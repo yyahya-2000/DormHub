@@ -23,4 +23,16 @@ else
     done
 fi
 
+# Rebuilt on every start rather than baked into the image: config:cache freezes
+# the environment it runs in, and the environment is only complete here. Each
+# command clears its own cache first, so a deploy cannot leave a stale one.
+if [ "${APP_OPTIMIZE_ON_BOOT:-0}" = "1" ]; then
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+    php artisan event:cache
+    # The commands above run as root; php-fpm works as www-data.
+    chown -R www-data:www-data storage bootstrap/cache
+fi
+
 exec docker-php-entrypoint "$@"
