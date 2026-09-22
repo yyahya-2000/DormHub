@@ -6,14 +6,8 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-// The browsable API reference. `api/openapi.yaml` is the single description
-// of the API (NFR-12): Orval generates the front end's client from it, and
-// these two routes render and serve it. It is not copied into `public/` —
-// one contract, one file.
-//
-// Neither route is authenticated: they expose the description of the
-// interface, not the data behind it, and the repository carries the same file
-// in the open.
+// The API reference. Not authenticated: it is the description of the
+// interface, not the data behind it.
 Route::prefix('api/docs')->group(function (): void {
     Route::view('/', 'api-docs')->name('api.docs');
 

@@ -91,12 +91,10 @@ docker compose logs -f queue
 
 ### The API reference
 
-`backend/api/openapi.yaml` describes all sixty-two operations (NFR-12), and
-http://localhost:8080/api/docs renders it. The raw file is at
-http://localhost:8080/api/docs/openapi.yaml; Orval reads the same one to generate the front end's
-client.
+http://localhost:8080/api/docs renders `backend/api/openapi.yaml` — the same file Orval reads to
+generate the front end's client. Raw: http://localhost:8080/api/docs/openapi.yaml.
 
-`Authorize` takes the token from `POST /api/v1/auth/login`. The seeded accounts share the password
+`Authorize` takes the token from `POST /api/v1/auth/login`. Seeded accounts share the password
 `password`:
 
 ```sh
@@ -105,9 +103,8 @@ curl -sS -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email":"admin@example.test","password":"password"}'
 ```
 
-Swagger UI is vendored under `backend/public/swagger-ui/` rather than loaded from a CDN, and its
-validity badge — the one call it makes on its own — is switched off. The page works with no route
-to the internet.
+Swagger UI is vendored under `backend/public/swagger-ui/`, so the page needs no route to the
+internet.
 
 ### Tests
 

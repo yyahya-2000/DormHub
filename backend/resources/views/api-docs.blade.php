@@ -1,12 +1,5 @@
-{{--
-    Browsable reference of the REST contract, at `GET /api/docs`.
-
-    A view and not a file under `public/`: nginx would find the directory and
-    redirect to it, rebuilding the Location without the published port.
-
-    Swagger UI is vendored under `public/swagger-ui/` — NFR-08 leaves no room
-    for a CDN. See PROVENANCE.txt there.
---}}
+{{-- Swagger UI over api/openapi.yaml. A view, not a file under public/:
+     nginx redirects to a matching directory and drops the port. --}}
 <!doctype html>
 <html lang="en">
 <head>
