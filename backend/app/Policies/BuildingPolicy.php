@@ -97,10 +97,13 @@ final class BuildingPolicy
 
     /**
      * FR-02: the register of rooms and places of this building. The warden and
-     * the manager keep it, the duty officer reads it to know which room a
-     * guest is bound for, and the administrator sees every building. A
-     * resident does not: the occupancy of the whole dormitory is not theirs to
-     * read.
+     * the manager keep it and therefore read it, and the administrator sees
+     * every building. A resident does not: the occupancy of the whole
+     * dormitory is not theirs to read.
+     *
+     * Reading stays a capability of its own although every holder of it also
+     * holds `ManageRooms` since revision 4 of the role model. The two name two
+     * different pieces of work, and the method below asks for the narrower.
      */
     public function viewRooms(User $user, Building $building): bool
     {
@@ -128,9 +131,9 @@ final class BuildingPolicy
 
     /**
      * The people attached to the building. This is personal data, so the
-     * circle is narrower than for the card: the administrator, and the warden,
-     * manager or duty officer of this building. A resident of the building
-     * sees the card and not the roll.
+     * circle is narrower than for the card: the administrator, and the warden
+     * or the manager of this building. A resident of the building sees the
+     * card and not the roll.
      */
     public function viewPeople(User $user, Building $building): bool
     {
@@ -190,15 +193,17 @@ final class BuildingPolicy
      * FR-17: approving and refusing.
      *
      * The check §4.7.2 singles out runs through this one line: a resident
-     * holds no such capability at all, and a duty officer of another building
-     * holds it in that building and not in this one. Both are 403, and both
-     * are recorded as `access.denied` by the handler.
+     * holds no such capability at all, and a manager of another building holds
+     * it in that building and not in this one. Both are 403, and both are
+     * recorded as `access.denied` by the handler.
      *
-     * The same line carries revision 3 of the guest module, which gave the
-     * capability to the warden and the manager as well. It is the building of
-     * the grant that keeps FR-07 shut, and widening the set of roles does not
-     * loosen it: a manager of block A asking about a request of block B holds
-     * the capability in block A and is refused here.
+     * The same line carried revision 3 of the guest module, which gave the
+     * capability to the warden and the manager beside the duty officer, and
+     * revision 4 of the role model, which removed the duty officer again.
+     * Neither edited this method. It is the building of the grant that keeps
+     * FR-07 shut, and moving roles in and out of the set does not loosen it: a
+     * manager of block A asking about a request of block B holds the
+     * capability in block A and is refused here.
      */
     public function decideGuestRequests(User $user, Building $building): bool
     {
@@ -238,8 +243,9 @@ final class BuildingPolicy
 
     /**
      * FR-37, FR-38: accepting, refusing and working a request of this
-     * dormitory. The warden and the manager beneath him; not the duty officer,
-     * not the administrator, and never the resident who filed it.
+     * dormitory. The warden and the manager beneath him; not the
+     * administrator, who reads the queue without triaging it, and never the
+     * resident who filed it.
      */
     public function triageMaintenanceRequests(User $user, Building $building): bool
     {

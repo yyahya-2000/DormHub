@@ -14,17 +14,18 @@ use App\Models\User;
  * Every method here reaches the building the request names and asks
  * `BuildingPolicy` about it, so the horizontal boundary of FR-07 is enforced
  * in the one place that has ever enforced it — the `building_id` of a role
- * grant. A duty officer of block 1 with the identifier of a request in block 2
- * is refused here, before any service is reached, and the refusal is written
- * to the audit log as `access.denied` by the handler in bootstrap/app.php.
+ * grant. A manager of block 1 with the identifier of a request in block 2 is
+ * refused here, before any service is reached, and the refusal is written to
+ * the audit log as `access.denied` by the handler in bootstrap/app.php.
  *
  * The policy names no role anywhere (§3.3.3). It asks `BuildingPolicy`, which
  * asks for a capability, which `RoleCode::permissions()` answers — so who
  * decides on a request is stated once, in the capability map, and not repeated
  * in four methods that could drift apart. Revision 3 of the guest module
- * (16.09.2026) widened that set from the duty officer to the duty officer, the
- * warden and the manager, and this class was not edited for it, which is the
- * argument for writing it this way.
+ * (16.09.2026) widened that set from one role to three, and revision 4 of the
+ * role model (21.09.2026) narrowed it back to two by removing the duty
+ * officer. This class was edited for neither, which is the argument for
+ * writing it this way.
  */
 final class GuestRequestPolicy
 {
@@ -61,9 +62,9 @@ final class GuestRequestPolicy
     /**
      * FR-17: approve or reject, inside **this** building and no other.
      *
-     * Three roles carry the capability since revision 3 of the guest module —
-     * the duty officer, the warden and the manager — and the building of the
-     * grant is what separates them from the same three roles next door.
+     * Two roles carry the capability — the warden of the building and the
+     * manager beneath him — and the building of the grant is what separates
+     * them from the same two roles next door.
      */
     public function decide(User $user, GuestRequest $request): bool
     {

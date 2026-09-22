@@ -21,9 +21,14 @@ namespace App\Enums;
  * `User::hasPermissionInBuilding()`.
  *
  * The names are of the work, not of the screen: FR-02's register of rooms is
- * one capability to read and another to keep, because the duty officer needs
- * the first to know which room a guest is bound for and has no business with
- * the second.
+ * one capability to read and another to keep, because knowing which room a
+ * guest is bound for and editing the register of rooms are different jobs.
+ * They were carried by different roles until revision 4 of the role model
+ * (21.09.2026) merged the duty officer — the one holder of the first without
+ * the second — into the manager. The pair is left split all the same: the two
+ * names still describe two different pieces of work, and the moment a role is
+ * allowed to read the register without keeping it, the split is there to be
+ * used rather than to be reinvented.
  */
 enum Permission: string
 {
@@ -63,19 +68,26 @@ enum Permission: string
      * Approving and refusing a guest request (FR-17).
      *
      * **The narrowest capability of the guest module, and the one line the
-     * role model is asked about most often.** The agreement of 13.09.2026 is
-     * that the duty officer decides and the warden does not, so this
-     * capability is on exactly one role — not on the warden, not on the
-     * manager, and not on the administrator either. The administrator holds
-     * the register of dormitories and appoints the staff of every building;
-     * the decision on a visitor is shift work at a particular post on a
-     * particular evening, and an administrator who could take it would be a
-     * duty officer of every building without ever being appointed one.
+     * role model is asked about most often.** The agreement of 13.09.2026 put
+     * the decision with a duty officer and withheld it from the warden;
+     * revision 3 of the guest module (16.09.2026) gave it to the warden and
+     * the manager as well, because the person a resident finds at the desk is
+     * the person who keeps the register; revision 4 of the role model
+     * (21.09.2026) then removed the duty officer, who by that point held
+     * nothing the manager did not. The capability is the warden's and the
+     * manager's, inside the building their grant names, and nobody else's.
      *
-     * The consequence is deliberate and worth stating plainly: on a dormitory
-     * with no duty officer appointed, nobody can approve a guest request. That
-     * is the correct failure. The remedy is an appointment, which is FR-41 and
-     * is itself recorded.
+     * The administrator is outside it, and that is the line still worth
+     * stating plainly. He holds the register of dormitories and appoints the
+     * staff of every building; the decision on a visitor is shift work at a
+     * particular post on a particular evening, and an administrator who could
+     * take it would be on duty in every dormitory without having been
+     * appointed in one.
+     *
+     * The consequence is deliberate: on a dormitory with neither a warden nor
+     * a manager appointed, nobody can approve a guest request. That is the
+     * correct failure. The remedy is an appointment, which is FR-41 and is
+     * itself recorded.
      */
     case DecideGuestRequests = 'guest_requests.decide';
 
@@ -127,12 +139,15 @@ enum Permission: string
     /**
      * Accepting, refusing and working a maintenance request (FR-37, FR-38).
      *
-     * **The warden and the manager of the building, and nobody else.** The
-     * duty officer is outside it although they decide on guest requests: the
-     * two decisions have nothing in common but the word. A guest request is
-     * shift work at a post on a particular evening; a maintenance request
-     * commits the dormitory's own labour and a date, which is the register
-     * work §1.1.4's revision 2 puts with the manager beneath the warden.
+     * **The warden and the manager of the building, and nobody else.** Since
+     * revision 4 of the role model that is the same pair `DecideGuestRequests`
+     * names, and the two stay separate capabilities regardless: they had
+     * different holders until 21.09.2026 and the difference they were split on
+     * has not gone anywhere. A guest request is shift work at a post on a
+     * particular evening; a maintenance request commits the dormitory's own
+     * labour and a date, which is the register work §1.1.4's revision 2 puts
+     * with the manager beneath the warden. The administrator reads every queue
+     * and triages none of them, which is the other half of the same line.
      *
      * The resident is outside it too, and that separation is the point of the
      * module rather than a detail of it (§3.5.2): the person who does the work

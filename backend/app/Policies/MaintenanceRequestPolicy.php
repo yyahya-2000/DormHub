@@ -16,8 +16,8 @@ use App\Models\User;
  * in the one place that has ever enforced it — the `building_id` of a role
  * grant. The policy names no role anywhere (§3.3.3): it asks for a capability,
  * `RoleCode::permissions()` says which roles carry it, and the agreement that
- * the warden and the manager triage while the duty officer does not is stated
- * once, in the capability map.
+ * the warden and the manager triage while the administrator, who reads every
+ * queue of every dormitory, does not is stated once, in the capability map.
  *
  * **`confirm` is the method the module exists for and it names no capability
  * at all.** §3.5.2: «the request is closed by the person who reported it, not

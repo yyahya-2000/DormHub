@@ -257,7 +257,7 @@ class User extends Authenticatable
      * role has to be one the holder's own role may hand out
      * (`RoleCode::grantableRoles()`), and the grant that carries that right
      * has to name the building being written into. Asked separately, a warden
-     * of block 1 holding a duty officer's grant in block 2 could appoint staff
+     * of block 1 holding a manager's grant in block 2 could appoint staff
      * in block 2, which is precisely the leak FR-07 exists to close.
      */
     public function mayGrantInBuilding(RoleCode $code, Building|int|null $building): bool

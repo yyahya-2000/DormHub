@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Enums;
 
 /**
- * The six roles of §1.1.4, in the codes the ER model of §3.4.3 fixes.
+ * The five roles of §1.1.4, in the codes the ER model of §3.4.3 fixes.
  *
  * The role itself is a table (§4.4.2) because ROLE_USER references it and
  * carries the building that scopes the grant; this enumeration is the
@@ -31,11 +31,32 @@ namespace App\Enums;
  * the warden and the security service and nothing between them. The manager is
  * an organisational answer to a building of several hundred places, not a
  * requirement read out of a norm.
+ *
+ * **The duty officer is gone (revision 4 of the role model, 21.09.2026).**
+ * Revision 3 of the guest module put the decision on a request with the warden
+ * and the manager beside the duty officer, and what the duty officer had left
+ * afterwards was five capabilities of which the manager already held every
+ * one. A role whose rights are a subset of another role's, granted in the same
+ * scope and appointed by the same person, is not a role — it is a second name
+ * for one, and the second name costs a row in `roles`, an arm in every match
+ * below, a line in the client's mirror and a string in two locale files. The
+ * duty officer is merged into the manager: existing grants are rewritten to
+ * name the manager, and the shift at the desk is worked by the person who
+ * keeps the register, which is what the dormitories had been doing before
+ * revision 3 admitted it.
+ *
+ * The merge widens one line rather than narrowing it, and the widening is
+ * accepted rather than overlooked. The duty officer was deliberately kept away
+ * from the resident card (FR-06); the manager reads it. Whoever held a duty
+ * officer's grant therefore reads the citizenship and the telephone of the
+ * residents of that building from now on. Every such reading is audited
+ * (§3.9.6), which makes the widening visible afterwards and not harmless: an
+ * operator unwilling to grant it has to withhold the appointment, because the
+ * capability can no longer be withheld on its own.
  */
 enum RoleCode: string
 {
     case Administrator = 'admin';
-    case DutyOfficer = 'duty_officer';
     case Warden = 'warden';
     case Manager = 'manager';
     case SecurityOfficer = 'security';
@@ -48,7 +69,6 @@ enum RoleCode: string
     {
         return match ($this) {
             self::Administrator => 'Administrator',
-            self::DutyOfficer => 'Duty officer',
             self::Warden => 'Dormitory head',
             self::Manager => 'Manager',
             self::SecurityOfficer => 'Security',
@@ -72,7 +92,7 @@ enum RoleCode: string
      * What a holder of this role may do inside the dormitory the grant names.
      *
      * This map is the single place a role's rights are written down. A policy
-     * asks for a capability and never for a role, so a seventh role is added
+     * asks for a capability and never for a role, so a sixth role is added
      * by extending this method and nothing else — which is what the addition
      * of the manager itself would otherwise have cost in every policy class.
      *
@@ -97,18 +117,23 @@ enum RoleCode: string
          * afterwards would have hidden both rules inside a method that is
          * supposed to state them.
          *
-         * **Revision 3 of the guest module (16.09.2026).** The decision on a
-         * request was the duty officer's alone; it is now the duty officer's,
-         * the warden's and the manager's, inside the building their grant
-         * names. The agreement of 13.09.2026 divided the queue from the
-         * register work on paper, and the dormitories do not: the person who
-         * keeps the register is the person a resident finds at the desk, and a
-         * request that waits for a duty officer who is on the door is a
-         * request the fourth criterion of FR-17 closes as rejected. The
-         * separation is dropped in favour of the building boundary, which is
-         * the one that was ever enforced — a manager of block A still cannot
-         * touch a request of block B, and the grant's `building_id` is what
-         * refuses him.
+         * **Revision 3 of the guest module (16.09.2026), and what it cost the
+         * role model.** The decision on a request had been a sixth role's
+         * alone — the duty officer's; revision 3 gave it to the warden and the
+         * manager as well, inside the building their grant names. The
+         * agreement of 13.09.2026 had divided the queue from the register work
+         * on paper, and the dormitories do not: the person who keeps the
+         * register is the person a resident finds at the desk, and a request
+         * that waits for an officer who is on the door is a request the fourth
+         * criterion of FR-17 closes as rejected. The separation was dropped in
+         * favour of the building boundary, which is the one that was ever
+         * enforced — a manager of block A still cannot touch a request of
+         * block B, and the grant's `building_id` is what refuses him.
+         *
+         * That left the sixth role holding nothing the manager did not hold,
+         * and revision 4 (21.09.2026) removed it. There is no arm for it
+         * below, and nothing moved into the three that remain: the merge was
+         * possible precisely because the manager's list already covered it.
          *
          * The register work — rooms, places, move-in, move-out, cards,
          * accounts — is still identical for all three, and the manager still
@@ -200,25 +225,6 @@ enum RoleCode: string
                 Permission::DecideLostFoundDisputes,
             ],
             /*
-             * The duty officer approves guest requests, and for that they need
-             * to know which room a guest is bound for and who is attached to
-             * the building — the register and the roll. They do not need the
-             * resident card. FR-06's criterion names «the warden of that
-             * building and the administrator», the contract for
-             * `GET /residents/{id}` says the same, and the card carries
-             * citizenship, telephone and study status. The line is drawn here,
-             * in the one place that decides what a role may do, rather than in
-             * `UserPolicy`, which asks for the capability and is not told
-             * which roles carry it.
-             */
-            self::DutyOfficer => [
-                Permission::ViewBuilding,
-                Permission::ViewRooms,
-                Permission::ViewPeople,
-                Permission::ViewGuestRequests,
-                Permission::DecideGuestRequests,
-            ],
-            /*
              * The security officer works the post and nothing else. FR-18 and
              * FR-19 are the whole of it: find the guest, compare the document,
              * record the entry, record the exit. He does not read the queue of
@@ -254,8 +260,8 @@ enum RoleCode: string
      * scope their own grant names.
      *
      * The chain of appointment agreed on 13.09.2026 reads
-     * «system administrator → warden of the building → manager, duty officer,
-     * security», and this method is that chain. Nobody may grant the
+     * «system administrator → warden of the building → manager, security», and
+     * this method is that chain. Nobody may grant the
      * administrator, because the administrator's grant is the one held over
      * the system as a whole and is issued outside the application; nobody but
      * the administrator may grant a warden; and the manager grants nothing at
@@ -264,7 +270,7 @@ enum RoleCode: string
      *
      * **Each level hands out exactly the level below (MVP decision of
      * 14.09.2026).** The administrator grants the warden and nothing else; the
-     * staff of a dormitory — manager, duty officer, security officer — are the
+     * staff of a dormitory — the manager and the security officer — are the
      * warden's own appointments, made inside the building he answers for. The
      * administrator held the whole list for a while, so that a dismissed
      * warden's appointments could still be unwound from the top; the MVP drops
@@ -283,7 +289,7 @@ enum RoleCode: string
     {
         return match ($this) {
             self::Administrator => [self::Warden],
-            self::Warden => [self::Manager, self::DutyOfficer, self::SecurityOfficer],
+            self::Warden => [self::Manager, self::SecurityOfficer],
             default => [],
         };
     }
