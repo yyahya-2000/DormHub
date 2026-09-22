@@ -1,8 +1,9 @@
 <?php
+
 namespace Tests\Feature\Auth;
 
-use Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 /**
  * FR-08. A request that carries no session is refused, and the refusal is the
