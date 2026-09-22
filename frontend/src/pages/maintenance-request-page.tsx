@@ -7,12 +7,10 @@ import {
   useAcceptMaintenanceRequest,
   useCompleteMaintenanceWork,
   useConfirmMaintenanceWork,
-  useListBuildingUsers,
   useRejectMaintenanceRequest,
   useReopenMaintenanceRequest,
   useShowMaintenanceRequest,
   useStartMaintenanceWork,
-  type listBuildingUsersResponse,
   type showMaintenanceRequestResponse,
 } from '@/api/generated/dormitory'
 import {
@@ -38,6 +36,7 @@ import { RequestRefusal } from '@/components/request-refusal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useBuildingStaff } from '@/hooks/use-building-staff'
 import { useFormatters } from '@/lib/format'
 import {
   MAINTENANCE_URGENCIES,
@@ -407,18 +406,14 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
   const reject = useRejectMaintenanceRequest<ApiError>()
 
   /*
-   * The roll of the building, used as the directory the responsible party is
-   * picked from. It carries personal data, so the route is narrow and answers
-   * 403 to anybody outside the staff of this dormitory — which is the same set
-   * this panel is drawn for. A refusal here empties the list and leaves the
-   * rest of the form working: naming somebody is optional.
+   * Who the work may be given to. `StaffOfThisDormitory` admits staff and
+   * nobody else, so the whole roll — which is mostly residents — offered
+   * forty-two names that were certain to come back 422, and read their
+   * contacts to do it. Read by post instead, and the list is the three people
+   * who can actually be named. A refusal empties it and leaves the rest of the
+   * form working: naming somebody is optional.
    */
-  const staff = useListBuildingUsers<listBuildingUsersResponse, ApiError>(
-    request.building_id,
-    { per_page: 100 },
-    { query: { retry: false } },
-  )
-  const people = staff.data?.status === 200 ? staff.data.data.data : null
+  const staff = useBuildingStaff(request.building_id, true)
 
   function sendAcceptance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -531,10 +526,14 @@ function AcceptOrReject({ request }: { request: MaintenanceRequest }) {
                 onChange={(event) => setAssignee(event.target.value)}
               >
                 <option value="">{t('maintenance.unassigned')}</option>
-                {(people ?? []).map((person) => (
-                  <option key={person.id} value={String(person.id)}>
-                    {person.full_name}
-                  </option>
+                {staff.groups.map((group) => (
+                  <optgroup key={group.role} label={t(`roles.${group.role}`)}>
+                    {group.people.map((person) => (
+                      <option key={person.id} value={String(person.id)}>
+                        {person.full_name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </FormField>
