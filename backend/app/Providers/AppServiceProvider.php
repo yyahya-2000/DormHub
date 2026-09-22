@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\LostFoundController;
 use App\LostFound\LostFoundClaimStateMachine;
 use App\LostFound\LostFoundItemStateMachine;
 use App\Maintenance\MaintenanceRequestStateMachine;
+use App\Models\MaintenanceRequest;
 use App\Services\AuditLogReader;
 use App\Services\AuditRecorder;
 use App\Services\AuthenticationService;
@@ -100,13 +101,14 @@ class AppServiceProvider extends ServiceProvider
         /*
          * FR-36's photographs. The disk is configuration because the
          * deployment's object store is (§3.2.2) and because the test suite
-         * pins a fake one; the ceiling is here so that the form rule, the
-         * CHECK constraint and this adapter all read the same figure.
+         * pins a fake one; the ceiling is not, because the CHECK constraint
+         * behind it cannot be — `MaintenanceRequest::MAX_PHOTOS` is the one
+         * figure the rule, the constraint and this adapter read.
          */
         $this->app->bind(PhotoStore::class, fn ($app) => new PhotoStore(
             disk: (string) config('dormitory.maintenance.photo_disk'),
             directory: (string) config('dormitory.maintenance.photo_directory'),
-            maximum: (int) config('dormitory.maintenance.max_photos'),
+            maximum: MaintenanceRequest::MAX_PHOTOS,
         ));
 
         /*

@@ -53,7 +53,7 @@ use Illuminate\Support\Facades\Route;
 | The seventh is the maintenance module of increment 3: the resident files a
 | defect (FR-36), the warden triages it (FR-37), the request moves along the
 | graph FR-38 fixes, the reporter confirms it or says it is not fixed (FR-39),
-| and the dormitory's queue is read and exported (FR-40).
+| and the dormitory's queue is read (FR-40).
 |
 | The eighth is the lost-and-found module of increment 4: the resident who
 | found something publishes it (FR-24), the dormitory reads the list without
@@ -342,8 +342,8 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function (): void
      | **The resident's list and the warden's queue are two routes**, which is
      | where this module parts company with the guest one. There, one route
      | serves both because the two lists are the same rows read with a
-     | different scope. Here they are not: the queue carries filters, an age,
-     | an overdue flag and an export, and none of that means anything on «my
+     | different scope. Here they are not: the queue carries an age, an overdue
+     | flag and the archive behind it, and none of that means anything on «my
      | own three requests». `GET /maintenance-requests` therefore takes no
      | parameter by which one resident could name another, and the queue is a
      | sub-resource of the building, decided on the building object.
@@ -411,7 +411,7 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function (): void
         ->name('maintenance-requests.reopen');
 
     /*
-     * FR-40. The queue of one dormitory, filtered and exported.
+     * FR-40. The open queue of one dormitory and the archive behind it.
      */
     Route::get('buildings/{building}/maintenance-queue', [MaintenanceQueueController::class, 'index'])
         ->name('buildings.maintenance-queue');
