@@ -1,3 +1,11 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Compose reads this for every ${VARIABLE} of docker-compose.prod.yml. On the
+# server it holds APP_KEY and the database and object-store passwords.
+.env
+.env.*
+
+# Pre-migration dumps written by scripts/deploy.sh.
+/backups/

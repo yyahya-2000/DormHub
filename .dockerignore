@@ -1,0 +1,31 @@
+.git
+.github
+.gitlab-ci.yml
+backups
+
+# Installed inside the image, and a host copy would be built for the wrong PHP
+# or the wrong libc.
+backend/vendor
+backend/node_modules
+frontend/node_modules
+frontend/dist
+
+# A local .env baked into an image is a leaked secret.
+**/.env
+**/.env.*
+!**/.env.example
+
+# The directories stay — Laravel writes into them; their contents do not.
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/.phpunit.result.cache
+backend/.phpunit.cache
+backend/build
+backend/public/build
+backend/public/hot
+
+.DS_Store
+.idea
+.vscode
