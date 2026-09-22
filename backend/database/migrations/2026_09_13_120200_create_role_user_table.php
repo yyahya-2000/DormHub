@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * ROLE_USER of the ER model (§3.4.3), and the single line that makes FR-07
  * enforceable: `building_id` scopes the grant to one dormitory and is NULL
- * only for a system-wide role (§3.4.1, decision 1). Without it the duty
- * officer of block 1 could decide requests in block 2.
+ * only for a system-wide role (§3.4.1, decision 1). Without it the manager of
+ * block 1 could decide requests in block 2.
  *
  * ON DELETE RESTRICT on every reference to registry data (§4.4.1): a role or
  * a building that is still granted to somebody cannot be deleted.
