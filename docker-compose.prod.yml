@@ -1,0 +1,203 @@
+# Production stack. Self-contained on purpose — used as
+# `docker compose -f docker-compose.prod.yml`, never layered over
+# docker-compose.yml, so no bind mount or published port of the development
+# environment can reach a server by being forgotten.
+#
+# Differences from development, all of them deliberate:
+#   * the source tree is baked into the images, not bind-mounted
+#   * the SPA is built and served by `web`, from the same origin as the API
+#   * `caddy` terminates TLS and is the only container with published ports
+#   * APP_DEBUG is off and APP_ENV is production
+#   * the three PHP containers hold no state — photographs go to the object
+#     store, logs to stderr — so a deploy replaces them without losing anything
+#
+# Every value below comes from .env next to this file. That file is written by
+# hand once on the server and is not in the repository.
+
+name: dormitory-system
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/php/Dockerfile
+    target: production
+  image: dormitory-system/php:prod
+
+x-app-env: &app-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY:?set APP_KEY in .env}
+  APP_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env}
+
+  # Rebuilt by the entrypoint on every container start.
+  APP_OPTIMIZE_ON_BOOT: "1"
+
+  # Only Caddy can reach `web`, and Caddy overwrites X-Forwarded-For with the
+  # address it saw, so trusting the hop is trusting Caddy.
+  TRUSTED_PROXIES: "*"
+
+  SESSION_SECURE_COOKIE: "true"
+  SESSION_SAME_SITE: strict
+
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: ${POSTGRES_DB:-dormitory}
+  DB_USERNAME: ${APP_DB_ROLE:-app_rw}
+  DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+  DB_APPLICATION_ROLE: ${APP_DB_ROLE:-app_rw}
+  DB_OWNER_USERNAME: ${POSTGRES_USER:-dormitory}
+  DB_OWNER_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_CLIENT: phpredis
+
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: warning
+
+  FILESYSTEM_DISK: s3
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dormitory}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: ${MINIO_BUCKET:-dormitory}
+  AWS_ENDPOINT: http://minio:9000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+x-app-depends: &app-depends
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: dormitory-caddy
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The issued certificates and the ACME account key. Losing this volume
+      # means re-issuing, and Let's Encrypt rate-limits that.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    image: dormitory-system/web:prod
+    container_name: dormitory-web
+    restart: unless-stopped
+    depends_on:
+      - app
+
+  app:
+    <<: *app-image
+    container_name: dormitory-app
+    restart: unless-stopped
+    environment: *app-env
+    depends_on: *app-depends
+
+  queue:
+    <<: *app-image
+    container_name: dormitory-queue
+    restart: unless-stopped
+    environment: *app-env
+    depends_on: *app-depends
+    command: php artisan queue:work --tries=3 --max-time=3600
+
+  scheduler:
+    <<: *app-image
+    container_name: dormitory-scheduler
+    restart: unless-stopped
+    environment: *app-env
+    depends_on: *app-depends
+    command: php artisan schedule:work
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: dormitory-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dormitory}
+      POSTGRES_USER: ${POSTGRES_USER:-dormitory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      APP_DB_ROLE: ${APP_DB_ROLE:-app_rw}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dormitory} -d ${POSTGRES_DB:-dormitory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: dormitory-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: dormitory-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dormitory}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-bootstrap:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: dormitory-minio-bootstrap
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dormitory}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dormitory}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set dormitory http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "dormitory/$$MINIO_BUCKET"
+        echo "bucket $$MINIO_BUCKET is ready"
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  caddy-data:
+  caddy-config:
