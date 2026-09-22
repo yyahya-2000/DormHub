@@ -36,4 +36,4 @@ screen.
 - [Running it locally, testing, deploying](docs/running.md)
 - [The API contract](backend/api/openapi.yaml) — 62 operations, the client is generated from it
 
-Yanal Yakhya, 2026.
+Yanal Yahya, 2026.
