@@ -1,0 +1,167 @@
+# Tests on every push and pull request; deployment only from a green main.
+#
+# The backend job reuses the logic of `.gitlab-ci.yml`: the same two database
+# roles, provisioned by the same docker/postgres/initdb/10-application-role.sh
+# that Compose runs, the suite on the owning connection against its own
+# database, and the production-shaped Redis stores that keep the isolation
+# guard in tests/TestCase.php honest.
+#
+# `.gitlab-ci.yml` stays as it is — the project also goes to the faculty GitLab.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A superseded pull-request run is cancelled; a run on main is not, because
+  # cancelling it would cancel a deploy halfway through.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dormitory
+          POSTGRES_USER: dormitory
+          POSTGRES_PASSWORD: secret
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dormitory -d dormitory"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      # Read by the init script below, which the service container cannot be
+      # handed as a directory.
+      POSTGRES_DB: dormitory
+      POSTGRES_USER: dormitory
+      APP_DB_ROLE: app_rw
+      APP_DB_PASSWORD: app-secret
+      TEST_DB_NAME: dormitory_test
+      PGHOST: 127.0.0.1
+      PGPASSWORD: secret
+
+      APP_ENV: testing
+      # A throwaway key: the pipeline encrypts nothing that outlives the job.
+      APP_KEY: base64:qsgSD/9V+1Yy5o8lH7xR2mUvKpZ4a0cN6eJtBwXbF3g=
+
+      # RefreshDatabase creates and drops tables, which the application role is
+      # not allowed to do and must not be allowed to do (§4.4.4).
+      DB_CONNECTION: pgsql_owner
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: dormitory_test
+      DB_USERNAME: app_rw
+      DB_PASSWORD: app-secret
+      DB_OWNER_USERNAME: dormitory
+      DB_OWNER_PASSWORD: secret
+      DB_APPLICATION_ROLE: app_rw
+
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      FILESYSTEM_DISK: local
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          # The extensions of docker/php/Dockerfile, plus the coverage driver.
+          # PCOV rather than Xdebug: it counts executed lines, which is what
+          # NFR-12 asks for, at a fraction of the run time.
+          extensions: bcmath, intl, pcntl, pdo_pgsql, pgsql, redis, zip, pcov
+          coverage: pcov
+          tools: composer:2.10.3
+
+      - uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: vendor-${{ hashFiles('backend/composer.lock') }}
+
+      - run: composer install --prefer-dist --no-progress --no-interaction
+
+      - run: vendor/bin/pint --test
+
+      - name: Provision the application role and the test database
+        run: sh "$GITHUB_WORKSPACE/docker/postgres/initdb/10-application-role.sh"
+
+      # Laravel's test runner reads the environment file to restore it around
+      # the run, and the repository carries none.
+      - run: ': > .env'
+
+      - run: php artisan migrate --database=pgsql_owner --force
+
+      - run: php artisan test --coverage --min=70
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npx oxlint
+      # `npm run build` runs tsc -b itself; running it first separates a type
+      # error from a bundler error in the log.
+      - run: npx tsc -b
+      - run: npm run build
+
+  deploy:
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Two deploys at once would race on the same checkout and the same
+    # database; a queued one is not cancelled, because it carries a commit.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SHA: ${{ github.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Pinned host key: without it the first connection would accept
+          # whatever answered.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "set -eu; cd '$DEPLOY_PATH'; git fetch --prune origin main; git reset --hard '$SHA'; ./scripts/deploy.sh"

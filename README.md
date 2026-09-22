@@ -155,6 +155,77 @@ npm run build
 npm run lint
 ```
 
+## Deployment
+
+`docker-compose.prod.yml` is the server stack. It is used on its own — never layered over
+`docker-compose.yml` — so no bind mount or published port of the development environment can reach
+a server by being forgotten. The source tree is baked into the images, the SPA is built by
+`docker/nginx/Dockerfile` and served from the same origin as the API, and Caddy terminates TLS and
+is the only container with published ports.
+
+`.github/workflows/deploy.yml` runs the tests on every push and pull request and deploys from a
+green `main`: SSH to the server, `git reset --hard` to the pushed commit, then `scripts/deploy.sh`.
+`.gitlab-ci.yml` is untouched — the project also goes to the faculty GitLab.
+
+### Once, on the server
+
+```sh
+git clone https://github.com/yyahya-2000/DormHub.git /srv/dormhub
+cd /srv/dormhub
+cp scripts/env.example .env && chmod 600 .env   # then fill in every empty value
+docker run --rm php:8.3-cli-alpine php -r \
+    'echo "base64:", base64_encode(random_bytes(32)), PHP_EOL;'   # APP_KEY
+./scripts/deploy.sh
+docker compose -f docker-compose.prod.yml run --rm app \
+    php artisan db:seed --class=RoleSeeder --database=pgsql_owner
+docker compose -f docker-compose.prod.yml run --rm app \
+    php artisan dormitory:create-administrator you@example.ru 'Your Name'
+```
+
+`db:seed` without `--class` also plants the demonstration accounts, whose password is `password`.
+On a server reachable from the internet, seed the roles and create the administrator — the command
+generates a one-time password and marks the account for a change on first sign-in.
+
+Point the domain's A record at the server and open ports 80 and 443. Caddy obtains the certificate
+on first start; port 80 has to stay open for renewals.
+
+### Repository secrets
+
+| Secret | Value |
+|---|---|
+| `DEPLOY_HOST` | server address |
+| `DEPLOY_USER` | the user that owns the checkout and is in the `docker` group |
+| `DEPLOY_PATH` | the checkout, e.g. `/srv/dormhub` |
+| `DEPLOY_SSH_KEY` | private key, whose public half is in that user's `authorized_keys` |
+| `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan -H <server>` |
+| `DEPLOY_PORT` | SSH port, only if it is not 22 |
+
+Nothing else belongs in GitHub: the domain, `APP_KEY` and every password live in `.env` on the
+server, which is in `.gitignore`.
+
+### What a deploy does, and how to undo it
+
+`scripts/deploy.sh` builds the images, dumps the database to `backups/db-<timestamp>.dump`, then
+runs the migrations **against the new image while the old containers are still serving**. Only a
+migration that succeeded is followed by `up -d`; a migration that fails leaves the previous release
+running and prints the `pg_restore` line for the dump it just took. The framework caches are
+rebuilt by the entrypoint of every new container, so a deploy cannot leave a stale route cache
+behind. Last, `/up` is polled through nginx, and the deploy fails if it does not answer.
+
+To roll back, reset the checkout to the previous commit and run the script again:
+
+```sh
+cd /srv/dormhub && git reset --hard <previous sha> && ./scripts/deploy.sh
+```
+
+That restores the code, not the schema. If the failed release also migrated, restore the dump
+first:
+
+```sh
+docker compose -f docker-compose.prod.yml exec -T postgres \
+    pg_restore -U dormitory -d dormitory --clean --if-exists < backups/db-<timestamp>.dump
+```
+
 ## Continuous integration
 
 `.gitlab-ci.yml` describes a GitLab CI pipeline that runs on every push and on every merge request.
