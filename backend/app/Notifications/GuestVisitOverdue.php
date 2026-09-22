@@ -6,7 +6,6 @@ namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
 use Carbon\CarbonInterface;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-34, second occasion: a guest is still recorded inside the dormitory after
@@ -21,7 +20,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  *
  * Raised by the scheduled sweep of §3.3.4 rather than by a request, which is
  * the other half of why it is queued: a cron entry has no user waiting on it,
- * and it must not be the thing that blocks when a mail server is slow.
+ * and a backlog of them must not hold up the sweep itself.
  */
 final class GuestVisitOverdue extends EventNotification
 {
@@ -35,20 +34,6 @@ final class GuestVisitOverdue extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::VisitOverdue;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('A guest has not left the dormitory')
-            ->line(sprintf(
-                '%s was to have left %s by %s and is still recorded inside.',
-                $this->guestName,
-                $this->buildingName,
-                $this->dueAt->format('H:i'),
-            ))
-            ->line('Clause 2.2 of the rules of internal order admits a guest only between 08:00 and 23:00, and only while the resident who invited them is present.')
-            ->line('Accompany the guest to the security post so the exit can be recorded.');
     }
 
     /**

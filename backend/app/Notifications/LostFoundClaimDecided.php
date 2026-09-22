@@ -6,7 +6,6 @@ namespace App\Notifications;
 
 use App\Enums\LostFoundClaimStatus;
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-26, the answer half: a claim has been accepted or declined, and the
@@ -41,38 +40,6 @@ final class LostFoundClaimDecided extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::LostFoundClaim;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        $message = (new MailMessage)
-            ->subject(sprintf(
-                'Your claim on «%s» was %s',
-                $this->itemTitle,
-                $this->status === LostFoundClaimStatus::Accepted ? 'accepted' : 'declined',
-            ));
-
-        if ($this->status === LostFoundClaimStatus::Accepted) {
-            $message->line($this->decidedByStaff
-                ? 'The warden has decided the claim in your favour.'
-                : 'The person who found it says it is yours.');
-
-            if ($this->handoverPoint !== null) {
-                $message->line(sprintf('Collect it here: %s', $this->handoverPoint));
-            }
-        } else {
-            $message->line($this->decidedByStaff
-                ? 'The warden did not uphold your claim.'
-                : 'The person holding it says the marks you gave do not match.');
-
-            if ($this->referralOffered) {
-                $message->line('If you disagree, you can ask the warden of your dormitory to decide.');
-            }
-        }
-
-        return $this->note === null || $this->note === ''
-            ? $message
-            : $message->line($this->note);
     }
 
     /**

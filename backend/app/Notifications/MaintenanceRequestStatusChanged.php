@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-34, third occasion: a maintenance request has moved from one state to
@@ -29,22 +28,6 @@ final class MaintenanceRequestStatusChanged extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::MaintenanceStatus;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        $message = (new MailMessage)
-            ->subject(sprintf('Maintenance request #%d is now «%s»', $this->requestId, $this->toStatus))
-            ->line(sprintf(
-                'Request #%d has moved from «%s» to «%s».',
-                $this->requestId,
-                $this->fromStatus,
-                $this->toStatus,
-            ));
-
-        return $this->comment === null || $this->comment === ''
-            ? $message
-            : $message->line($this->comment);
     }
 
     /**

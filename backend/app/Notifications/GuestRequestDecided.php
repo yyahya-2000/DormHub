@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-34, first of the four occasions: a guest request has been decided
@@ -33,28 +32,6 @@ final class GuestRequestDecided extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::RequestDecision;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        $message = (new MailMessage)
-            ->subject($this->approved
-                ? 'Your guest request has been approved'
-                : 'Your guest request has been refused')
-            ->line(sprintf(
-                'Request #%d, for %s, has been %s.',
-                $this->requestId,
-                $this->guestName,
-                $this->approved ? 'approved' : 'refused',
-            ));
-
-        if ($this->comment !== null && $this->comment !== '') {
-            $message->line('The decision reads: '.$this->comment);
-        }
-
-        return $this->approved
-            ? $message->line('The guest is admitted between 08:00 and 23:00, and only while you are there.')
-            : $message;
     }
 
     /**

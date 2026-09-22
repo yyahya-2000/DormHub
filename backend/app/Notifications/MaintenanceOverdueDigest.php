@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-40 and §3.5.2's nightly pass: «digest of overdue requests» to the warden.
@@ -44,26 +43,6 @@ final class MaintenanceOverdueDigest extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::MaintenanceStatus;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject(sprintf(
-                '%d overdue maintenance request(s) in %s',
-                $this->overdueCount,
-                $this->buildingName,
-            ))
-            ->line(sprintf(
-                '%d request(s) are past the %d-day threshold or past their planned completion date.',
-                $this->overdueCount,
-                $this->thresholdDays,
-            ))
-            ->line(sprintf(
-                'The oldest is #%d, %d day(s) old.',
-                $this->oldestRequestId,
-                $this->oldestAgeDays,
-            ));
     }
 
     /**

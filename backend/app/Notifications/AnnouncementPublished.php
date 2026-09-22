@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-09 reaching the resident: the warden has published an announcement.
@@ -32,16 +31,6 @@ final class AnnouncementPublished extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::Announcement;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('Announcement: '.$this->title)
-            ->line($this->buildingName !== null
-                ? sprintf('A new announcement for %s: %s.', $this->buildingName, $this->title)
-                : sprintf('A new announcement for every dormitory: %s.', $this->title))
-            ->line('You can read it in the announcements feed.');
     }
 
     /**

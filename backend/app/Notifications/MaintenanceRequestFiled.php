@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-36, last line of the Gherkin: «the warden of that building receives a
@@ -41,19 +40,6 @@ final class MaintenanceRequestFiled extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::MaintenanceStatus;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject(sprintf('New maintenance request #%d in %s', $this->requestId, $this->buildingName))
-            ->line(sprintf(
-                'A %s request was filed for %s: %s.',
-                $this->urgency,
-                $this->place,
-                $this->category,
-            ))
-            ->line('It is waiting in the queue of the dormitory.');
     }
 
     /**

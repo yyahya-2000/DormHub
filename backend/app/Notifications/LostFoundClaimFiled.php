@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Enums\NotificationCategory;
-use Illuminate\Notifications\Messages\MailMessage;
 
 /**
  * FR-26: somebody has claimed an entry, and the person who has to answer is
@@ -36,21 +35,6 @@ final class LostFoundClaimFiled extends EventNotification
     public function category(): NotificationCategory
     {
         return NotificationCategory::LostFoundClaim;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        $subject = $this->referred
-            ? sprintf('A disputed claim on «%s» has been referred to you', $this->itemTitle)
-            : sprintf('Somebody claims «%s»', $this->itemTitle);
-
-        return (new MailMessage)
-            ->subject($subject)
-            ->line($this->referred
-                ? 'The person who filed this claim did not accept the refusal and has asked the warden to decide.'
-                : 'Somebody says this is theirs. The marks they gave are below.')
-            ->line($this->marks)
-            ->line('Open the entry to accept or decline the claim.');
     }
 
     /**
