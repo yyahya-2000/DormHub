@@ -14,6 +14,7 @@ use App\Exceptions\PhotoStorageFailedException;
 use App\Exceptions\RegistryDeletionBlockedException;
 use App\Exceptions\ResidentAlreadyAccommodatedException;
 use App\Exceptions\VisitAlreadyClosedException;
+use App\Http\Middleware\RequirePasswordChange;
 use App\Http\Resources\ResidencyResource;
 use App\Services\AccessDenialRecorder;
 use Illuminate\Foundation\Application;
@@ -31,7 +32,9 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'password.changed' => RequirePasswordChange::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

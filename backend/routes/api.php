@@ -74,7 +74,13 @@ Route::post('auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:login')
     ->name('auth.login');
 
-Route::middleware('auth:sanctum')->group(function (): void {
+/*
+ * `password.changed` closes the whole group to an account that still owes the
+ * change of FR-42, and opens three routes of it by name. The group and not the
+ * individual routes: a route added below is then refused until it is put on
+ * that list deliberately.
+ */
+Route::middleware(['auth:sanctum', 'password.changed'])->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
