@@ -8,6 +8,7 @@ import {
   guestRequestBuildingsOf,
   maintenanceBuildingsOf,
   Permission,
+  showsAuditLink,
 } from '@/auth/navigation'
 import { useSession } from '@/auth/session-context'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -123,6 +124,11 @@ export function AppShell() {
    * every one of them.
    */
   tabs.push({ to: '/lost-found', label: t('app.section.lostFound') })
+  // FR-33. The one tab here the server narrows nothing for: the log is read
+  // whole or refused whole, so the link is drawn only where it would answer.
+  if (showsAuditLink(user)) {
+    tabs.push({ to: '/audit-logs', label: t('app.section.audit') })
+  }
 
   tabs.push({ to: `/residents/${user.id}`, label: t('app.section.myCard') })
   // The personal account is nobody's privilege: the route behind this one is

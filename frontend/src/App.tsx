@@ -5,6 +5,7 @@ import { SessionProvider } from '@/auth/session-provider'
 import { AppShell } from '@/components/app-shell'
 import { AnnouncementPublishPage } from '@/pages/announcement-publish-page'
 import { AnnouncementsPage } from '@/pages/announcements-page'
+import { AuditLogPage } from '@/pages/audit-log-page'
 import { BuildingPage } from '@/pages/building-page'
 import { BuildingRegisterPage } from '@/pages/building-register-page'
 import { BuildingStaffPage } from '@/pages/building-staff-page'
@@ -147,6 +148,12 @@ export default function App() {
                 everyone who can sign in has one.
               */}
               <Route path="notifications" element={<NotificationsPage />} />
+              {/*
+                FR-33. No parameter either, and for once not because the token
+                narrows the answer: the log is not narrowed at all, and the
+                route is the administrator's or a 403.
+              */}
+              <Route path="audit-logs" element={<AuditLogPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Route>
