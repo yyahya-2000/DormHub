@@ -257,7 +257,6 @@
   },
   "roles": {
     "admin": "Administrator",
-    "duty_officer": "Duty officer",
     "warden": "Dormitory head",
     "manager": "Manager",
     "security": "Security",
@@ -490,7 +489,7 @@
     "mineCount_other": "{{count, number}} requests",
     "mineEmpty": "Nothing filed yet.",
     "codeLabel": "Access code",
-    "decisionComment": "The duty officer wrote: {{comment}}",
+    "decisionComment": "The decision reads: {{comment}}",
     "visitStillIn": "not yet recorded",
     "withdraw": "Withdraw the request"
   },

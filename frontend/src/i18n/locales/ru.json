@@ -267,7 +267,6 @@
   },
   "roles": {
     "admin": "Администратор",
-    "duty_officer": "Дежурный",
     "warden": "Комендант",
     "manager": "Менеджер корпуса",
     "security": "Охрана",
@@ -508,7 +507,7 @@
     "mineCount_other": "{{count, number}} заявок",
     "mineEmpty": "Заявок пока нет.",
     "codeLabel": "Код доступа",
-    "decisionComment": "Решение дежурного: {{comment}}",
+    "decisionComment": "Комментарий к решению: {{comment}}",
     "visitStillIn": "ещё не отмечен",
     "withdraw": "Отозвать заявку"
   },

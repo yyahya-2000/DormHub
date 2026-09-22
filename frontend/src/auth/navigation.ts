@@ -12,10 +12,11 @@ import { RoleCode, type User } from '@/api/generated/model'
  *
  * The table below mirrors `RoleCode::permissions()` on the server, and mirrors
  * it in the same shape: a capability names the work, a role carries a set of
- * capabilities, and a screen asks for the capability. That is what makes a new
- * role cheap. The building manager of revision 2 of the role model (13.09.2026)
- * sits between the warden and the duty officer, and adding it here is one line
- * in one map — no screen names a role, so no screen has to be edited.
+ * capabilities, and a screen asks for the capability. That is what makes a role
+ * cheap to add and cheap to take away. The building manager of revision 2 of
+ * the role model (13.09.2026) arrived as one line in one map, and the duty
+ * officer of revision 4 (21.09.2026) left the same way — no screen names a
+ * role, so no screen had to be edited for either.
  *
  * A mirror can fall out of step with what it mirrors, and this one is allowed
  * to: it decides what is drawn, never what is permitted. If the two disagree
@@ -28,7 +29,9 @@ import { RoleCode, type User } from '@/api/generated/model'
  * the generated `RoleCode`, and the building manager is the case that proved
  * why: it was written here while the contract still named five roles, the
  * screens compiled either way, and regenerating the client the day the sixth
- * role landed changed nothing above this line.
+ * role landed changed nothing above this line. The same width absorbed the
+ * removal of `duty_officer` from the contract: a code the generated union has
+ * dropped is still a string, and the lookups below are keyed by string.
  */
 export type KnownRole = RoleCode | 'manager'
 
@@ -136,20 +139,6 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
     Permission.holdLostFoundItems,
     Permission.decideLostFoundDisputes,
   ],
-  // The duty officer approves guest requests, and for that he needs the room a
-  // guest is bound for and the roll of the building. Not the resident card: it
-  // carries citizenship and telephone, and FR-06's criterion
-  // names the warden of that building and the administrator. The server struck
-  // this capability from the duty officer's set, and the mirror follows —
-  // otherwise the floor plan would ask him for a dozen cards it knows will be
-  // refused, and each refusal is an `access.denied` line in the audit log.
-  duty_officer: [
-    Permission.viewBuilding,
-    Permission.viewRooms,
-    Permission.viewPeople,
-    Permission.viewGuestRequests,
-    Permission.decideGuestRequests,
-  ],
   // The security officer works the post and nothing else: find the guest,
   // compare the document, record the entry, record the exit. Not the queue of
   // undecided requests — there is nothing at the desk to do with one — and not
@@ -184,7 +173,7 @@ const CAPABILITIES: Record<string, readonly Permission[]> = {
  */
 const GRANTABLE: Record<string, readonly KnownRole[]> = {
   admin: [RoleCode.warden],
-  warden: [RoleCode.manager, RoleCode.duty_officer, RoleCode.security],
+  warden: [RoleCode.manager, RoleCode.security],
 }
 
 /**
@@ -229,7 +218,6 @@ const ROLE_PRECEDENCE: readonly KnownRole[] = [
   RoleCode.admin,
   RoleCode.warden,
   RoleCode.manager,
-  RoleCode.duty_officer,
   RoleCode.security,
   RoleCode.student,
 ]
@@ -238,11 +226,11 @@ const ROLE_PRECEDENCE: readonly KnownRole[] = [
  * The roles of the account, each named once and in the order above.
  *
  * A grant names a building, so one person may hold the same role twice — a
- * duty officer of two dormitories is two grants and one role — and may hold
- * two different roles in two different buildings. The first is a repetition
- * and is dropped; the second is not, and both roles are kept. Naming only the
+ * manager of two dormitories is two grants and one role — and may hold two
+ * different roles in two different buildings. The first is a repetition and is
+ * dropped; the second is not, and both roles are kept. Naming only the
  * weightiest would be the shorter answer and the wrong one: it would tell a
- * warden of one dormitory who is a duty officer of another that he is only the
+ * warden of one dormitory who is a manager of another that he is only the
  * first of the two.
  */
 export function distinctRolesOf(user: User): KnownRole[] {
@@ -345,10 +333,10 @@ export function guestRequestBuildingsOf(user: User): number[] {
 }
 
 /**
- * FR-17. The duty officer, the warden or the manager of **this** dormitory.
+ * FR-17. The warden or the manager of **this** dormitory.
  *
  * The building is the argument because it is the whole of the boundary: the
- * same three roles one block over answer false here.
+ * same two roles one block over answer false here.
  */
 export function decidesGuestRequests(user: User, buildingId: number): boolean {
   return may(user, Permission.decideGuestRequests, buildingId)
@@ -408,10 +396,9 @@ export function readsMaintenanceQueue(user: User, buildingId: number): boolean {
 
 /**
  * FR-37 and FR-38. Who moves a request: the warden and the manager of this
- * dormitory. Not the duty officer, who decides on guest requests and has
- * nothing to do with these; not the administrator, who reads every queue and
- * promises no dates; and never the resident who filed it, whose two buttons are
- * `confirm` and `reopen` and are a matter of identity rather than of capability.
+ * dormitory. Not the administrator, who reads every queue and promises no
+ * dates; and never the resident who filed it, whose two buttons are `confirm`
+ * and `reopen` and are a matter of identity rather than of capability.
  */
 export function triagesMaintenance(user: User, buildingId: number): boolean {
   return may(user, Permission.triageMaintenanceRequests, buildingId)

@@ -10,8 +10,8 @@ import type { ApiError } from '@/api/http-client'
 /**
  * The staff of one dormitory, by post.
  *
- * FR-41 puts a role on a person and not a person in a post, so «who is the duty
- * officer here» is a question the roll route answers with a filter: one request
+ * FR-41 puts a role on a person and not a person in a post, so «who is the
+ * manager here» is a question the roll route answers with a filter: one request
  * per post, `role=...`, in the order the chain of appointment runs. The
  * grouping is then the requests themselves, which is why nothing here sorts.
  *
@@ -19,11 +19,10 @@ import type { ApiError } from '@/api/http-client'
  * residents of a building are read from the housing screens.
  */
 
-/** The four posts, from the one the administrator appoints downwards. */
+/** The three posts, from the one the administrator appoints downwards. */
 export const STAFF_ROLES = [
   RoleCode.warden,
   RoleCode.manager,
-  RoleCode.duty_officer,
   RoleCode.security,
 ] as const
 

@@ -34,9 +34,9 @@ import { useHousingRefresh } from '@/lib/housing-cache'
  *
  * Which roles the form offers is read from `grantableRolesIn`, the mirror of
  * `RoleCode::grantableRoles()`. The administrator is offered the warden and
- * nothing else; the warden of this building is offered manager, duty officer
- * and security; the manager is offered nothing, which is why the tab that leads
- * here is not drawn for him. The decision is still the server's (§3.3.2) — the
+ * nothing else; the warden of this building is offered manager and security;
+ * the manager is offered nothing, which is why the tab that leads here is not
+ * drawn for him. The decision is still the server's (§3.3.2) — the
  * 403 is shown where the control was.
  */
 

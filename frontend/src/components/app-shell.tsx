@@ -77,8 +77,9 @@ export function AppShell() {
    *
    * The post gets a tab of its own because the terminal is a workplace and not
    * a view of a building: an officer signs in, presses it, and stays there for
-   * a shift. The duty officer's queue is a tab too, and that is the register of
-   * stakeholders taken literally — the decision has to be a few seconds from
+   * a shift. The queue of undecided requests is a tab too, and that is the
+   * register of stakeholders taken literally — the decision has to be a few
+   * seconds from
    * sign-in on a telephone, and three taps through the building card is not
    * that. A resident who lives somewhere gets the form.
    */

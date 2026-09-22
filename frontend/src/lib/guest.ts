@@ -34,7 +34,7 @@ export const VISIT_STATUS_TONE: Record<GuestVisitStatus, string> = {
   closed_late: 'border-brick/40 bg-brick-wash text-brick',
 }
 
-/** The states a decision is still open on — the duty officer's queue (FR-17). */
+/** The states a decision is still open on — the queue of a dormitory (FR-17). */
 export function awaitsDecision(status: GuestRequestStatus): boolean {
   return status === GuestRequestStatus.pending_review
 }

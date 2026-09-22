@@ -315,7 +315,7 @@ function SubmissionForm({
 /**
  * One request of the author's own. The code is the row's whole point once the
  * decision is in, so it is set in the monospaced face and given the width of a
- * line; a refusal shows the reason the duty officer wrote.
+ * line; a refusal shows the reason written with the decision.
  */
 function MyRequestRow({ request }: { request: GuestRequest }) {
   const { t } = useTranslation()
