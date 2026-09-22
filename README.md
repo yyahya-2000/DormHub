@@ -36,6 +36,7 @@ screen.
 - [Running it locally, testing, deploying](RUNNING.md)
 - [The coursework itself](docs/yanal_yahya_cw.docx) — the written work behind this repository
 - [The project proposal](docs/yanal_yahya_pp.docx) — where it started, January 2024
+- [The approved topic](docs/yanal_yahya_topic.doc) — the form the supervisor signed off
 - [The API contract](backend/api/openapi.yaml) — 62 operations, the client is generated from it
 
 Yanal Yahya, 2026.
