@@ -35,6 +35,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'password.changed' => RequirePasswordChange::class,
         ]);
+
+        /*
+         * Behind the production reverse proxy every request otherwise appears
+         * to come from the proxy, which collapses the per-address sign-in limit
+         * of FR-08 into one shared ceiling and writes the proxy's address into
+         * the audit log. Unset in development, where there is no proxy and
+         * X-Forwarded-For would be whatever the client chose to send.
+         */
+        $proxies = env('TRUSTED_PROXIES');
+
+        if ($proxies !== null && $proxies !== '') {
+            $middleware->trustProxies(
+                at: $proxies === '*' ? '*' : explode(',', $proxies),
+            );
+        }
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
