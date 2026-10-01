@@ -9,3 +9,6 @@
 
 # Pre-migration dumps written by scripts/deploy.sh.
 /backups/
+
+# Lock files Office leaves beside an open document.
+~$*
